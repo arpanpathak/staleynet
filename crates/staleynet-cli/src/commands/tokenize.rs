@@ -12,7 +12,7 @@ use staleynet_cuda::Gpu;
 use staleynet_data::catalog::Split;
 use staleynet_data::store::{CacheLayout, DatasetManifest, read_f16, write_codes};
 use staleynet_data::tokenizer::{AudioTokenizer, TokenizerConfig};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Griffin-Lim iterations for listening examples.
 const LISTENING_ITERATIONS: usize = 64;
@@ -109,11 +109,12 @@ fn train_tokenizer(gpu: &Gpu, arguments: &Arguments, layout: &CacheLayout, manif
     .map_err(Into::into)
 }
 
+/// Fits (or reuses) the tokenizer, encodes every track of the cache, and
+/// reports the reconstruction error of each split.
 pub fn run(arguments: Arguments) -> Result<()> {
     let gpu = open_gpu()?;
     let layout = CacheLayout::new(&arguments.cache);
     let manifest = DatasetManifest::load(&layout)?;
-    let mel_bands = manifest.mel.mel_bands;
     let tokenizer = match &arguments.reuse {
         Some(path) => AudioTokenizer::load(path)?,
         None => train_tokenizer(&gpu, &arguments, &layout, &manifest)?,
@@ -125,42 +126,64 @@ pub fn run(arguments: Arguments) -> Result<()> {
     let mut rendered = 0;
 
     for entry in &manifest.tracks {
-        let log_mel = read_f16(&layout.mel(&entry.track.id))?;
+        let id = &entry.track.id;
+        let log_mel = read_f16(&layout.mel(id))?;
         let codes = tokenizer.encode(&gpu, &log_mel)?;
-        write_codes(&layout.codes(&entry.track.id), &codes)?;
+        write_codes(&layout.codes(id), &codes)?;
 
         let errors =
             (1..=tokenizer.config.levels()).map(|levels| mean_absolute_error(&log_mel, &tokenizer.decode(&codes, levels))).collect();
-        reports.push(TrackReport { id: entry.track.id.clone(), split: entry.track.split, log_mel_error_by_levels: errors });
+        reports.push(TrackReport { id: id.clone(), split: entry.track.split, log_mel_error_by_levels: errors });
 
         let Some(listen) = &arguments.listen else { continue };
-        if entry.track.split != Split::Validation || rendered == LISTENING_TRACKS {
-            continue;
+        if entry.track.split == Split::Validation && rendered < LISTENING_TRACKS {
+            render_listening_pair(listen, &analyzer, &tokenizer, id, &log_mel, &codes)?;
+            rendered += 1;
         }
-
-        std::fs::create_dir_all(listen)?;
-        let frames = (LISTENING_SECONDS * analyzer.config.frames_per_second()) as usize * mel_bands;
-        let griffin = GriffinLimConfig { iterations: LISTENING_ITERATIONS, seed: 0 };
-        let original = griffin_lim(&analyzer, &log_mel[..frames.min(log_mel.len())], griffin);
-        let tokenized_mel = tokenizer.decode(&codes, tokenizer.config.codebooks);
-        let tokenized = griffin_lim(&analyzer, &tokenized_mel[..frames.min(tokenized_mel.len())], griffin);
-
-        write_mono_pcm16(&listen.join(format!("{}-original-mel.wav", entry.track.id)), &original, analyzer.config.sample_rate)?;
-        write_mono_pcm16(&listen.join(format!("{}-tokenized.wav", entry.track.id)), &tokenized, analyzer.config.sample_rate)?;
-        rendered += 1;
     }
 
     for split in [Split::Train, Split::Validation] {
-        let selected: Vec<&TrackReport> = reports.iter().filter(|report| report.split == split).collect();
-        if selected.is_empty() {
-            continue;
-        }
-        let mean_by_level: Vec<f32> = (0..tokenizer.config.levels())
-            .map(|level| selected.iter().map(|report| report.log_mel_error_by_levels[level]).sum::<f32>() / selected.len() as f32)
-            .collect();
-        eprintln!("{split:?}: mean |log-mel error| by levels used {mean_by_level:.3?}");
+        print_mean_errors(&reports, split, tokenizer.config.levels());
     }
 
     std::fs::write(arguments.cache.join("tokenizer_report.json"), serde_json::to_string_pretty(&reports)?)?;
     Ok(())
+}
+
+/// Writes the first [`LISTENING_SECONDS`] of a track twice, from its exact
+/// log-mel and from its tokens, both through Griffin-Lim, so the two can be
+/// compared by ear.
+fn render_listening_pair(
+    listen: &Path,
+    analyzer: &MelAnalyzer,
+    tokenizer: &AudioTokenizer,
+    id: &str,
+    log_mel: &[f32],
+    codes: &[u32],
+) -> Result<()> {
+    std::fs::create_dir_all(listen)?;
+    let values = (LISTENING_SECONDS * analyzer.config.frames_per_second()) as usize * analyzer.config.mel_bands;
+    let griffin = GriffinLimConfig { iterations: LISTENING_ITERATIONS, seed: 0 };
+
+    let tokenized_mel = tokenizer.decode(codes, tokenizer.config.codebooks);
+    let original = griffin_lim(analyzer, &log_mel[..values.min(log_mel.len())], griffin);
+    let tokenized = griffin_lim(analyzer, &tokenized_mel[..values.min(tokenized_mel.len())], griffin);
+
+    let rate = analyzer.config.sample_rate;
+    write_mono_pcm16(&listen.join(format!("{id}-original-mel.wav")), &original, rate)?;
+    write_mono_pcm16(&listen.join(format!("{id}-tokenized.wav")), &tokenized, rate)
+}
+
+/// Prints the mean reconstruction error of `split`'s tracks after decoding
+/// with 1, 2, … `levels` residual levels. Prints nothing for an empty split.
+fn print_mean_errors(reports: &[TrackReport], split: Split, levels: usize) {
+    let selected: Vec<&TrackReport> = reports.iter().filter(|report| report.split == split).collect();
+    if selected.is_empty() {
+        return;
+    }
+
+    let count = selected.len() as f32;
+    let mean_by_level: Vec<f32> =
+        (0..levels).map(|level| selected.iter().map(|report| report.log_mel_error_by_levels[level]).sum::<f32>() / count).collect();
+    eprintln!("{split:?}: mean |log-mel error| by levels used {mean_by_level:.3?}");
 }
