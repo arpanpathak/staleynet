@@ -12,7 +12,7 @@ use staleynet_data::tokenizer::AudioTokenizer;
 use staleynet_model::generate::{AttentionMode, GenerationConfig, GenerationStats, Guidance, Sampling, generate};
 use staleynet_model::{Conditioning, checkpoint};
 use staleynet_train::{RUN_TOKENIZER, preferred_checkpoint};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Command-line spelling of [`AttentionMode`].
@@ -119,57 +119,40 @@ struct SingReport {
     real_time_factor: f64,
 }
 
+/// Generates audio for the prompt and writes the WAV file and its report.
 pub fn run(arguments: Arguments) -> Result<()> {
     let gpu = open_gpu()?;
     let layout = CacheLayout::new(&arguments.cache);
-    let manifest = DatasetManifest::load(&layout)?;
-    let run_tokenizer = arguments.run.join(RUN_TOKENIZER);
-    let tokenizer_path = if run_tokenizer.is_file() { run_tokenizer } else { layout.tokenizer() };
-    let tokenizer = AudioTokenizer::load(&tokenizer_path)?;
+    let mel = MelConfig::from(DatasetManifest::load(&layout)?.mel);
+    let tokenizer = run_tokenizer(&arguments.run, &layout)?;
+
     let checkpoint_directory = preferred_checkpoint(&arguments.run);
     let (model, metadata) = checkpoint::load(&gpu, &checkpoint_directory, None)?;
 
-    let mel = MelConfig::from(manifest.mel);
-    let frames = (arguments.seconds * mel.frames_per_second() / tokenizer.config.frames_per_step as f32).ceil() as usize;
-    let sampling = if arguments.temperature <= 0.0 {
-        Sampling::Greedy
-    } else {
-        Sampling::TopK { temperature: arguments.temperature, k: arguments.top_k }
-    };
-    let guidance = if arguments.guidance == 1.0 { Guidance::Off } else { Guidance::ClassifierFree { scale: arguments.guidance } };
-    let attention = match arguments.attention {
-        AttentionArgument::Cached => AttentionMode::KvCache,
-        AttentionArgument::Recompute => AttentionMode::Recompute,
-    };
-
-    let lyrics = match &arguments.lyrics_file {
-        Some(path) => std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?,
-        None => arguments.lyrics.clone(),
-    };
+    let lyrics = arguments.lyrics()?;
     let model_reads_lyrics = model.config.lyrics_bytes > 0;
     if !lyrics.trim().is_empty() && !model_reads_lyrics {
         eprintln!("warning: this model has no lyrics field; the lyrics are ignored");
     }
 
+    let frames = (arguments.seconds * mel.frames_per_second() / tokenizer.config.frames_per_step as f32).ceil() as usize;
     eprintln!("{} (step {}): generating {frames} frames for {:.1}s", checkpoint_directory.display(), metadata.step, arguments.seconds);
     let prompt = Conditioning { caption: &arguments.prompt, lyrics: &lyrics };
-    let generation = generate(&gpu, &model, prompt, &GenerationConfig { frames, sampling, guidance, attention, seed: arguments.seed })?;
+    let generation = generate(&gpu, &model, prompt, &arguments.generation_config(frames))?;
 
     if let Some(path) = &arguments.save_codes {
         write_codes(path, &generation.codes)?;
     }
 
     let vocoder_started = Instant::now();
-    let analyzer = MelAnalyzer::new(mel);
-    let log_mel = tokenizer.decode(&generation.codes, tokenizer.config.codebooks);
-    let waveform =
-        griffin_lim(&analyzer, &log_mel, GriffinLimConfig { iterations: arguments.griffin_lim_iterations, seed: arguments.seed });
+    let griffin = GriffinLimConfig { iterations: arguments.griffin_lim_iterations, seed: arguments.seed };
+    let waveform = griffin_lim(&MelAnalyzer::new(mel), &tokenizer.decode(&generation.codes, tokenizer.config.codebooks), griffin);
     let vocoder_seconds = vocoder_started.elapsed().as_secs_f64();
     write_mono_pcm16(&arguments.out, &waveform, mel.sample_rate)?;
 
     let audio_seconds = waveform.len() as f32 / mel.sample_rate as f32;
     let report = SingReport {
-        prompt: arguments.prompt,
+        prompt: arguments.prompt.clone(),
         lyrics,
         model_reads_lyrics,
         checkpoint: checkpoint_directory,
@@ -188,4 +171,36 @@ pub fn run(arguments: Arguments) -> Result<()> {
         report.real_time_factor
     );
     Ok(())
+}
+
+/// The tokenizer saved with the run, or the cache's when the run has none.
+fn run_tokenizer(run: &Path, layout: &CacheLayout) -> Result<AudioTokenizer> {
+    let saved_with_run = run.join(RUN_TOKENIZER);
+    let path = if saved_with_run.is_file() { saved_with_run } else { layout.tokenizer() };
+
+    AudioTokenizer::load(&path)
+}
+
+impl Arguments {
+    /// The lyrics from `--lyrics-file` when given, otherwise from `--lyrics`.
+    fn lyrics(&self) -> Result<String> {
+        let Some(path) = &self.lyrics_file else { return Ok(self.lyrics.clone()) };
+
+        std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))
+    }
+
+    /// Sampling, guidance and attention settings for `frames` frames.
+    /// A temperature of 0 means greedy decoding, and a guidance scale of 1
+    /// means no guidance.
+    fn generation_config(&self, frames: usize) -> GenerationConfig {
+        let sampling =
+            if self.temperature <= 0.0 { Sampling::Greedy } else { Sampling::TopK { temperature: self.temperature, k: self.top_k } };
+        let guidance = if self.guidance == 1.0 { Guidance::Off } else { Guidance::ClassifierFree { scale: self.guidance } };
+        let attention = match self.attention {
+            AttentionArgument::Cached => AttentionMode::KvCache,
+            AttentionArgument::Recompute => AttentionMode::Recompute,
+        };
+
+        GenerationConfig { frames, sampling, guidance, attention, seed: self.seed }
+    }
 }

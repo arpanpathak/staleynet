@@ -16,7 +16,7 @@ by artist as described in [Training](training.md#data-and-partitions).
 
 **Metrics.** Losses are mean cross-entropies in nats per code (chance level
 6.93). Spectral errors are mean absolute differences of natural-log mel
-energies; one unit corresponds to about 8.7 dB. Throughput is given in
+energies; one unit is a factor of e in energy, about 4.3 dB. Throughput is given in
 sequence positions per second.
 
 **Procedures.** Every number in this chapter is produced by a command listed
@@ -119,7 +119,7 @@ exact log-mel of the excerpt.
 
 The tokenizer introduces between three and four times the spectral error of
 Griffin-Lim, and the end-to-end error of a perfect language model is almost
-entirely that of the tokenizer. An error of 0.7 units, about 6 dB per mel
+entirely that of the tokenizer. An error of 0.7 units, about 3 dB per mel
 band on average, is consistent with the blurred quality heard in generated
 voices, which depend on fine spectral detail (harmonics and formants). The
 measure does not capture the phase artefacts of Griffin-Lim, which are audible

@@ -10,7 +10,7 @@ The most important limitation is the fidelity of the audio representation.
 The experiments in
 [Section 5 of Experiments](experiments.md#5-the-audio-pipeline-in-isolation)
 show that the tokenizer loses about 0.7 log units of spectral detail, roughly
-6 dB per frequency band, and that a model which reproduces its training audio
+3 dB per frequency band, and that a model which reproduces its training audio
 perfectly still sounds only as good as this reconstruction. The detail that
 singing depends on, the harmonics and formants that make vowels
 recognisable, is precisely what is lost. Until the representation improves,
