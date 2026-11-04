@@ -147,7 +147,7 @@ sources in [`paper/figures/`](paper/figures).
 
 ## Checkpoints and data
 
-The trained checkpoints and the derived training caches are kept in 2 private
+The trained checkpoints and the derived training caches are kept in 2 public
 Hugging Face repositories:
 
 - [staleynet-checkpoints](https://huggingface.co/arpanpathak/staleynet-checkpoints):
