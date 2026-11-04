@@ -17,11 +17,15 @@
 //! * [`istft`]: the inverse Fourier transform and overlap-add.
 //! * [`loss`]: the spectral losses that compare a waveform with its target.
 //! * [`vocoder`]: the whole path from mel spectrogram to waveform and back.
+//! * [`data`]: segments of decoded spectrograms paired with their recordings.
+//! * [`train`]: the training loop, its checkpoints, metrics and samples.
 
 pub mod config;
+pub mod data;
 pub mod istft;
 pub mod loss;
 pub mod network;
+pub mod train;
 pub mod vocoder;
 
 pub use config::VocoderConfig;

@@ -6,6 +6,7 @@
 //!   tokenizer.json       trained residual codebooks
 //!   mel/<id>.f16         log-mel frames, IEEE half precision, [frames, bands]
 //!   codes/<id>.u16       tokenizer codes, [steps, codebooks]
+//!   waveforms/<id>.f16   resampled, level-normalized samples (for the vocoder)
 //! ```
 //!
 //! Half precision halves the cache with an error (≈ 0.001 relative) far
@@ -56,6 +57,11 @@ impl CacheLayout {
     /// Code file of track `id`.
     pub fn codes(&self, id: &str) -> PathBuf {
         self.root.join("codes").join(format!("{id}.u16"))
+    }
+
+    /// Waveform file of track `id`: the samples its log-mel was computed from.
+    pub fn waveform(&self, id: &str) -> PathBuf {
+        self.root.join("waveforms").join(format!("{id}.f16"))
     }
 
     /// Creates the sub-directories.

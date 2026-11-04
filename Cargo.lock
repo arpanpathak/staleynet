@@ -899,6 +899,7 @@ dependencies = [
  "staleynet-data",
  "staleynet-model",
  "staleynet-train",
+ "staleynet-vocoder",
 ]
 
 [[package]]
@@ -953,10 +954,13 @@ name = "staleynet-vocoder"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "half",
+ "rayon",
  "serde",
  "serde_json",
  "staleynet-audio",
  "staleynet-cuda",
+ "staleynet-data",
  "staleynet-model",
 ]
 

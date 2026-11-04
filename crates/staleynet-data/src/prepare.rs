@@ -60,7 +60,7 @@ pub fn normalize_level(samples: &mut [f32]) {
 }
 
 /// Decodes, resamples, trims and level-normalises one recording.
-fn load_signal(track: &Track, options: &PrepareOptions) -> Result<Vec<f32>> {
+pub fn load_signal(track: &Track, options: &PrepareOptions) -> Result<Vec<f32>> {
     let audio = decode_mono(&track.audio_path)?;
     let mut signal = resample(&audio.samples, audio.sample_rate, options.mel.sample_rate);
 

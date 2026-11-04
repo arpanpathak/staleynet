@@ -7,6 +7,7 @@
 //! staleynet sing     --cache data/cache --run runs/base --prompt "..." --out song.wav
 //! staleynet reconstruct --cache data/cache --out samples/reconstruction
 //! staleynet evaluate --run runs/lyrics --cache data/cache-jamendolyrics
+//! staleynet vocoder train --cache data/cache --run runs/vocoder
 //! staleynet bench    --out benchmarks/results.json
 //! ```
 
@@ -42,6 +43,9 @@ enum Command {
     /// Render held-out excerpts through the tokenizer and vocoder alone.
     Reconstruct(commands::reconstruct::Arguments),
 
+    /// Build waveforms, train the neural vocoder, and render through it.
+    Vocoder(commands::vocoder::Arguments),
+
     /// Measure whether a model reads its lyrics.
     Evaluate(commands::evaluate::Arguments),
 
@@ -56,6 +60,7 @@ fn main() -> Result<()> {
         Command::Train(arguments) => commands::train::run(arguments),
         Command::Sing(arguments) => commands::sing::run(arguments),
         Command::Reconstruct(arguments) => commands::reconstruct::run(arguments),
+        Command::Vocoder(arguments) => commands::vocoder::run(arguments),
         Command::Evaluate(arguments) => commands::evaluate::run(arguments),
         Command::Bench(arguments) => commands::bench::run(arguments),
     }
@@ -92,6 +97,16 @@ mod tests {
 
         assert!(matches!(evaluate.command, Command::Evaluate(_)));
         assert!(matches!(bench.command, Command::Bench(_)));
+    }
+
+    #[test]
+    fn parses_vocoder_commands() {
+        let prepare = Cli::try_parse_from(["staleynet", "vocoder", "prepare", "--cache", "data/cache"]).unwrap();
+        let train = Cli::try_parse_from(["staleynet", "vocoder", "train", "--run", "runs/vocoder"]).unwrap();
+
+        assert!(matches!(prepare.command, Command::Vocoder(_)));
+        assert!(matches!(train.command, Command::Vocoder(_)));
+        assert!(Cli::try_parse_from(["staleynet", "vocoder", "render"]).is_err());
     }
 
     #[test]
