@@ -1,5 +1,6 @@
 //! Elementwise operations, one thread per output element: scaled addition,
-//! scaling, bias, column sums and the GELU activation with its derivative.
+//! scaling, bias, column sums, per-column scales and the GELU activation with
+//! its derivative.
 
 use cuda_device::cuda_module;
 
@@ -88,6 +89,45 @@ pub mod kernels {
 
         if let Some(slot) = sums.get_mut(index) {
             *slot += sum;
+        }
+    }
+
+    /// Multiplies every column by its own factor, `output[r, c] = values[r, c] ·
+    /// scale[c]`: the per-channel "layer scale" of ConvNeXt blocks (Touvron et
+    /// al., 2021, <https://arxiv.org/abs/2103.17239>).
+    ///
+    /// * `values`, `output`: `[rows, cols]`, row-major.
+    /// * `scale`: one factor per column.
+    #[kernel]
+    pub fn scale_columns(values: &[f32], scale: &[f32], mut output: DisjointSlice<f32>, cols: usize) {
+        let index = thread::index_1d();
+        let position = index.get();
+        if let Some(slot) = output.get_mut(index) {
+            *slot = values[position] * scale[position % cols];
+        }
+    }
+
+    /// The gradient of [`scale_columns`] with respect to its factors:
+    /// `scale_grad[c] = Σ_r output_grad[r, c] · values[r, c]`. One thread per
+    /// column, summing its rows in a fixed order.
+    ///
+    /// * `output_grad`, `values`: `[rows, cols]`, row-major.
+    /// * `scale_grad`: one sum per column, written.
+    #[kernel]
+    pub fn column_products(output_grad: &[f32], values: &[f32], rows: usize, cols: usize, mut scale_grad: DisjointSlice<f32>) {
+        let index = thread::index_1d();
+        let col = index.get();
+        if col >= cols {
+            return;
+        }
+
+        let mut sum = 0.0f32;
+        for row in 0..rows {
+            sum += output_grad[row * cols + col] * values[row * cols + col];
+        }
+
+        if let Some(slot) = scale_grad.get_mut(index) {
+            *slot = sum;
         }
     }
 

@@ -3,21 +3,23 @@
 //! the kernels rely on hold by construction.
 
 mod attention;
+mod convolution;
 mod elementwise;
 mod embedding;
 mod loss;
 mod matmul;
 mod normalization;
 mod optimizer;
+mod overlap;
 mod signal;
-mod synthesis;
+mod spectrum;
 
 pub use attention::HeadLayout;
+pub use convolution::Convolution;
 pub use embedding::TokenIndex;
 pub use loss::CrossEntropyHead;
 pub use matmul::{BatchStrides, MatmulSpec, Storage};
 pub use optimizer::AdamWHyperparameters;
-pub use synthesis::Convolution;
 
 /// Whether an operation replaces its output or adds into it. Accumulation is
 /// how gradients from several uses of one parameter are summed.

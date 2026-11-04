@@ -16,6 +16,10 @@
 //! `latest/` carries the AdamW moments and step, so `--resume` continues the
 //! same optimisation rather than restarting it; it is rewritten every
 //! `checkpoint_every` steps, which bounds the work an interruption can lose.
+//!
+//! The neural vocoder's training loop lives in [`vocoder`].
+
+pub mod vocoder;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -315,7 +319,10 @@ pub fn train(
         gpu,
         workspace: TrainingWorkspace::new(gpu, &config.model, shape)?,
         batch: TrainingBatch::empty(shape, config.model.codebooks),
-        metrics: OpenOptions::new().create(true).append(true).open(run.root.join("metrics.jsonl"))?,
+        metrics: OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(run.root.join("metrics.jsonl"))?,
         best_validation: state.best_validation,
         model: state.model,
         optimizer: state.optimizer,
@@ -464,7 +471,9 @@ impl Session<'_> {
         let mut random = Random::derived(self.config.seed, step as u64);
         sampler.fill(&self.train, &mut self.batch, &mut random);
 
-        let loss = self.model.accumulate_gradients(self.gpu, &mut self.workspace, &self.batch)?;
+        let loss = self
+            .model
+            .accumulate_gradients(self.gpu, &mut self.workspace, &self.batch)?;
         ensure!(loss.mean.is_finite(), "loss became {} at step {step}", loss.mean);
 
         let update = self.optimizer.step(self.gpu, &mut self.model)?;
@@ -552,10 +561,15 @@ impl Session<'_> {
         let mut per_codebook = vec![0.0; self.config.model.codebooks];
         for _ in 0..self.config.validation_batches {
             sampler.fill(corpus, &mut self.batch, &mut random);
-            let loss = self.model.forward_loss(self.gpu, &mut self.workspace, &self.batch)?;
+            let loss = self
+                .model
+                .forward_loss(self.gpu, &mut self.workspace, &self.batch)?;
 
             total += loss.mean;
-            per_codebook.iter_mut().zip(&loss.per_codebook).for_each(|(sum, value)| *sum += value);
+            per_codebook
+                .iter_mut()
+                .zip(&loss.per_codebook)
+                .for_each(|(sum, value)| *sum += value);
         }
 
         let batches = self.config.validation_batches as f32;

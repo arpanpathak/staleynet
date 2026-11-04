@@ -74,8 +74,19 @@ pub fn run(arguments: Arguments) -> Result<()> {
         DatasetSource::Folder(root) => catalog::folder(&root)?,
     };
 
-    let with_lyrics = tracks.iter().filter(|track| !track.lyrics.is_empty()).count();
-    let unlabelled = tracks.iter().filter(|track| track.captions.iter().all(|caption| caption.source == CaptionSource::FileName)).count();
+    let with_lyrics = tracks
+        .iter()
+        .filter(|track| !track.lyrics.is_empty())
+        .count();
+    let unlabelled = tracks
+        .iter()
+        .filter(|track| {
+            track
+                .captions
+                .iter()
+                .all(|caption| caption.source == CaptionSource::FileName)
+        })
+        .count();
 
     eprintln!("catalogue: {} recordings ({unlabelled} described only by file name, {with_lyrics} with lyrics)", tracks.len());
 
@@ -96,8 +107,17 @@ pub fn run(arguments: Arguments) -> Result<()> {
         }
     })?;
 
-    let hours = manifest.tracks.iter().map(|entry| entry.seconds).sum::<f32>() / 3600.0;
-    let validation = manifest.tracks.iter().filter(|entry| entry.track.split == Split::Validation).count();
+    let hours = manifest
+        .tracks
+        .iter()
+        .map(|entry| entry.seconds)
+        .sum::<f32>()
+        / 3600.0;
+    let validation = manifest
+        .tracks
+        .iter()
+        .filter(|entry| entry.track.split == Split::Validation)
+        .count();
 
     eprintln!("prepared {} recordings, {hours:.2} h ({validation} validation) → {}", manifest.tracks.len(), arguments.cache.display());
     Ok(())

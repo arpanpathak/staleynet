@@ -266,10 +266,9 @@ page are drawn from the same TikZ sources.
 |---|---|
 | [`staleynet-audio`](crates/staleynet-audio) | decoding, polyphase resampling, log-mel spectrogram, Griffin-Lim; [on crates.io](https://crates.io/crates/staleynet-audio) |
 | `staleynet-cuda` | GPU kernels in Rust (one module per topic), tensors, shape-checked operations, CPU references |
-| `staleynet-model` | the Transformer with hand-derived gradients, AdamW, cached decoding, sampling, checkpoints |
+| `staleynet-model` | the networks: the Transformer and the neural vocoder (ConvNeXt network, inverse STFT, spectral losses), all with hand-derived gradients; AdamW, cached decoding, sampling, checkpoints |
 | `staleynet-data` | dataset catalogs, GPU log-mel, the residual k-means tokenizer, batch sampling |
-| `staleynet-train` | the training loop, validation, metrics and checkpoint policy |
-| `staleynet-vocoder` | the neural vocoder: ConvNeXt network, inverse STFT and spectral losses with hand-derived gradients, and its training loop |
+| `staleynet-train` | the training loops of the language model and the vocoder: batches, validation, metrics and checkpoint policy |
 | `staleynet-cli` | the `staleynet` command |
 
 `studio/` is a small web app for listening and recording, `deploy/` holds the

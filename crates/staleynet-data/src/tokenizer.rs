@@ -136,7 +136,10 @@ impl CentroidSearch {
     /// Uploads `centroids` (`[count, dim]`).
     fn new(gpu: &Gpu, centroids: &[f32], dim: usize) -> GpuResult<Self> {
         let count = centroids.len() / dim;
-        let norms: Vec<f32> = centroids.chunks_exact(dim).map(|centroid| centroid.iter().map(|value| value * value).sum()).collect();
+        let norms: Vec<f32> = centroids
+            .chunks_exact(dim)
+            .map(|centroid| centroid.iter().map(|value| value * value).sum())
+            .collect();
 
         Ok(Self { centroids: gpu.upload(Shape::new(count, dim), centroids)?, norms: gpu.upload(Shape::vector(count), &norms)?, dim })
     }
@@ -184,7 +187,10 @@ fn update_centroids(centroids: &mut [f32], points: &[f32], assignments: &[u32], 
     for (point, &centroid) in points.chunks_exact(dim).zip(assignments) {
         let centroid = centroid as usize;
         members[centroid] += 1;
-        for (sum, &value) in sums[centroid * dim..(centroid + 1) * dim].iter_mut().zip(point) {
+        for (sum, &value) in sums[centroid * dim..(centroid + 1) * dim]
+            .iter_mut()
+            .zip(point)
+        {
             *sum += value as f64;
         }
     }
@@ -222,7 +228,11 @@ fn quantisation_error(points: &[f32], centroids: &[f32], assignments: &[u32], di
     let mut total = 0.0f64;
     for (point, &centroid) in points.chunks_exact(dim).zip(assignments) {
         let center = &centroids[centroid as usize * dim..(centroid as usize + 1) * dim];
-        total += point.iter().zip(center).map(|(a, b)| ((a - b) as f64).powi(2)).sum::<f64>();
+        total += point
+            .iter()
+            .zip(center)
+            .map(|(a, b)| ((a - b) as f64).powi(2))
+            .sum::<f64>();
     }
     total / points.len().max(1) as f64
 }
@@ -255,13 +265,20 @@ impl BandGroups {
     /// The pieces `[steps, group_dim]` of `group` from step vectors `[steps, frames·bands]`.
     fn extract(&self, steps: &[f32], group: usize) -> Vec<f32> {
         let first_band = group * self.group_bands;
-        steps.chunks_exact(self.bands).flat_map(|frame| &frame[first_band..first_band + self.group_bands]).copied().collect()
+        steps
+            .chunks_exact(self.bands)
+            .flat_map(|frame| &frame[first_band..first_band + self.group_bands])
+            .copied()
+            .collect()
     }
 
     /// Writes one group's `piece` back into its place in `step`.
     fn insert(&self, step: &mut [f32], group: usize, piece: &[f32]) {
         let first_band = group * self.group_bands;
-        for (frame, values) in step.chunks_exact_mut(self.bands).zip(piece.chunks_exact(self.group_bands)) {
+        for (frame, values) in step
+            .chunks_exact_mut(self.bands)
+            .zip(piece.chunks_exact(self.group_bands))
+        {
             frame[first_band..first_band + self.group_bands].copy_from_slice(values);
         }
     }
@@ -302,7 +319,11 @@ impl AudioTokenizer {
         let mut vectors = Vec::with_capacity(usable_frames * mel_bands);
 
         for frame in log_mel.chunks_exact(mel_bands).take(usable_frames) {
-            for ((value, mean), std) in frame.iter().zip(&normalization.mean).zip(&normalization.std) {
+            for ((value, mean), std) in frame
+                .iter()
+                .zip(&normalization.mean)
+                .zip(&normalization.std)
+            {
                 vectors.push((value - mean) / std);
             }
         }
@@ -383,21 +404,31 @@ impl AudioTokenizer {
         let mut log_mel = vec![0.0f32; codes.len() / config.codebooks * self.step_dim()];
         let mut piece = vec![0.0f32; group_dim];
 
-        for (step_codes, step_values) in codes.chunks_exact(config.codebooks).zip(log_mel.chunks_exact_mut(self.step_dim())) {
+        for (step_codes, step_values) in codes
+            .chunks_exact(config.codebooks)
+            .zip(log_mel.chunks_exact_mut(self.step_dim()))
+        {
             for group in 0..config.band_groups {
                 piece.fill(0.0);
                 for level in 0..levels.min(config.levels()) {
                     let index = config.code_index(level, group);
                     let code = step_codes[index] as usize;
                     let centroid = &self.codebooks[index][code * group_dim..(code + 1) * group_dim];
-                    piece.iter_mut().zip(centroid).for_each(|(value, center)| *value += center);
+                    piece
+                        .iter_mut()
+                        .zip(centroid)
+                        .for_each(|(value, center)| *value += center);
                 }
                 groups.insert(step_values, group, &piece);
             }
         }
 
         for frame in log_mel.chunks_exact_mut(self.mel_bands) {
-            for ((value, mean), std) in frame.iter_mut().zip(&self.normalization.mean).zip(&self.normalization.std) {
+            for ((value, mean), std) in frame
+                .iter_mut()
+                .zip(&self.normalization.mean)
+                .zip(&self.normalization.std)
+            {
                 *value = *value * std + mean;
             }
         }
@@ -444,7 +475,12 @@ mod tests {
         let config = TokenizerConfig { codebooks: 8, band_groups: 4, ..TokenizerConfig::default() };
 
         assert_eq!(config.levels(), 2);
-        assert_eq!((0..4).map(|group| config.code_index(0, group)).collect::<Vec<_>>(), vec![0, 1, 2, 3]);
+        assert_eq!(
+            (0..4)
+                .map(|group| config.code_index(0, group))
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2, 3]
+        );
         assert_eq!(config.code_index(1, 2), 6);
     }
 }

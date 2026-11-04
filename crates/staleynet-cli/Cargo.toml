@@ -15,7 +15,6 @@ staleynet-cuda = { path = "../staleynet-cuda" }
 staleynet-data = { path = "../staleynet-data" }
 staleynet-model = { path = "../staleynet-model" }
 staleynet-train = { path = "../staleynet-train" }
-staleynet-vocoder = { path = "../staleynet-vocoder" }
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true

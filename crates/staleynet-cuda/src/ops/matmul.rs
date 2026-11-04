@@ -188,12 +188,12 @@ mod tests {
 
     #[test]
     fn builders_set_the_expected_fields() {
-        let spec = MatmulSpec::new(2, 3, 4).left_transposed().right_transposed().accumulate().scaled(0.25).batched(BatchStrides {
-            count: 3,
-            left: 8,
-            right: 12,
-            output: 6,
-        });
+        let spec = MatmulSpec::new(2, 3, 4)
+            .left_transposed()
+            .right_transposed()
+            .accumulate()
+            .scaled(0.25)
+            .batched(BatchStrides { count: 3, left: 8, right: 12, output: 6 });
 
         assert_eq!(spec.left, Storage::Transposed);
         assert_eq!(spec.right, Storage::Transposed);

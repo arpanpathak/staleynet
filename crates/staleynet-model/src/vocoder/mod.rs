@@ -13,20 +13,29 @@
 //! short-time Fourier transform turns that spectrum into samples.
 //!
 //! * [`config`]: sizes and settings.
-//! * [`network`]: the backbone and the head, with hand-derived gradients.
+//! * [`block`]: one ConvNeXt block, forward and backward.
+//! * [`network`]: the input convolution, the blocks and the spectrum head.
 //! * [`istft`]: the inverse Fourier transform and overlap-add.
+//! * [`synthesis`]: from the head's output to samples, and back.
 //! * [`loss`]: the spectral losses that compare a waveform with its target.
-//! * [`vocoder`]: the whole path from mel spectrogram to waveform and back.
-//! * [`data`]: segments of decoded spectrograms paired with their recordings.
-//! * [`train`]: the training loop, its checkpoints, metrics and samples.
+//! * [`model`]: the vocoder as a whole, mel spectrogram in, waveform out.
+//! * [`training_pass`]: one forward and backward pass over a batch.
+//! * [`checkpoint`]: saving and loading weights and optimizer state.
+//!
+//! The training loop and its data live in `staleynet-train`, as the language
+//! model's do; the GPU kernels live in `staleynet-cuda`.
 
+pub mod block;
+pub mod checkpoint;
 pub mod config;
-pub mod data;
 pub mod istft;
 pub mod loss;
+pub mod model;
 pub mod network;
-pub mod train;
-pub mod vocoder;
+pub mod synthesis;
+pub mod training_pass;
 
 pub use config::VocoderConfig;
-pub use vocoder::Vocoder;
+pub use loss::{Resolution, TRAINING_RESOLUTIONS};
+pub use model::Vocoder;
+pub use training_pass::{LossBreakdown, TrainingPass};

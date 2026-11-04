@@ -149,8 +149,11 @@ impl ConditionedStream {
 /// breaking between lines where possible and between words otherwise.
 /// Returns one empty window for empty lyrics or a model without a lyrics field.
 pub fn lyrics_windows(lyrics: &str, window_bytes: usize) -> Vec<String> {
-    let words_per_line: Vec<Vec<&str>> =
-        lyrics.lines().map(|line| line.split_whitespace().collect::<Vec<_>>()).filter(|words| !words.is_empty()).collect();
+    let words_per_line: Vec<Vec<&str>> = lyrics
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>())
+        .filter(|words| !words.is_empty())
+        .collect();
     if window_bytes == 0 || words_per_line.is_empty() {
         return vec![String::new()];
     }
@@ -198,7 +201,9 @@ fn push_with_separator(buffer: &mut String, text: &str, separator: char) {
 fn sample(logits: &[f32], sampling: Sampling, random: &mut Random) -> u32 {
     let (temperature, k) = match sampling {
         Sampling::Greedy => {
-            let best = (0..logits.len()).max_by(|&a, &b| logits[a].total_cmp(&logits[b])).unwrap_or(0);
+            let best = (0..logits.len())
+                .max_by(|&a, &b| logits[a].total_cmp(&logits[b]))
+                .unwrap_or(0);
             return best as u32;
         }
         Sampling::TopK { temperature, k } => (temperature, k.clamp(1, logits.len())),
@@ -208,8 +213,14 @@ fn sample(logits: &[f32], sampling: Sampling, random: &mut Random) -> u32 {
     candidates.select_nth_unstable_by(k - 1, |&a, &b| logits[b].total_cmp(&logits[a]));
     candidates.truncate(k);
 
-    let best_logit = candidates.iter().map(|&code| logits[code]).fold(f32::NEG_INFINITY, f32::max);
-    let weights: Vec<f32> = candidates.iter().map(|&code| ((logits[code] - best_logit) / temperature).exp()).collect();
+    let best_logit = candidates
+        .iter()
+        .map(|&code| logits[code])
+        .fold(f32::NEG_INFINITY, f32::max);
+    let weights: Vec<f32> = candidates
+        .iter()
+        .map(|&code| ((logits[code] - best_logit) / temperature).exp())
+        .collect();
 
     let mut threshold = random.uniform() * weights.iter().sum::<f32>();
     for (&code, &weight) in candidates.iter().zip(&weights) {
@@ -241,7 +252,9 @@ pub fn generate(gpu: &Gpu, model: &Gpt, prompt: Conditioning, config: &Generatio
 
     for step in 0..steps {
         if lyrics.advance_to(step) {
-            streams.conditional.condition_on(lyrics.prompt_slots(&vocabulary));
+            streams
+                .conditional
+                .condition_on(lyrics.prompt_slots(&vocabulary));
         }
 
         let logits = streams.next_logits(gpu, model, &codes.history, config.attention)?;
@@ -328,7 +341,9 @@ impl GuidedStreams {
     /// Logits for the next step. Under guidance they are moved away from the
     /// unprompted logits: `unconditional + scale · (conditional − unconditional)`.
     fn next_logits(&mut self, gpu: &Gpu, model: &Gpt, history: &[u32], attention: AttentionMode) -> GpuResult<Vec<f32>> {
-        let mut logits = self.conditional.next_logits(gpu, model, history, attention)?;
+        let mut logits = self
+            .conditional
+            .next_logits(gpu, model, history, attention)?;
         self.model_calls += 1;
 
         let (Some(stream), Guidance::ClassifierFree { scale }) = (self.unconditional.as_mut(), self.guidance) else {

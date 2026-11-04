@@ -12,10 +12,9 @@ use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use staleynet_audio::wav::write_mono_pcm16;
 use staleynet_data::store::CacheLayout;
-use staleynet_vocoder::Vocoder;
-use staleynet_vocoder::data::{SegmentSampler, WaveformOutcome, prepare_waveforms};
-use staleynet_vocoder::train::{VocoderTrainingConfig, preferred_checkpoint, train};
-use std::path::PathBuf;
+use staleynet_model::vocoder::checkpoint;
+use staleynet_train::vocoder::{SegmentSampler, VocoderTrainingConfig, WaveformOutcome, preferred_checkpoint, prepare_waveforms, train};
+use std::path::{Path, PathBuf};
 
 /// Tracks between progress lines while building the waveform cache.
 const PREPARE_REPORT_EVERY: usize = 500;
@@ -83,13 +82,21 @@ pub fn run(arguments: Arguments) -> Result<()> {
         Task::Prepare { cache } => prepare(cache),
         Task::Train { cache, run, config } => {
             let config = match config {
-                Some(path) => serde_json::from_str(&std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?)?,
+                Some(path) => read_config(&path)?,
                 None => VocoderTrainingConfig::default(),
             };
+
             train(&open_gpu()?, &cache, &run, config)
         }
         Task::Render { cache, run, out, tracks, seconds } => render(cache, run, out, tracks, seconds),
     }
+}
+
+/// Reads a training configuration; fields it leaves out take their defaults.
+fn read_config(path: &Path) -> Result<VocoderTrainingConfig> {
+    let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+
+    Ok(serde_json::from_str(&text)?)
 }
 
 /// Builds the waveform cache, printing progress and failures.
@@ -125,23 +132,24 @@ fn prepare(cache: PathBuf) -> Result<()> {
 /// Writes each held-out track's recording and its vocoder rendering.
 fn render(cache: PathBuf, run: PathBuf, out: PathBuf, tracks: usize, seconds: f32) -> Result<()> {
     let gpu = open_gpu()?;
-    let checkpoint = preferred_checkpoint(&run);
-    let (vocoder, step) = Vocoder::load(&gpu, &checkpoint)?;
-    let config = &vocoder.config;
+    let directory = preferred_checkpoint(&run);
+    let restored = checkpoint::load(&gpu, &directory)?;
+    let config = &restored.vocoder.config;
 
     let sampler = SegmentSampler::new(&CacheLayout::new(&cache), config, 1, None)?;
-    let frames = (seconds * config.sample_rate as f32 / config.hop_size as f32) as usize + 1;
+    let frames_per_second = config.sample_rate as f32 / config.hop_size as f32;
+    let frames = (seconds * frames_per_second) as usize + 1;
     std::fs::create_dir_all(&out)?;
 
     for id in sampler.listening_tracks(tracks) {
-        let (log_mel, recording) = sampler.whole_track(&id, frames)?;
-        let waveform = vocoder.synthesize(&gpu, &log_mel)?;
+        let track = sampler.whole_track(&id, frames)?;
+        let waveform = restored.vocoder.synthesize(&gpu, &track.log_mel)?;
         let stem = id.replace(['/', '\\'], "_");
 
-        write_mono_pcm16(&out.join(format!("{stem}-recording.wav")), &recording, config.sample_rate)?;
+        write_mono_pcm16(&out.join(format!("{stem}-recording.wav")), &track.recording, config.sample_rate)?;
         write_mono_pcm16(&out.join(format!("{stem}-vocoder.wav")), &waveform, config.sample_rate)?;
     }
 
-    eprintln!("rendered {tracks} tracks with {} (step {step}) into {}", checkpoint.display(), out.display());
+    eprintln!("rendered {tracks} tracks with {} (step {}) into {}", directory.display(), restored.step, out.display());
     Ok(())
 }

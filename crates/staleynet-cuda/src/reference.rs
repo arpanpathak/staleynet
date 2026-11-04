@@ -66,7 +66,11 @@ pub fn rms_norm_forward(input: &[f32], gain: &[f32], cols: usize, epsilon: f32) 
         let mean_square = row.iter().map(|value| value * value).sum::<f32>() / cols as f32;
         let inverse = 1.0 / (mean_square + epsilon).sqrt();
 
-        output.extend(row.iter().zip(gain).map(|(value, scale)| value * inverse * scale));
+        output.extend(
+            row.iter()
+                .zip(gain)
+                .map(|(value, scale)| value * inverse * scale),
+        );
         inv_rms.push(inverse);
     }
 
@@ -97,7 +101,10 @@ pub fn rms_norm_backward(output_grad: &[f32], input: &[f32], gain: &[f32], inv_r
 pub fn causal_softmax(scores: &mut [f32], queries: usize, keys: usize, scale: f32, query_offset: usize) {
     for (row, values) in scores.chunks_exact_mut(keys).enumerate() {
         let visible = (row % queries + query_offset + 1).min(keys);
-        let maximum = values[..visible].iter().map(|value| value * scale).fold(f32::NEG_INFINITY, f32::max);
+        let maximum = values[..visible]
+            .iter()
+            .map(|value| value * scale)
+            .fold(f32::NEG_INFINITY, f32::max);
 
         for value in &mut values[..visible] {
             *value = (*value * scale - maximum).exp();
@@ -113,8 +120,15 @@ pub fn causal_softmax(scores: &mut [f32], queries: usize, keys: usize, scale: f3
 
 /// Reference softmax backward, in place on `grad`.
 pub fn softmax_backward(probabilities: &[f32], grad: &mut [f32], cols: usize) {
-    for (grad_row, probability_row) in grad.chunks_exact_mut(cols).zip(probabilities.chunks_exact(cols)) {
-        let projection: f32 = grad_row.iter().zip(probability_row).map(|(g, p)| g * p).sum();
+    for (grad_row, probability_row) in grad
+        .chunks_exact_mut(cols)
+        .zip(probabilities.chunks_exact(cols))
+    {
+        let projection: f32 = grad_row
+            .iter()
+            .zip(probability_row)
+            .map(|(g, p)| g * p)
+            .sum();
 
         for (g, p) in grad_row.iter_mut().zip(probability_row) {
             *g = p * (*g - projection);
@@ -136,7 +150,12 @@ pub fn cross_entropy(logits: &[f32], targets: &[u32], cols: usize, head: &CrossE
 
         let row_logits = &logits[span.clone()];
         let maximum = row_logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        let log_partition = maximum + row_logits.iter().map(|logit| (logit - maximum).exp()).sum::<f32>().ln();
+        let log_partition = maximum
+            + row_logits
+                .iter()
+                .map(|logit| (logit - maximum).exp())
+                .sum::<f32>()
+                .ln();
 
         *loss = log_partition - row_logits[target as usize];
         for (class, (grad, logit)) in logits_grad[span].iter_mut().zip(row_logits).enumerate() {

@@ -11,7 +11,7 @@
 //! <https://doi.org/10.1109/TASSP.1984.1164317>; J. O. Smith, *Spectral Audio
 //! Signal Processing*, <https://ccrma.stanford.edu/~jos/sasp/>).
 
-use crate::config::VocoderConfig;
+use super::config::VocoderConfig;
 use staleynet_cuda::{Gpu, GpuResult, MatmulSpec, Shape, Tensor};
 use std::f64::consts::TAU;
 
@@ -30,7 +30,7 @@ pub struct InverseStft {
     /// The synthesis window, one value per frame sample.
     window: Vec<f32>,
 
-    /// Samples per frame.
+    /// Samples per frame, `N`.
     fft_size: usize,
 
     /// Samples between the starts of consecutive frames.
@@ -41,25 +41,29 @@ impl InverseStft {
     /// Builds the bases for `config`, with `window` (normally the analysis
     /// window, a periodic Hann window) as the synthesis window.
     pub fn new(gpu: &Gpu, config: &VocoderConfig, window: &[f32]) -> GpuResult<Self> {
-        let (n, bins) = (config.fft_size, config.bins());
-        let mut real = vec![0.0f32; bins * n];
-        let mut imaginary = vec![0.0f32; bins * n];
+        let fft_size = config.fft_size;
+        let bins = config.bins();
+
+        let mut real = vec![0.0f32; bins * fft_size];
+        let mut imaginary = vec![0.0f32; bins * fft_size];
 
         for bin in 0..bins {
-            let pair_weight = if bin == 0 || bin == n / 2 { 1.0 } else { 2.0 };
-            for sample in 0..n {
-                let angle = TAU * (bin * sample) as f64 / n as f64;
-                let scale = pair_weight * window[sample] as f64 / n as f64;
-                real[bin * n + sample] = (angle.cos() * scale) as f32;
-                imaginary[bin * n + sample] = (-angle.sin() * scale) as f32;
+            let pair_weight = if bin == 0 || bin == fft_size / 2 { 1.0 } else { 2.0 };
+
+            for sample in 0..fft_size {
+                let angle = TAU * (bin * sample) as f64 / fft_size as f64;
+                let scale = pair_weight * window[sample] as f64 / fft_size as f64;
+
+                real[bin * fft_size + sample] = (angle.cos() * scale) as f32;
+                imaginary[bin * fft_size + sample] = (-angle.sin() * scale) as f32;
             }
         }
 
         Ok(Self {
-            real_basis: gpu.upload(Shape::new(bins, n), &real)?,
-            imaginary_basis: gpu.upload(Shape::new(bins, n), &imaginary)?,
+            real_basis: gpu.upload(Shape::new(bins, fft_size), &real)?,
+            imaginary_basis: gpu.upload(Shape::new(bins, fft_size), &imaginary)?,
             window: window.to_vec(),
-            fft_size: n,
+            fft_size,
             hop_size: config.hop_size,
         })
     }
@@ -69,13 +73,17 @@ impl InverseStft {
     pub fn normalization(&self, frames: usize) -> Vec<f32> {
         let length = (frames - 1) * self.hop_size + self.fft_size;
         let mut window_sum = vec![0.0f64; length];
+
         for frame in 0..frames {
             for (offset, weight) in self.window.iter().enumerate() {
                 window_sum[frame * self.hop_size + offset] += (*weight as f64).powi(2);
             }
         }
 
-        window_sum.iter().map(|sum| (1.0 / sum.max(WINDOW_SUM_FLOOR)) as f32).collect()
+        window_sum
+            .iter()
+            .map(|sum| (1.0 / sum.max(WINDOW_SUM_FLOOR)) as f32)
+            .collect()
     }
 
     /// Samples from a spectrum: `frames = real · Br + imaginary · Bi`, then
@@ -92,11 +100,13 @@ impl InverseStft {
         frames: &mut Tensor,
         signal: &mut Tensor,
     ) -> GpuResult {
-        let (rows, bins) = (real.shape().rows, real.shape().cols);
+        let rows = real.shape().rows;
+        let bins = real.shape().cols;
         let product = MatmulSpec::new(rows, self.fft_size, bins);
 
         gpu.matmul(&product, real, &self.real_basis, frames)?;
         gpu.matmul(&product.accumulate(), imaginary, &self.imaginary_basis, frames)?;
+
         gpu.overlap_add(frames, normalization, signal, frames_per_sequence, self.hop_size)
     }
 
@@ -115,8 +125,10 @@ impl InverseStft {
     ) -> GpuResult {
         gpu.overlap_add_backward(signal_grad, normalization, frames_grad, frames_per_sequence, self.hop_size)?;
 
-        let (rows, bins) = (real_grad.shape().rows, real_grad.shape().cols);
+        let rows = real_grad.shape().rows;
+        let bins = real_grad.shape().cols;
         let product = MatmulSpec::new(rows, bins, self.fft_size).right_transposed();
+
         gpu.matmul(&product, frames_grad, &self.real_basis, real_grad)?;
         gpu.matmul(&product, frames_grad, &self.imaginary_basis, imaginary_grad)
     }

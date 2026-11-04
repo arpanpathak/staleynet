@@ -119,7 +119,10 @@ impl PolyphaseFilter {
         let mut accumulator = 0.0f32;
         for (offset, &weight) in phase_taps.iter().enumerate() {
             let input_index = first + offset as isize;
-            if let Some(&sample) = usize::try_from(input_index).ok().and_then(|index| input.get(index)) {
+            if let Some(&sample) = usize::try_from(input_index)
+                .ok()
+                .and_then(|index| input.get(index))
+            {
                 accumulator += sample * weight;
             }
         }
@@ -139,7 +142,10 @@ pub fn resample(input: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
     let filter = PolyphaseFilter::new(source_rate, target_rate);
     let output_length = (input.len() as u64 * target_rate as u64 / source_rate as u64) as usize;
 
-    (0..output_length).into_par_iter().map(|index| filter.sample(input, index)).collect()
+    (0..output_length)
+        .into_par_iter()
+        .map(|index| filter.sample(input, index))
+        .collect()
 }
 
 #[cfg(test)]
@@ -150,7 +156,9 @@ mod tests {
     /// in f64: an f32 phase of ~10⁵ rad carries enough rounding noise to
     /// masquerade as aliasing at −46 dB.
     fn tone(frequency: f64, rate: u32, length: usize) -> Vec<f32> {
-        (0..length).map(|index| (std::f64::consts::TAU * frequency * index as f64 / rate as f64).sin() as f32).collect()
+        (0..length)
+            .map(|index| (std::f64::consts::TAU * frequency * index as f64 / rate as f64).sin() as f32)
+            .collect()
     }
 
     #[test]
@@ -163,7 +171,9 @@ mod tests {
             assert_eq!(output.len(), target_rate as usize);
 
             let edge = 1000;
-            let worst = (edge..output.len() - edge).map(|index| (output[index] - expected[index]).abs()).fold(0.0f32, f32::max);
+            let worst = (edge..output.len() - edge)
+                .map(|index| (output[index] - expected[index]).abs())
+                .fold(0.0f32, f32::max);
             assert!(worst < 2e-3, "{source_rate} → {target_rate}: worst error {worst}");
         }
     }
@@ -174,7 +184,9 @@ mod tests {
         let output = resample(&tone(15_000.0, source_rate, source_rate as usize), source_rate, target_rate);
 
         let edge = 1000;
-        let peak = output[edge..output.len() - edge].iter().fold(0.0f32, |peak, sample| peak.max(sample.abs()));
+        let peak = output[edge..output.len() - edge]
+            .iter()
+            .fold(0.0f32, |peak, sample| peak.max(sample.abs()));
         // The designed stop-band attenuation at 15 kHz is ≈ −107 dB; allow −80 dB.
         assert!(peak < 1e-4, "aliased peak {peak}");
     }

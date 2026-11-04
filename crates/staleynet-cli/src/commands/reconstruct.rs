@@ -90,7 +90,12 @@ struct ExcerptReport {
 /// Mean absolute difference over the shorter of two log-mels.
 fn mean_absolute_error(reference: &[f32], estimate: &[f32]) -> f32 {
     let compared = reference.len().min(estimate.len());
-    reference[..compared].iter().zip(&estimate[..compared]).map(|(a, b)| (a - b).abs()).sum::<f32>() / compared.max(1) as f32
+    reference[..compared]
+        .iter()
+        .zip(&estimate[..compared])
+        .map(|(a, b)| (a - b).abs())
+        .sum::<f32>()
+        / compared.max(1) as f32
 }
 
 /// Captions that mark a track as having no singing, whatever else it says.
@@ -130,7 +135,14 @@ pub fn run(arguments: Arguments) -> Result<()> {
 /// voice and do not describe them as instrumental.
 fn held_out_vocal_tracks<'a>(manifest: &'a DatasetManifest, arguments: &Arguments) -> Vec<&'a PreparedTrack> {
     let filter = TrackFilter { require_any: arguments.require.clone(), exclude_any: NO_VOICE_WORDS.map(String::from).to_vec() };
-    let captions = |entry: &PreparedTrack| entry.track.captions.iter().map(|caption| caption.text.clone()).collect::<Vec<_>>();
+    let captions = |entry: &PreparedTrack| {
+        entry
+            .track
+            .captions
+            .iter()
+            .map(|caption| caption.text.clone())
+            .collect::<Vec<_>>()
+    };
 
     manifest
         .tracks
@@ -203,8 +215,9 @@ impl Pipeline {
 
         let codes = read_codes(&self.layout.codes(id))?;
         let excerpt_codes = excerpt.of_codes(&codes, frames_per_step, self.tokenizer.config.codebooks);
-        let decoded: Vec<Vec<f32>> =
-            (1..=self.tokenizer.config.levels()).map(|levels| self.tokenizer.decode(excerpt_codes, levels)).collect();
+        let decoded: Vec<Vec<f32>> = (1..=self.tokenizer.config.levels())
+            .map(|levels| self.tokenizer.decode(excerpt_codes, levels))
+            .collect();
 
         let from_mel = griffin_lim(&self.analyzer, exact, self.griffin);
         let from_coarse_tokens = griffin_lim(&self.analyzer, &decoded[0], self.griffin);
@@ -221,9 +234,17 @@ impl Pipeline {
 
         Ok(ExcerptReport {
             id: id.clone(),
-            caption: entry.track.captions.first().map(|caption| caption.text.clone()).unwrap_or_default(),
+            caption: entry
+                .track
+                .captions
+                .first()
+                .map(|caption| caption.text.clone())
+                .unwrap_or_default(),
             offset: excerpt.start_frame as f32 / self.analyzer.config.frames_per_second(),
-            tokenizer_error_by_levels: decoded.iter().map(|estimate| mean_absolute_error(exact, estimate)).collect(),
+            tokenizer_error_by_levels: decoded
+                .iter()
+                .map(|estimate| mean_absolute_error(exact, estimate))
+                .collect(),
             vocoder_error_from_exact_mel: mean_absolute_error(exact, &self.analyzer.log_mel(&from_mel)),
             end_to_end_error_from_tokens: mean_absolute_error(exact, &self.analyzer.log_mel(&from_tokens)),
         })

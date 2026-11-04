@@ -89,7 +89,10 @@ pub fn prepare(
     let mut prepared = Vec::with_capacity(tracks.len());
 
     for group in tracks.chunks(DECODE_GROUP_SIZE) {
-        let signals: Vec<Result<Vec<f32>>> = group.par_iter().map(|track| load_signal(track, options)).collect();
+        let signals: Vec<Result<Vec<f32>>> = group
+            .par_iter()
+            .map(|track| load_signal(track, options))
+            .collect();
 
         for (track, signal) in group.iter().zip(signals) {
             let outcome = match signal.and_then(|signal| analyse(gpu, &extractor, &analyzer, track, &signal, layout)) {
@@ -105,7 +108,10 @@ pub fn prepare(
     }
 
     let mut statistics = BandStatistics::new(options.mel.mel_bands);
-    for entry in prepared.iter().filter(|entry| entry.track.split == Split::Train) {
+    for entry in prepared
+        .iter()
+        .filter(|entry| entry.track.split == Split::Train)
+    {
         statistics.add(&read_f16(&layout.mel(&entry.track.id))?);
     }
 

@@ -1,4 +1,5 @@
-//! Elementwise arithmetic, bias handling and the GELU activation.
+//! Elementwise arithmetic, bias handling, per-column scales and the GELU
+//! activation.
 
 use crate::device::{Gpu, GpuResult, Tensor};
 use crate::launch;
@@ -10,14 +11,20 @@ impl Gpu {
 
         // SAFETY: one thread per output element; `get_mut` guards the tail.
         unsafe {
-            self.kernels.elementwise.add_scaled(&self.stream, launch::elementwise(output.len()), scale, &input.buffer, &mut output.buffer)
+            self.kernels
+                .elementwise
+                .add_scaled(&self.stream, launch::elementwise(output.len()), scale, &input.buffer, &mut output.buffer)
         }
     }
 
     /// `values *= factor`.
     pub fn scale(&self, values: &mut Tensor, factor: f32) -> GpuResult {
         // SAFETY: one thread per element; `get_mut` guards the tail.
-        unsafe { self.kernels.elementwise.scale_in_place(&self.stream, launch::elementwise(values.len()), &mut values.buffer, factor) }
+        unsafe {
+            self.kernels
+                .elementwise
+                .scale_in_place(&self.stream, launch::elementwise(values.len()), &mut values.buffer, factor)
+        }
     }
 
     /// `output[r, :] += bias` for every row.
@@ -27,7 +34,9 @@ impl Gpu {
 
         // SAFETY: one thread per output element; `get_mut` guards the tail.
         unsafe {
-            self.kernels.elementwise.add_row_bias(&self.stream, launch::elementwise(output.len()), &mut output.buffer, &bias.buffer, cols)
+            self.kernels
+                .elementwise
+                .add_row_bias(&self.stream, launch::elementwise(output.len()), &mut output.buffer, &bias.buffer, cols)
         }
     }
 
@@ -49,12 +58,56 @@ impl Gpu {
         }
     }
 
+    /// `output[r, c] = values[r, c] · scale[c]`.
+    pub fn scale_columns(&self, values: &Tensor, scale: &Tensor, output: &mut Tensor) -> GpuResult {
+        let shape = values.shape();
+        assert_eq!(scale.len(), shape.cols, "scale_columns: one factor per column");
+        assert_eq!(output.shape(), shape, "scale_columns: output shape");
+
+        // SAFETY: one thread per output element; `get_mut` guards the tail.
+        unsafe {
+            self.kernels.elementwise.scale_columns(
+                &self.stream,
+                launch::elementwise(values.len()),
+                &values.buffer,
+                &scale.buffer,
+                &mut output.buffer,
+                shape.cols,
+            )
+        }
+    }
+
+    /// `scale_grad[c] = Σ_r output_grad[r, c] · values[r, c]`, the gradient of
+    /// [`Gpu::scale_columns`] with respect to its factors.
+    pub fn column_products(&self, output_grad: &Tensor, values: &Tensor, scale_grad: &mut Tensor) -> GpuResult {
+        let shape = values.shape();
+        assert_eq!(output_grad.shape(), shape, "column_products: shapes");
+        assert_eq!(scale_grad.len(), shape.cols, "column_products: one sum per column");
+
+        // SAFETY: one thread per column; out-of-range threads return early.
+        unsafe {
+            self.kernels.elementwise.column_products(
+                &self.stream,
+                launch::elementwise(shape.cols),
+                &output_grad.buffer,
+                &values.buffer,
+                shape.rows,
+                shape.cols,
+                &mut scale_grad.buffer,
+            )
+        }
+    }
+
     /// `output = GELU(input)`.
     pub fn gelu_forward(&self, input: &Tensor, output: &mut Tensor) -> GpuResult {
         assert_eq!(input.shape(), output.shape(), "gelu_forward: shape mismatch");
 
         // SAFETY: one thread per element; `get_mut` guards the tail.
-        unsafe { self.kernels.elementwise.gelu_forward(&self.stream, launch::elementwise(output.len()), &input.buffer, &mut output.buffer) }
+        unsafe {
+            self.kernels
+                .elementwise
+                .gelu_forward(&self.stream, launch::elementwise(output.len()), &input.buffer, &mut output.buffer)
+        }
     }
 
     /// `input_grad = output_grad ⊙ GELU'(input)`.

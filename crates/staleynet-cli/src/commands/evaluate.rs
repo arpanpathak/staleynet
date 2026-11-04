@@ -90,7 +90,10 @@ const CONDITIONS: [LyricsCondition; 3] = [LyricsCondition::Aligned, LyricsCondit
 pub fn run(arguments: Arguments) -> Result<()> {
     let gpu = open_gpu()?;
 
-    let checkpoint_directory = arguments.checkpoint.clone().unwrap_or_else(|| preferred_checkpoint(&arguments.run));
+    let checkpoint_directory = arguments
+        .checkpoint
+        .clone()
+        .unwrap_or_else(|| preferred_checkpoint(&arguments.run));
     let (model, metadata) = checkpoint::load(&gpu, &checkpoint_directory, None)?;
     ensure!(model.config.lyrics_bytes > 0, "{} has no lyrics field", checkpoint_directory.display());
 
@@ -180,10 +183,15 @@ impl<'a> Scorer<'a> {
         let mut per_codebook = vec![0.0; self.model.config.codebooks];
         for _ in 0..self.batches {
             sampler.fill(self.corpus, &mut self.batch, &mut random);
-            let loss = self.model.forward_loss(self.gpu, &mut self.workspace, &self.batch)?;
+            let loss = self
+                .model
+                .forward_loss(self.gpu, &mut self.workspace, &self.batch)?;
 
             losses.push(loss.mean);
-            per_codebook.iter_mut().zip(&loss.per_codebook).for_each(|(sum, value)| *sum += value);
+            per_codebook
+                .iter_mut()
+                .zip(&loss.per_codebook)
+                .for_each(|(sum, value)| *sum += value);
         }
 
         let batches = self.batches as f32;
@@ -215,7 +223,11 @@ impl PairedDifference {
         let count = differences.len() as f32;
 
         let mean = differences.iter().sum::<f32>() / count;
-        let variance = differences.iter().map(|difference| (difference - mean).powi(2)).sum::<f32>() / (count - 1.0).max(1.0);
+        let variance = differences
+            .iter()
+            .map(|difference| (difference - mean).powi(2))
+            .sum::<f32>()
+            / (count - 1.0).max(1.0);
         Self { mean, standard_error: (variance / count).sqrt() }
     }
 

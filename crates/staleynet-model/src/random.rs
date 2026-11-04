@@ -134,7 +134,11 @@ mod tests {
         let values: Vec<f32> = (0..2_000).map(|_| random.normal()).collect();
 
         let mean = values.iter().sum::<f32>() / values.len() as f32;
-        let variance = values.iter().map(|value| (value - mean).powi(2)).sum::<f32>() / values.len() as f32;
+        let variance = values
+            .iter()
+            .map(|value| (value - mean).powi(2))
+            .sum::<f32>()
+            / values.len() as f32;
 
         assert!(values.iter().all(|value| value.is_finite()));
         assert!(mean.abs() < 0.2, "mean {mean}");

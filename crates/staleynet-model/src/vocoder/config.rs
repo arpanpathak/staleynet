@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 /// Every size the vocoder depends on. The defaults are those of Vocos at
-/// 24 kHz (Siuzdak, 2023), with StaleyNET's 128 mel bands as input.
+/// 24 kHz (Siuzdak, 2023, <https://arxiv.org/abs/2306.00814>), with
+/// StaleyNET's 128 mel bands as input.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VocoderConfig {
@@ -57,6 +58,11 @@ impl VocoderConfig {
     /// Non-negative frequencies of one frame, `fft_size / 2 + 1`.
     pub fn bins(&self) -> usize {
         self.fft_size / 2 + 1
+    }
+
+    /// Width of each block's feed-forward layer, `expansion · width`.
+    pub fn hidden_width(&self) -> usize {
+        self.expansion * self.width
     }
 
     /// Samples of the waveform synthesized from `frames` frames, before the

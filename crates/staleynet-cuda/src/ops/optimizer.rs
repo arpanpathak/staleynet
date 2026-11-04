@@ -71,7 +71,11 @@ impl Gpu {
 
         // SAFETY: fixed full-block grid matching the kernel's shared-memory size;
         // each block writes only its own partial sum.
-        unsafe { self.kernels.optimizer.sum_of_squares(&self.stream, launch::reduction(), &values.buffer, &mut partial_sums.buffer)? };
+        unsafe {
+            self.kernels
+                .optimizer
+                .sum_of_squares(&self.stream, launch::reduction(), &values.buffer, &mut partial_sums.buffer)?
+        };
 
         let partials = self.download(&partial_sums)?;
         Ok(partials.iter().map(|&partial| partial as f64).sum())

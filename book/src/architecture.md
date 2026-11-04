@@ -50,17 +50,16 @@ benefit with a small shift of the sequence.
 
 ## Organization of the code
 
-The implementation is divided into seven Rust crates, arranged so that each
+The implementation is divided into six Rust crates, arranged so that each
 depends only on crates above it in the following table.
 
 | Crate | Contents |
 |---|---|
 | `staleynet-audio` | Reading audio files, resampling, spectrogram analysis and the Griffin-Lim reconstruction, as plain CPU code that serves as the reference for the GPU versions. |
 | `staleynet-cuda` | The GPU kernels written in Rust and compiled by cuda-oxide, the tensor type that holds GPU data, and CPU versions of each kernel for testing. |
-| `staleynet-model` | The Transformer, its gradient computation, the optimizer, the incremental decoder used for generation, sampling, and checkpoint files. |
+| `staleynet-model` | The networks. The Transformer with its gradient computation, the optimizer, the incremental decoder used for generation, sampling, and checkpoint files; and the neural vocoder with its inverse STFT and spectral losses, each with hand-derived gradients. |
 | `staleynet-data` | Dataset catalogs, GPU spectrogram extraction, the tokenizer and the assembly of training batches. |
-| `staleynet-train` | The training loop, validation, logging and the checkpoint policy. |
-| `staleynet-vocoder` | The neural vocoder: its network, the inverse STFT, the spectral losses with their gradients, and its own training loop. |
+| `staleynet-train` | The training loops of the language model and of the vocoder: sampling batches, validation, logging and the checkpoint policy. |
 | `staleynet-cli` | The `staleynet` command-line program that ties the crates together. |
 
 A separate program, `studio/`, serves a web page for generating and listening

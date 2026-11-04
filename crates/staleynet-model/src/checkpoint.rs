@@ -81,7 +81,10 @@ pub fn save(
     }
 
     write_atomically(&directory.join(TENSOR_FILE), |writer| {
-        values.iter().flatten().try_for_each(|value| writer.write_all(&value.to_le_bytes()))
+        values
+            .iter()
+            .flatten()
+            .try_for_each(|value| writer.write_all(&value.to_le_bytes()))
     })?;
 
     let metadata = CheckpointMetadata { model: model.config.clone(), tensors, step, has_optimizer_state: optimizer.is_some(), training };
@@ -169,7 +172,9 @@ pub fn load(gpu: &Gpu, directory: &Path, optimizer: Option<&mut AdamW>) -> Resul
     let mut remaining = values.as_slice();
     let mut entries = metadata.tensors.iter();
     try_for_each_parameter(&mut model, |parameter| {
-        let entry = entries.next().context("checkpoint has fewer tensors than the model")?;
+        let entry = entries
+            .next()
+            .context("checkpoint has fewer tensors than the model")?;
         ensure!(
             entry.name == parameter.name && entry.len == parameter.value.len(),
             "checkpoint tensor {} ({}) does not match parameter {}",
@@ -190,8 +195,8 @@ pub fn load(gpu: &Gpu, directory: &Path, optimizer: Option<&mut AdamW>) -> Resul
 }
 
 /// Calls `action` on every parameter of `model` in visitor order and stops at
-/// the first error, which it returns.
-fn try_for_each_parameter(model: &mut Gpt, mut action: impl FnMut(&mut Parameter) -> Result<()>) -> Result<()> {
+/// the first error, which it returns. Shared with the vocoder's checkpoints.
+pub(crate) fn try_for_each_parameter(model: &mut impl Parameters, mut action: impl FnMut(&mut Parameter) -> Result<()>) -> Result<()> {
     let mut outcome = Ok(());
     model.visit_parameters(&mut |parameter| {
         if outcome.is_ok() {
@@ -204,10 +209,17 @@ fn try_for_each_parameter(model: &mut Gpt, mut action: impl FnMut(&mut Parameter
 
 /// All values of `tensors.bin`, decoded from little-endian `f32`.
 fn read_values(directory: &Path) -> Result<Vec<f32>> {
-    let path = directory.join(TENSOR_FILE);
-    let bytes = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
+    read_f32_file(&directory.join(TENSOR_FILE))
+}
 
-    Ok(bytes.chunks_exact(BYTES_PER_VALUE).map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])).collect())
+/// Every value of a file of little-endian `f32`. Shared with the vocoder's checkpoints.
+pub(crate) fn read_f32_file(path: &Path) -> Result<Vec<f32>> {
+    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+
+    Ok(bytes
+        .chunks_exact(BYTES_PER_VALUE)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect())
 }
 
 /// The stored parameters by name, each a slice of `values` in file order.
@@ -224,8 +236,8 @@ fn stored_tensors<'a>(metadata: &CheckpointMetadata, values: &'a [f32]) -> HashM
 }
 
 /// Uploads the next `tensor.len()` values of `remaining` into `tensor` and
-/// advances `remaining` past them.
-fn upload_next(gpu: &Gpu, remaining: &mut &[f32], tensor: &mut Tensor) -> Result<()> {
+/// advances `remaining` past them. Shared with the vocoder's checkpoints.
+pub(crate) fn upload_next(gpu: &Gpu, remaining: &mut &[f32], tensor: &mut Tensor) -> Result<()> {
     ensure!(remaining.len() >= tensor.len(), "tensors.bin ends before every tensor was read");
 
     let (values, rest) = remaining.split_at(tensor.len());
@@ -240,7 +252,10 @@ fn download_moments(gpu: &Gpu, optimizer: &AdamW) -> Result<Vec<Vec<f32>>> {
     let firsts = optimizer.moments.iter().map(|moment| &moment.first);
     let seconds = optimizer.moments.iter().map(|moment| &moment.second);
 
-    Ok(firsts.chain(seconds).map(|tensor| gpu.download(tensor)).collect::<Result<_, _>>()?)
+    Ok(firsts
+        .chain(seconds)
+        .map(|tensor| gpu.download(tensor))
+        .collect::<Result<_, _>>()?)
 }
 
 /// Uploads the AdamW moments stored after the parameters, in the order that
@@ -258,8 +273,9 @@ fn restore_moments(gpu: &Gpu, optimizer: &mut AdamW, mut remaining: &[f32]) -> R
 /// Lets `write` fill a temporary file next to `path` and then renames it to
 /// `path`, so that the file at `path` is always either the old one or the
 /// complete new one. Writing through a buffer keeps large tensors streaming
-/// to disk instead of being copied into memory first.
-fn write_atomically(path: &Path, write: impl FnOnce(&mut BufWriter<fs::File>) -> std::io::Result<()>) -> Result<()> {
+/// to disk instead of being copied into memory first. Shared with the
+/// vocoder's checkpoints.
+pub(crate) fn write_atomically(path: &Path, write: impl FnOnce(&mut BufWriter<fs::File>) -> std::io::Result<()>) -> Result<()> {
     let mut staging_name = path.as_os_str().to_owned();
     staging_name.push(".partial");
     let staging = Path::new(&staging_name);

@@ -10,9 +10,9 @@ use staleynet_audio::{MelAnalyzer, MelConfig};
 use staleynet_data::store::{CacheLayout, DatasetManifest, write_codes};
 use staleynet_data::tokenizer::AudioTokenizer;
 use staleynet_model::generate::{AttentionMode, GenerationConfig, GenerationStats, Guidance, Sampling, generate};
+use staleynet_model::vocoder;
 use staleynet_model::{Conditioning, checkpoint};
 use staleynet_train::{RUN_TOKENIZER, preferred_checkpoint};
-use staleynet_vocoder::Vocoder;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -155,10 +155,16 @@ pub fn run(arguments: Arguments) -> Result<()> {
     }
 
     let log_mel = tokenizer.decode(&generation.codes, tokenizer.config.codebooks);
-    let vocoder_checkpoint = arguments.vocoder.as_deref().map(vocoder_checkpoint);
+    let vocoder_checkpoint = arguments
+        .vocoder
+        .as_deref()
+        .map(staleynet_train::vocoder::preferred_checkpoint);
     let vocoder_started = Instant::now();
     let waveform = match &vocoder_checkpoint {
-        Some(checkpoint) => Vocoder::load(&gpu, checkpoint)?.0.synthesize(&gpu, &log_mel)?,
+        Some(directory) => {
+            let restored = vocoder::checkpoint::load(&gpu, directory)?;
+            restored.vocoder.synthesize(&gpu, &log_mel)?
+        }
         None => {
             let griffin = GriffinLimConfig { iterations: arguments.griffin_lim_iterations, seed: arguments.seed };
             griffin_lim(&MelAnalyzer::new(mel), &log_mel, griffin)
@@ -190,11 +196,6 @@ pub fn run(arguments: Arguments) -> Result<()> {
         report.real_time_factor
     );
     Ok(())
-}
-
-/// The checkpoint of a vocoder run to synthesize with.
-fn vocoder_checkpoint(run: &Path) -> PathBuf {
-    staleynet_vocoder::train::preferred_checkpoint(run)
 }
 
 /// The tokenizer saved with the run, or the cache's when the run has none.

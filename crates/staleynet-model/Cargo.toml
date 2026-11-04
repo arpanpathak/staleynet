@@ -1,11 +1,12 @@
 [package]
 name = "staleynet-model"
-description = "Decoder-only Transformer over text and audio tokens, trained and sampled on the GPU."
+description = "The networks: a decoder-only Transformer over text and audio tokens, and a neural vocoder, trained and run on the GPU."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
+staleynet-audio = { path = "../staleynet-audio" }
 staleynet-cuda = { path = "../staleynet-cuda" }
 anyhow.workspace = true
 serde.workspace = true

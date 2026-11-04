@@ -78,7 +78,9 @@ fn cholesky_solve(lower: &DenseMatrix, rhs: &mut DenseMatrix) {
         }
 
         for row in (0..size).rev() {
-            let dot: f64 = (row + 1..size).map(|k| lower.at(k, row) * rhs.at(k, col)).sum();
+            let dot: f64 = (row + 1..size)
+                .map(|k| lower.at(k, row) * rhs.at(k, col))
+                .sum();
             rhs.values[row * rhs.cols + col] = (rhs.at(row, col) - dot) / lower.at(row, row);
         }
     }
@@ -93,7 +95,9 @@ fn filterbank_pseudo_inverse(analyzer: &MelAnalyzer) -> Vec<f32> {
 
     let mut gram = DenseMatrix { rows: bands, cols: bands, values: vec![0.0; bands * bands] };
     for (band_a, band_b) in (0..bands).flat_map(|a| (0..bands).map(move |b| (a, b))) {
-        gram.values[band_a * bands + band_b] = (0..bins).map(|bin| weight(bin, band_a) * weight(bin, band_b)).sum();
+        gram.values[band_a * bands + band_b] = (0..bins)
+            .map(|bin| weight(bin, band_a) * weight(bin, band_b))
+            .sum();
     }
 
     let mean_diagonal = (0..bands).map(|band| gram.at(band, band)).sum::<f64>() / bands as f64;
@@ -107,7 +111,11 @@ fn filterbank_pseudo_inverse(analyzer: &MelAnalyzer) -> Vec<f32> {
     }
 
     cholesky_solve(&cholesky(&gram), &mut transposed);
-    transposed.values.into_iter().map(|value| value as f32).collect()
+    transposed
+        .values
+        .into_iter()
+        .map(|value| value as f32)
+        .collect()
 }
 
 /// Linear-frequency magnitudes `[frame][bin]` implied by a log-mel spectrogram.
@@ -129,7 +137,10 @@ fn mel_to_magnitudes(analyzer: &MelAnalyzer, log_mel: &[f32]) -> Vec<Vec<f32>> {
                 }
             }
 
-            power.into_iter().map(|value| value.max(0.0).sqrt()).collect()
+            power
+                .into_iter()
+                .map(|value| value.max(0.0).sqrt())
+                .collect()
         })
         .collect()
 }
@@ -172,7 +183,12 @@ pub fn griffin_lim(analyzer: &MelAnalyzer, log_mel: &[f32], config: GriffinLimCo
 
     let mut estimate: Vec<SpectrumFrame> = magnitudes
         .iter()
-        .map(|frame| frame.iter().map(|&magnitude| Complex32::from_polar(magnitude, phases.next_phase())).collect())
+        .map(|frame| {
+            frame
+                .iter()
+                .map(|&magnitude| Complex32::from_polar(magnitude, phases.next_phase()))
+                .collect()
+        })
         .collect();
     let mut previous_projection: Option<Vec<SpectrumFrame>> = None;
     let mut waveform = analyzer.istft(&estimate, sample_count);
@@ -220,8 +236,12 @@ mod tests {
         let reanalysed = analyzer.log_mel(&waveform);
 
         let compared = original.len().min(reanalysed.len());
-        let mean_error =
-            original[..compared].iter().zip(&reanalysed[..compared]).map(|(a, b)| (a - b).abs()).sum::<f32>() / compared as f32;
+        let mean_error = original[..compared]
+            .iter()
+            .zip(&reanalysed[..compared])
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f32>()
+            / compared as f32;
         assert!(mean_error < 1.0, "mean log-mel error {mean_error}");
     }
 }
@@ -232,7 +252,9 @@ mod edge_tests {
     use crate::mel::MelConfig;
 
     fn short_signal() -> Vec<f32> {
-        (0..1_200).map(|index| (index as f32 * 0.05).sin() * 0.3).collect()
+        (0..1_200)
+            .map(|index| (index as f32 * 0.05).sin() * 0.3)
+            .collect()
     }
 
     #[test]
@@ -320,6 +342,10 @@ mod edge_tests {
 
         assert_eq!(magnitudes.len(), 1);
         assert_eq!(magnitudes[0].len(), config.frequency_bins());
-        assert!(magnitudes[0].iter().all(|value| value.is_finite() && *value >= 0.0));
+        assert!(
+            magnitudes[0]
+                .iter()
+                .all(|value| value.is_finite() && *value >= 0.0)
+        );
     }
 }

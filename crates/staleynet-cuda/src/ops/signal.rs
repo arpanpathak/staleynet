@@ -43,7 +43,11 @@ impl Gpu {
     /// `values = ln(max(values, floor))`.
     pub fn log_compress(&self, values: &mut Tensor, floor: f32) -> GpuResult {
         // SAFETY: one thread per element; `get_mut` guards the tail.
-        unsafe { self.kernels.signal.log_compress(&self.stream, launch::elementwise(values.len()), &mut values.buffer, floor) }
+        unsafe {
+            self.kernels
+                .signal
+                .log_compress(&self.stream, launch::elementwise(values.len()), &mut values.buffer, floor)
+        }
     }
 
     /// For each row of `dots` (`x·cᵀ`, `[points, centroids]`), the index of the

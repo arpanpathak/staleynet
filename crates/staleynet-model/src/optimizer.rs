@@ -109,7 +109,9 @@ impl AdamW {
 
         model.visit_parameters(&mut |parameter| {
             let shape = parameter.value.shape();
-            let allocated = gpu.zeros(shape).and_then(|first| Ok(Moments { first, second: gpu.zeros(shape)? }));
+            let allocated = gpu
+                .zeros(shape)
+                .and_then(|first| Ok(Moments { first, second: gpu.zeros(shape)? }));
             match allocated {
                 Ok(moment) => moments.push(moment),
                 Err(error) => result = Err(error),
