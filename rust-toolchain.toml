@@ -1,3 +1,6 @@
+# The toolchain of the cuda-oxide revision recorded in Cargo.lock; keep it in
+# step with cuda-oxide/rust-toolchain.toml upstream. Machines that must stay on
+# an older cuda-oxide use docs/legacy-cuda-oxide.md instead.
 [toolchain]
-channel = "nightly-2026-04-03"
+channel = "1.99.1"
 components = ["rust-src", "rustc-dev", "rust-analyzer", "clippy", "rustfmt", "llvm-tools"]

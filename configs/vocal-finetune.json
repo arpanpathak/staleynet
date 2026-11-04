@@ -1,0 +1,63 @@
+{
+  "model": {
+    "width": 256,
+    "heads": 8,
+    "layers": 6,
+    "feed_forward_multiplier": 4,
+    "context_length": 768,
+    "prompt_bytes": 126,
+    "codebooks": 4,
+    "codebook_size": 1024
+  },
+  "optimizer": {
+    "peak_learning_rate": 0.0003,
+    "final_learning_rate": 3e-05,
+    "warmup_steps": 200,
+    "decay_steps": 8000,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "epsilon": 1e-08,
+    "weight_decay": 0.1,
+    "max_gradient_norm": 1.0
+  },
+  "batch_size": 4,
+  "sequence_length": 768,
+  "steps": 8000,
+  "log_every": 25,
+  "validate_every": 250,
+  "validation_batches": 16,
+  "checkpoint_every": 250,
+  "seed": 1234,
+  "track_filter": {
+    "require_any": [
+      "vocal",
+      "vocals",
+      "voice",
+      "voices",
+      "vocalist",
+      "vocalists",
+      "sing",
+      "sings",
+      "singing",
+      "singer",
+      "singers",
+      "sung",
+      "choir",
+      "choral",
+      "rap",
+      "rapper",
+      "rapping",
+      "lyrics",
+      "chant",
+      "chanting"
+    ],
+    "exclude_any": [
+      "instrumental",
+      "no vocals",
+      "without vocals",
+      "no singing",
+      "no voice",
+      "without voice"
+    ]
+  }
+}

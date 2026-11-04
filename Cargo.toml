@@ -16,10 +16,13 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-# cuda-oxide is pinned to the revision whose codegen backend is installed.
-cuda-device = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "b7fe543b863cdef46362e5f69797906b84d499c7" }
-cuda-host = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "b7fe543b863cdef46362e5f69797906b84d499c7" }
-cuda-core = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "b7fe543b863cdef46362e5f69797906b84d499c7" }
+# cuda-oxide follows upstream main, and Cargo.lock records the commit that was
+# last built and tested. To move to a newer cuda-oxide, run
+#     cargo update -p cuda-core -p cuda-device -p cuda-host
+# and set rust-toolchain.toml to the channel of cuda-oxide/rust-toolchain.toml.
+cuda-device = { git = "https://github.com/NVlabs/cuda-oxide.git", branch = "main" }
+cuda-host = { git = "https://github.com/NVlabs/cuda-oxide.git", branch = "main" }
+cuda-core = { git = "https://github.com/NVlabs/cuda-oxide.git", branch = "main" }
 libm = "0.2"
 
 anyhow = "1"
