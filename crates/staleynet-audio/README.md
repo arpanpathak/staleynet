@@ -1,5 +1,7 @@
 # staleynet-audio
 
+[![crates.io](https://img.shields.io/crates/v/staleynet-audio)](https://crates.io/crates/staleynet-audio) [![docs.rs](https://img.shields.io/docsrs/staleynet-audio)](https://docs.rs/staleynet-audio) [![License: Apache-2.0](https://img.shields.io/crates/l/staleynet-audio)](https://github.com/arpanpathak/staleynet/blob/main/LICENSE) [![Source on GitHub](https://img.shields.io/badge/source-GitHub-1D1B20?logo=github)](https://github.com/arpanpathak/staleynet) [![Paper](https://img.shields.io/badge/paper-PDF-6750A4)](https://github.com/arpanpathak/staleynet/blob/main/paper/preprint.pdf) [![Book](https://img.shields.io/badge/book-mdBook-6750A4)](https://github.com/arpanpathak/staleynet/tree/main/book/src) [![Checkpoints on Hugging Face](https://img.shields.io/badge/checkpoints-9%20runs-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/arpanpathak/staleynet-checkpoints) [![Dataset on Hugging Face](https://img.shields.io/badge/dataset-3.1%20GB-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/datasets/arpanpathak/staleynet-data)
+
 Audio decoding, resampling, log-mel spectrograms and Griffin-Lim reconstruction
 in pure Rust, on the CPU.
 
