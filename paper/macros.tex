@@ -1,0 +1,96 @@
+% Shared definitions for both builds of the StaleyNET paper.
+
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,decorations.pathreplacing,shadows.blur,backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{xspace}
+
+\definecolor{accent}{HTML}{3B4BA8}
+\definecolor{definitionfill}{HTML}{EEF0FB}
+\definecolor{theoremfill}{HTML}{F1EEFB}
+\definecolor{codefill}{HTML}{F6F7F9}
+\definecolor{rulefill}{HTML}{E7F5EF}
+\definecolor{muted}{HTML}{6B7080}
+\definecolor{tilea}{HTML}{DCDFFB}
+\definecolor{tileb}{HTML}{FDE8C8}
+\definecolor{tilec}{HTML}{D5F0E3}
+\definecolor{tiled}{HTML}{FADADD}
+
+% Definitions, theorems and their proofs, in shaded boxes.
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\tcolorboxenvironment{definition}{colback=definitionfill,colframe=definitionfill,boxrule=0pt,arc=2pt,left=6pt,right=6pt,top=4pt,bottom=4pt}
+\tcolorboxenvironment{theorem}{colback=theoremfill,colframe=theoremfill,boxrule=0pt,arc=2pt,left=6pt,right=6pt,top=4pt,bottom=4pt}
+\tcolorboxenvironment{lemma}{colback=theoremfill,colframe=theoremfill,boxrule=0pt,arc=2pt,left=6pt,right=6pt,top=4pt,bottom=4pt}
+\tcolorboxenvironment{proposition}{colback=theoremfill,colframe=theoremfill,boxrule=0pt,arc=2pt,left=6pt,right=6pt,top=4pt,bottom=4pt}
+
+% Pseudocode in the style of Cormen, Leiserson, Rivest and Stein: one
+% statement per numbered line, procedure names in small capitals, and a
+% wider gap after the last line of each group of lines that belong together
+% (end such a line with \groupend instead of \\).
+\newcounter{codeline}
+% Procedure names in bold capitals: each hyphen-separated word keeps its first
+% letter at full height and sets the rest as reduced capitals, as in
+% \proc{Matrix-Multiply}.
+\ExplSyntaxOn
+\seq_new:N \l__proc_words_seq
+\NewDocumentCommand{\proc}{m}{
+  \textsf{\bfseries
+    \seq_set_split:Nnn \l__proc_words_seq { - } { #1 }
+    \seq_map_indexed_inline:Nn \l__proc_words_seq
+      {
+        \int_compare:nT { ##1 > 1 } { - }
+        \tl_head:n { ##2 }
+        \scalebox{0.8}{ \text_uppercase:n { \tl_tail:n { ##2 } } }
+      }
+  }
+}
+\ExplSyntaxOff
+\newenvironment{procedure}[1]{%
+  \setcounter{codeline}{0}%
+  \begin{tcolorbox}[enhanced,colback=codefill,colframe=codefill,boxrule=0pt,arc=4pt,left=10pt,right=8pt,top=6pt,bottom=4pt]%
+  \small\linespread{1.18}\selectfont\noindent#1\par\vspace{4pt}%
+  \begin{tabbing}%
+  \hspace*{1.6em}\=\hspace{1.2em}\=\hspace{1.2em}\=\hspace{1.2em}\=\hspace{1.2em}\=\kill}{%
+  \end{tabbing}\end{tcolorbox}}
+\newcommand{\li}{\refstepcounter{codeline}\llap{\scriptsize\color{muted}\thecodeline\hspace{0.7em}}\>}
+\newcommand{\groupend}{\\[0.55em]}
+\newcommand{\kw}[1]{\textbf{#1}}
+\newcommand{\cmt}[1]{\hfill{\color{muted}\itshape // #1}}
+
+% A highlighted rule or observation.
+\newtcolorbox{observation}{colback=rulefill,colframe=rulefill,boxrule=0pt,arc=2pt,left=6pt,right=6pt,top=4pt,bottom=4pt}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\nats}{\,nats\xspace}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\softmax}{softmax}
+
+% Figure styles: soft rounded blocks with a light shadow, sans-serif labels.
+\definecolor{blockblue}{HTML}{E3E7FB}
+\definecolor{blockgreen}{HTML}{D9F2E6}
+\definecolor{blockamber}{HTML}{FDEBCF}
+\definecolor{blockrose}{HTML}{FBE0E3}
+\definecolor{blockviolet}{HTML}{ECE3FA}
+\definecolor{blockgray}{HTML}{ECEEF2}
+\definecolor{inkline}{HTML}{4A5068}
+\tikzset{
+  figure/.style={font=\sffamily\small, >={Stealth[length=2.2mm]}, line width=0.6pt},
+  block/.style={rounded corners=5pt, draw=none, align=center, inner sep=5pt,
+    minimum height=2.1em, blur shadow={shadow blur steps=6, shadow xshift=0.3pt,
+    shadow yshift=-0.9pt, shadow opacity=22}},
+  caption text/.style={font=\sffamily\scriptsize, text=muted, align=center},
+  flow/.style={->, draw=inkline},
+}

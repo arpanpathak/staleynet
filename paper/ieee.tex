@@ -1,0 +1,17 @@
+% Two-column IEEE conference format, the basis for a venue-specific version.
+\documentclass[conference]{IEEEtran}
+\input{macros}
+\usepackage[colorlinks,linkcolor=accent,citecolor=accent,urlcolor=accent]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+\newenvironment{widetable}{\begin{table*}[t]\centering}{\end{table*}}
+\newenvironment{widefigure}{\begin{figure*}[t]\centering}{\end{figure*}}
+
+\title{\includegraphics[width=3.2cm]{figures/emblem}\\[0.3em]StaleyNET: Text-Conditioned Music Generation Trained from Scratch on Edge GPUs in Rust}
+\author{\IEEEauthorblockN{Arpan Pathak}}
+
+\begin{document}
+\maketitle
+\input{body}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+\end{document}
