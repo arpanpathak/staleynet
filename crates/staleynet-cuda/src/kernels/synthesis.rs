@@ -50,15 +50,18 @@ pub mod kernels {
     use crate::kernels::device::{global_thread, store};
     use cuda_device::{DisjointSlice, kernel};
 
-    /// Overlap-add: joins frames into a signal, `signal[s] = normalization[s] ·
-    /// Σ_f frames[f, s − f · hop]` over the frames that cover sample `s`. One
-    /// thread per output sample, so no two threads add into the same place.
+    /// Overlap-add: joins the frames of each sequence into its signal,
+    /// `signal[s] = normalization[s] · Σ_f frames[f, s − f · hop]` over that
+    /// sequence's frames that cover sample `s`. Sequences are stored one after
+    /// another and never mix. One thread per output sample, so no two threads
+    /// add into the same place.
     ///
-    /// * `frames`: `[frame count, frame_length]`, already multiplied by the
-    ///   synthesis window.
-    /// * `normalization`: one factor per output sample, the inverse of the
-    ///   summed squared window at that sample.
-    /// * `signal`: `(frame count − 1) · hop + frame_length` samples, written.
+    /// With a normalization of ones this is also the adjoint of framing a
+    /// signal, which the spectral losses use to send gradients back.
+    ///
+    /// * `frames`: `[sequences · frame_count, frame_length]`.
+    /// * `normalization`: one factor per sample of one sequence's signal.
+    /// * `signal`: `sequences · ((frame_count − 1) · hop + frame_length)` samples, written.
     #[kernel]
     pub fn overlap_add(
         frames: &[f32],
@@ -68,42 +71,52 @@ pub mod kernels {
         frame_length: usize,
         hop: usize,
     ) {
-        let sample = global_thread();
-        if sample >= signal.len() {
+        let element = global_thread();
+        if element >= signal.len() {
             return;
         }
 
+        let length = (frame_count - 1) * hop + frame_length;
+        let first_frame = (element / length) * frame_count;
+        let sample = element % length;
         let last = (sample / hop).min(frame_count - 1);
         let first = if sample >= frame_length { (sample - frame_length) / hop + 1 } else { 0 };
 
         let mut sum = 0.0f32;
         for frame in first..=last {
-            sum += frames[frame * frame_length + sample - frame * hop];
+            sum += frames[(first_frame + frame) * frame_length + sample - frame * hop];
         }
-        store(&mut signal, sample, sum * normalization[sample]);
+        store(&mut signal, element, sum * normalization[sample]);
     }
 
     /// The gradient of [`overlap_add`]: every frame sample receives the
     /// gradient of the signal sample it was added into, times that sample's
-    /// normalization. One thread per frame sample.
+    /// normalization. With a normalization of ones this cuts each sequence's
+    /// signal into overlapping frames. One thread per frame sample.
     ///
-    /// * `signal_grad`: the gradient of the joined signal.
+    /// * `signal_grad`: the gradient of the joined signals.
     /// * `normalization`: as in [`overlap_add`].
-    /// * `frames_grad`: `[frame count, frame_length]`, written.
+    /// * `frames_grad`: `[sequences · frame_count, frame_length]`, written.
     #[kernel]
     pub fn overlap_add_backward(
         signal_grad: &[f32],
         normalization: &[f32],
         mut frames_grad: DisjointSlice<f32>,
+        frame_count: usize,
         frame_length: usize,
         hop: usize,
     ) {
         let element = global_thread();
-        let sample = (element / frame_length) * hop + element % frame_length;
-
-        if element < frames_grad.len() {
-            store(&mut frames_grad, element, signal_grad[sample] * normalization[sample]);
+        if element >= frames_grad.len() {
+            return;
         }
+
+        let length = (frame_count - 1) * hop + frame_length;
+        let row = element / frame_length;
+        let sample = (row % frame_count) * hop + element % frame_length;
+        let sequence = row / frame_count;
+
+        store(&mut frames_grad, element, signal_grad[sequence * length + sample] * normalization[sample]);
     }
 
     /// The spectrum the network predicts: for frame `f` and frequency `k`,

@@ -54,38 +54,43 @@ fn dot(a: &[f32], b: &[f32]) -> f64 {
 
 // ---------------------------------------------------------------- overlap-add
 
-fn overlap_add_reference(frames: &[f32], normalization: &[f32], frame_length: usize, hop: usize) -> Vec<f32> {
-    let mut signal = vec![0.0f32; normalization.len()];
-    for (frame, row) in frames.chunks(frame_length).enumerate() {
-        for (offset, value) in row.iter().enumerate() {
-            signal[frame * hop + offset] += value;
+fn overlap_add_reference(frames: &[f32], normalization: &[f32], frames_per_sequence: usize, frame_length: usize, hop: usize) -> Vec<f32> {
+    let length = normalization.len();
+    let sequences = frames.len() / (frames_per_sequence * frame_length);
+    let mut signal = vec![0.0f32; sequences * length];
+
+    for (row, values) in frames.chunks(frame_length).enumerate() {
+        let (sequence, frame) = (row / frames_per_sequence, row % frames_per_sequence);
+        for (offset, value) in values.iter().enumerate() {
+            signal[sequence * length + frame * hop + offset] += value;
         }
     }
-    signal.iter().zip(normalization).map(|(sum, factor)| sum * factor).collect()
+    signal.iter().enumerate().map(|(index, sum)| sum * normalization[index % length]).collect()
 }
 
 #[test]
 fn overlap_add_matches_reference_and_its_gradient_is_the_adjoint() {
     let gpu = gpu();
-    for (frame_count, frame_length, hop) in [(1, 8, 2), (7, 16, 4), (13, 37, 9), (5, 64, 64)] {
+    for (sequences, frame_count, frame_length, hop) in [(1, 1, 8, 2), (2, 7, 16, 4), (3, 13, 37, 9), (2, 5, 64, 64)] {
         let length = (frame_count - 1) * hop + frame_length;
-        let frames = random_values(frame_count * frame_length, 1);
+        let rows = sequences * frame_count;
+        let frames = random_values(rows * frame_length, 1);
         let normalization: Vec<f32> = random_values(length, 2).iter().map(|value| 1.0 + value.abs()).collect();
-        let signal_grad = random_values(length, 3);
+        let signal_grad = random_values(sequences * length, 3);
 
-        let frames_tensor = upload(&gpu, frame_count, frame_length, &frames);
+        let frames_tensor = upload(&gpu, rows, frame_length, &frames);
         let normalization_tensor = upload(&gpu, 1, length, &normalization);
-        let mut signal = zeros(&gpu, 1, length);
-        gpu.overlap_add(&frames_tensor, &normalization_tensor, &mut signal, hop).unwrap();
+        let mut signal = zeros(&gpu, sequences, length);
+        gpu.overlap_add(&frames_tensor, &normalization_tensor, &mut signal, frame_count, hop).unwrap();
 
-        let expected = overlap_add_reference(&frames, &normalization, frame_length, hop);
+        let expected = overlap_add_reference(&frames, &normalization, frame_count, frame_length, hop);
         let error = relative_error(&expected, &gpu.download(&signal).unwrap());
-        assert!(error < TOLERANCE, "overlap_add {frame_count}x{frame_length}/{hop}: {error}");
+        assert!(error < TOLERANCE, "overlap_add {sequences}x{frame_count}x{frame_length}/{hop}: {error}");
 
         // A linear map's gradient is its adjoint: <A x, g> = <x, Aᵀ g>.
-        let grad_tensor = upload(&gpu, 1, length, &signal_grad);
-        let mut frames_grad = zeros(&gpu, frame_count, frame_length);
-        gpu.overlap_add_backward(&grad_tensor, &normalization_tensor, &mut frames_grad, hop).unwrap();
+        let grad_tensor = upload(&gpu, sequences, length, &signal_grad);
+        let mut frames_grad = zeros(&gpu, rows, frame_length);
+        gpu.overlap_add_backward(&grad_tensor, &normalization_tensor, &mut frames_grad, frame_count, hop).unwrap();
         let forward = dot(&expected, &signal_grad);
         let adjoint = dot(&frames, &gpu.download(&frames_grad).unwrap());
         assert!((forward - adjoint).abs() < 1e-3 * forward.abs().max(1.0), "overlap_add adjoint: {forward} vs {adjoint}");
