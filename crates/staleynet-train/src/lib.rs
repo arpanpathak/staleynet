@@ -288,6 +288,11 @@ struct Session<'a> {
 }
 
 /// Trains a model on the tokenised dataset in `cache`, writing into `run`.
+///
+/// The run directory receives the configuration, a copy of the tokenizer, the
+/// metrics log, and the `best/` and `latest/` checkpoints. `start` decides
+/// whether the weights begin fresh, resume from `latest/`, or are copied from
+/// another checkpoint.
 pub fn train(
     gpu: &Gpu,
     cache: &CacheLayout,
@@ -296,42 +301,13 @@ pub fn train(
     start: StartPoint,
     mut report: impl FnMut(&TrainingEvent),
 ) -> Result<()> {
-    let tokenizer = AudioTokenizer::load(&cache.tokenizer()).context("load tokenizer (run `staleynet tokenize` first)")?;
-    config.model.codebooks = tokenizer.config.codebooks;
-    config.model.codebook_size = tokenizer.config.codebook_size;
-    ensure!(config.sequence_length <= config.model.context_length, "sequence_length exceeds the model's context_length");
+    adopt_tokenizer(cache, &mut config)?;
 
     let (train, validation) = load_corpora(cache, &config)?;
     ensure!(!train.tracks.is_empty(), "no training tracks pass the track filter");
 
-    std::fs::create_dir_all(run)?;
-    std::fs::write(run.join("config.json"), serde_json::to_string_pretty(&config)?)?;
-    std::fs::copy(cache.tokenizer(), run.join(RUN_TOKENIZER)).context("copy the tokenizer into the run directory")?;
-    let run = RunLayout { root: run.to_path_buf() };
-
-    let mut model = Gpt::new(gpu, config.model.clone(), config.seed)?;
-    let mut optimizer = AdamW::new(gpu, config.optimizer.clone(), &mut model)?;
-    let mut best_validation = None;
-    match &start {
-        StartPoint::Fresh => {}
-        StartPoint::ResumeLatest if !run.latest().join("model.json").exists() => {}
-        StartPoint::ResumeLatest => {
-            let (restored, metadata) = checkpoint::load(gpu, &run.latest(), Some(&mut optimizer))?;
-            ensure!(metadata.model == config.model, "the checkpoint's architecture differs from the configuration");
-            model = restored;
-            best_validation = best_logged_validation(&run.root.join("metrics.jsonl"));
-        }
-        StartPoint::FineTune(source) => {
-            let transfer = checkpoint::load_weights(gpu, source, &mut model)?;
-            eprintln!(
-                "warm start from {}: {} tensors copied, grown {:?}, fresh {:?}",
-                source.display(),
-                transfer.copied.len(),
-                transfer.grown,
-                transfer.fresh
-            );
-        }
-    }
+    let run = prepare_run_directory(run, cache, &config)?;
+    let state = starting_state(gpu, &config, &run, &start)?;
 
     let shape = SequenceShape { batch: config.batch_size, time: config.sequence_length + config.model.lyrics_bytes };
     let session = Session {
@@ -339,11 +315,11 @@ pub fn train(
         workspace: TrainingWorkspace::new(gpu, &config.model, shape)?,
         batch: TrainingBatch::empty(shape, config.model.codebooks),
         metrics: OpenOptions::new().create(true).append(true).open(run.root.join("metrics.jsonl"))?,
-        best_validation: best_validation.unwrap_or(f32::INFINITY),
+        best_validation: state.best_validation,
+        model: state.model,
+        optimizer: state.optimizer,
         config,
         run,
-        model,
-        optimizer,
         train,
         validation,
     };
@@ -351,63 +327,187 @@ pub fn train(
     session.run(&mut report)
 }
 
+/// Sizes the model's output heads to the cache's tokenizer and checks that a
+/// training sequence fits in the model's context.
+fn adopt_tokenizer(cache: &CacheLayout, config: &mut TrainingConfig) -> Result<()> {
+    let tokenizer = AudioTokenizer::load(&cache.tokenizer()).context("load tokenizer (run `staleynet tokenize` first)")?;
+    config.model.codebooks = tokenizer.config.codebooks;
+    config.model.codebook_size = tokenizer.config.codebook_size;
+
+    ensure!(config.sequence_length <= config.model.context_length, "sequence_length exceeds the model's context_length");
+    Ok(())
+}
+
+/// Creates the run directory and records the configuration and the tokenizer
+/// in it, so that the run can be reproduced and decoded on its own.
+fn prepare_run_directory(run: &Path, cache: &CacheLayout, config: &TrainingConfig) -> Result<RunLayout> {
+    std::fs::create_dir_all(run)?;
+    std::fs::write(run.join("config.json"), serde_json::to_string_pretty(config)?)?;
+    std::fs::copy(cache.tokenizer(), run.join(RUN_TOKENIZER)).context("copy the tokenizer into the run directory")?;
+
+    Ok(RunLayout { root: run.to_path_buf() })
+}
+
+/// The model, its optimizer, and the lowest validation loss seen so far.
+struct StartingState {
+    /// Model weights, fresh or restored.
+    model: Gpt,
+
+    /// AdamW state, restored only when resuming.
+    optimizer: AdamW,
+
+    /// Lowest logged validation loss, or infinity when none is known.
+    best_validation: f32,
+}
+
+/// Builds a fresh model and optimizer, then applies `start` to them.
+fn starting_state(gpu: &Gpu, config: &TrainingConfig, run: &RunLayout, start: &StartPoint) -> Result<StartingState> {
+    let mut model = Gpt::new(gpu, config.model.clone(), config.seed)?;
+    let optimizer = AdamW::new(gpu, config.optimizer.clone(), &mut model)?;
+    let mut state = StartingState { model, optimizer, best_validation: f32::INFINITY };
+
+    match start {
+        StartPoint::Fresh => {}
+        StartPoint::ResumeLatest => resume_latest(gpu, config, run, &mut state)?,
+        StartPoint::FineTune(source) => warm_start(gpu, source, &mut state.model)?,
+    }
+
+    Ok(state)
+}
+
+/// Restores weights, optimizer moments and the best validation loss from
+/// `latest/`. A run without a `latest/` checkpoint starts fresh.
+fn resume_latest(gpu: &Gpu, config: &TrainingConfig, run: &RunLayout, state: &mut StartingState) -> Result<()> {
+    if !run.latest().join("model.json").exists() {
+        return Ok(());
+    }
+
+    let (model, metadata) = checkpoint::load(gpu, &run.latest(), Some(&mut state.optimizer))?;
+    ensure!(metadata.model == config.model, "the checkpoint's architecture differs from the configuration");
+
+    state.model = model;
+    state.best_validation = best_logged_validation(&run.root.join("metrics.jsonl")).unwrap_or(f32::INFINITY);
+    Ok(())
+}
+
+/// Copies every compatible tensor of the checkpoint at `source` into `model`
+/// and reports which tensors were copied, grown, or left fresh.
+fn warm_start(gpu: &Gpu, source: &Path, model: &mut Gpt) -> Result<()> {
+    let transfer = checkpoint::load_weights(gpu, source, model)?;
+
+    eprintln!(
+        "warm start from {}: {} tensors copied, grown {:?}, fresh {:?}",
+        source.display(),
+        transfer.copied.len(),
+        transfer.grown,
+        transfer.fresh
+    );
+    Ok(())
+}
+
+/// Throughput bookkeeping between two progress reports.
+struct ProgressWindow {
+    /// When the window began.
+    started: Instant,
+
+    /// Optimizer steps taken inside the window.
+    steps: usize,
+}
+
+impl ProgressWindow {
+    /// An empty window beginning now.
+    fn new() -> Self {
+        Self { started: Instant::now(), steps: 0 }
+    }
+}
+
 impl Session<'_> {
-    /// The main loop.
+    /// The main loop: one optimizer step per iteration, followed by whatever
+    /// logging, validation and checkpointing falls due at that step.
     fn run(mut self, report: &mut impl FnMut(&TrainingEvent)) -> Result<()> {
+        let started = self.started_event();
+        self.emit(report, started)?;
+
+        let sampler = BatchSampler::new(self.model.vocabulary(), SamplerOptions::TRAINING);
+        let mut window = ProgressWindow::new();
+
+        for step in self.optimizer.steps_taken..self.config.steps {
+            let (loss, update) = self.train_step(step, &sampler)?;
+            window.steps += 1;
+
+            self.after_step(step + 1, &loss, &update, &mut window, report)?;
+        }
+
+        Ok(())
+    }
+
+    /// The event that opens a run's log.
+    fn started_event(&mut self) -> TrainingEvent {
         let codebooks = self.config.model.codebooks;
-        let first_step = self.optimizer.steps_taken;
-        let started = TrainingEvent::Started {
+
+        TrainingEvent::Started {
             parameters: self.model.parameter_count(),
             train_tracks: self.train.tracks.len(),
             train_steps: self.train.total_steps(codebooks),
             validation_tracks: self.validation.tracks.len(),
-            first_step,
+            first_step: self.optimizer.steps_taken,
             tracks_with_lyrics: self.train.tracks_with_lyrics(),
             best_validation: Some(self.best_validation).filter(|loss| loss.is_finite()),
-        };
-        self.emit(report, started)?;
+        }
+    }
 
-        let sampler = BatchSampler::new(self.model.vocabulary(), SamplerOptions::TRAINING);
-        let mut window_start = Instant::now();
-        let mut window_steps = 0;
+    /// Samples a batch for `step`, accumulates gradients, and updates the weights.
+    /// The batch depends only on the seed and the step, so a resumed run sees
+    /// the same data it would have seen without interruption.
+    fn train_step(&mut self, step: usize, sampler: &BatchSampler) -> Result<(LossReport, StepReport)> {
+        let mut random = Random::derived(self.config.seed, step as u64);
+        sampler.fill(&self.train, &mut self.batch, &mut random);
 
-        for step in first_step..self.config.steps {
-            let mut random = Random::derived(self.config.seed, step as u64);
-            sampler.fill(&self.train, &mut self.batch, &mut random);
+        let loss = self.model.accumulate_gradients(self.gpu, &mut self.workspace, &self.batch)?;
+        ensure!(loss.mean.is_finite(), "loss became {} at step {step}", loss.mean);
 
-            let loss = self.model.accumulate_gradients(self.gpu, &mut self.workspace, &self.batch)?;
-            ensure!(loss.mean.is_finite(), "loss became {} at step {step}", loss.mean);
-            let update = self.optimizer.step(self.gpu, &mut self.model)?;
-            window_steps += 1;
+        let update = self.optimizer.step(self.gpu, &mut self.model)?;
+        Ok((loss, update))
+    }
 
-            let completed = step + 1;
-            let is_last = completed == self.config.steps;
+    /// Logs progress, validates and saves `latest/` when each falls due after
+    /// `completed` steps.
+    fn after_step(
+        &mut self,
+        completed: usize,
+        loss: &LossReport,
+        update: &StepReport,
+        window: &mut ProgressWindow,
+        report: &mut impl FnMut(&TrainingEvent),
+    ) -> Result<()> {
+        if self.is_due(completed, self.config.log_every) {
+            self.gpu.synchronize()?;
+            let progress = self.progress(completed, loss, update, window.started.elapsed().as_secs_f64(), window.steps);
+            self.emit(report, progress)?;
+            *window = ProgressWindow::new();
+        }
 
-            if completed % self.config.log_every == 0 || is_last {
-                self.gpu.synchronize()?;
-                let progress = self.progress(completed, &loss, &update, window_start.elapsed().as_secs_f64(), window_steps);
-                self.emit(report, progress)?;
-                window_start = Instant::now();
-                window_steps = 0;
-            }
+        if self.is_due(completed, self.config.validate_every) {
+            self.validate(completed, report)?;
+        }
 
-            if completed % self.config.validate_every == 0 || is_last {
-                self.validate(completed, report)?;
-            }
-
-            if completed % self.config.checkpoint_every == 0 || is_last {
-                checkpoint::save(
-                    self.gpu,
-                    &self.run.latest(),
-                    &mut self.model,
-                    Some(&self.optimizer),
-                    completed,
-                    serde_json::to_value(&self.config)?,
-                )?;
-            }
+        if self.is_due(completed, self.config.checkpoint_every) {
+            self.save_latest(completed)?;
         }
 
         Ok(())
+    }
+
+    /// True every `interval` steps and at the final step.
+    fn is_due(&self, completed: usize, interval: usize) -> bool {
+        completed.is_multiple_of(interval) || completed == self.config.steps
+    }
+
+    /// Saves weights and optimizer moments to `latest/`, the resumable checkpoint.
+    fn save_latest(&mut self, completed: usize) -> Result<()> {
+        let config = serde_json::to_value(&self.config)?;
+
+        checkpoint::save(self.gpu, &self.run.latest(), &mut self.model, Some(&self.optimizer), completed, config)
     }
 
     /// A progress event for the window of `window_steps` steps that took `seconds`.
@@ -425,36 +525,40 @@ impl Session<'_> {
         }
     }
 
-    /// Mean loss over a fixed set of validation batches; saves `best/` on improvement.
-    /// Without a validation split, the training corpus is used and labelled as such in the log.
+    /// Measures the held-out loss, saves `best/` when it improves, and logs the result.
     fn validate(&mut self, step: usize, report: &mut impl FnMut(&TrainingEvent)) -> Result<()> {
-        let corpus = if self.validation.tracks.is_empty() { &self.train } else { &self.validation };
-        let sampler = BatchSampler::new(self.model.vocabulary(), SamplerOptions::VALIDATION);
-        let mut random = Random::derived(self.config.seed, VALIDATION_STREAM);
-        let codebooks = self.config.model.codebooks;
+        let (loss, loss_per_codebook) = self.mean_validation_loss()?;
 
-        let mut total = 0.0;
-        let mut per_codebook = vec![0.0; codebooks];
-        for _ in 0..self.config.validation_batches {
-            sampler.fill(corpus, &mut self.batch, &mut random);
-            let loss = self.model.forward_loss(self.gpu, &mut self.workspace, &self.batch)?;
-
-            total += loss.mean;
-            for (sum, value) in per_codebook.iter_mut().zip(&loss.per_codebook) {
-                *sum += value;
-            }
-        }
-
-        let batches = self.config.validation_batches as f32;
-        let loss = total / batches;
         let improved = loss < self.best_validation;
         if improved {
             self.best_validation = loss;
             checkpoint::save(self.gpu, &self.run.best(), &mut self.model, None, step, serde_json::to_value(&self.config)?)?;
         }
 
-        let loss_per_codebook = per_codebook.into_iter().map(|sum| sum / batches).collect();
         self.emit(report, TrainingEvent::Validation { step, loss, loss_per_codebook, improved })
+    }
+
+    /// Mean loss, overall and per codebook, over a fixed set of validation
+    /// batches. The batches are drawn from their own random stream, so every
+    /// validation sees the same data. Without a validation split, the training
+    /// corpus is used instead.
+    fn mean_validation_loss(&mut self) -> Result<(f32, Vec<f32>)> {
+        let corpus = if self.validation.tracks.is_empty() { &self.train } else { &self.validation };
+        let sampler = BatchSampler::new(self.model.vocabulary(), SamplerOptions::VALIDATION);
+        let mut random = Random::derived(self.config.seed, VALIDATION_STREAM);
+
+        let mut total = 0.0;
+        let mut per_codebook = vec![0.0; self.config.model.codebooks];
+        for _ in 0..self.config.validation_batches {
+            sampler.fill(corpus, &mut self.batch, &mut random);
+            let loss = self.model.forward_loss(self.gpu, &mut self.workspace, &self.batch)?;
+
+            total += loss.mean;
+            per_codebook.iter_mut().zip(&loss.per_codebook).for_each(|(sum, value)| *sum += value);
+        }
+
+        let batches = self.config.validation_batches as f32;
+        Ok((total / batches, per_codebook.into_iter().map(|sum| sum / batches).collect()))
     }
 
     /// Logs `event` to `metrics.jsonl` and forwards it to the caller.
