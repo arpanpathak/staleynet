@@ -146,27 +146,36 @@ setting; \cref{sec:pipeline} measures what our simpler choices cost.
 \section{From sound to spectrogram and back}
 \label{sec:representation}
 
-A recording is stored as a \emph{waveform}: a list of \emph{samples}, each
-the displacement of the loudspeaker at one instant, scaled to lie between $-1$
-and $1$. The \emph{sample rate} is the number of samples per second, measured
-in hertz, and a rate of 24\,kHz therefore gives 24\,000 numbers per second. Any
-sound can be described as a sum of vibrations, each with a \emph{frequency}
-(how many times per second it repeats, in Hz), a \emph{magnitude} (how strong it
-is) and a \emph{phase} (where in its cycle it is at a given instant). The ear is
-sensitive to frequency and magnitude but much less to phase. We therefore
-describe sound by its log-mel spectrogram: the energy in 128 frequency bands
-spaced according to human pitch perception, measured $f_\text{s}/H = 24\,000 /
-256 = 93.75$ times per second and compressed logarithmically.
+A model that generates music needs some description of sound, and the most
+direct one, the waveform, is a poor choice. It lists the displacement of the
+loudspeaker 24\,000 times per second, and much of that detail is the exact
+\emph{phase} of each vibration, where in its cycle it happens to be, which the
+ear barely notices. A model trained on waveforms would spend most of its
+capacity on information that listeners do not hear. StaleyNET instead
+describes sound by its \emph{log-mel spectrogram}: a picture of how much energy
+each frequency band holds in each short moment of time. This section follows a
+recording on its way to such a picture, and a generated picture on its way
+back to sound.
 
-\subsection{Resampling}
+\subsection{From a recording to a clean signal}
 
-The training recordings arrive at several sample rates, most often 44.1\,kHz
-(the rate of a CD), and we convert them all to 24\,kHz. A waveform sampled at a
-rate $f$ can only represent frequencies below $f/2$, the \emph{Nyquist
-frequency}, because at least two samples per cycle are needed to tell a
-vibration apart from silence. Lowering the rate to 24\,kHz therefore requires
-first removing all content above 12\,kHz; otherwise that content folds back
-into the audible range as false tones, an effect known as \emph{aliasing}.
+Training recordings arrive as MP3, FLAC, AAC, Ogg Vorbis or WAV files, at
+various sample rates and often in stereo. Each file is decoded into a list of
+\emph{samples}, numbers between $-1$ and $1$ that give the loudspeaker's
+displacement at successive instants, and stereo channels are averaged into one.
+The \emph{sample rate}, the number of samples per second, is then unified at
+24\,kHz, so that a second of music always yields the same number of analysis
+frames. Last, every recording is scaled to the same average loudness (a
+root-mean-square level of $-20$\,dBFS); otherwise the model would have to learn
+the large differences in level between commercial and amateur recordings as if
+they were part of the music.
+
+Changing the sample rate is a filtering problem. A waveform sampled $f$ times
+per second can represent only frequencies below $f/2$, its \emph{Nyquist
+frequency}, because at least two samples per cycle are needed to distinguish a
+vibration from silence. Lowering the rate to 24\,kHz therefore requires first
+removing everything above 12\,kHz; otherwise that content folds back into the
+audible range as false tones, an effect called \emph{aliasing}.
 
 \begin{definition}[Bandlimited resampling]
 Let $x_m$ be sample $m$ of a recording made at $f_\text{in}$ samples per second,
@@ -185,32 +194,31 @@ its distance $t_n - m$ from $t_n$, measured in input samples. Each output sample
 is therefore a weighted sum of the input samples near $t_n$.
 \end{definition}
 
-The ideal weights come from the function $\operatorname{sinc}(u) = \sin(\pi
-u)/(\pi u)$, which interpolates a bandlimited signal exactly but extends
-infinitely far in both directions \cite{smith2002resample}. We use the windowed
-sinc filter
+Ideal weights come from $\operatorname{sinc}(u) = \sin(\pi u)/(\pi u)$, which
+interpolates a bandlimited signal exactly but extends infinitely far in both
+directions \cite{smith2002resample}. In practice it is cut short smoothly:
 \[
-h(t) = c\,\operatorname{sinc}(ct)\,w(ct/Z),
+h(t) = c\,\operatorname{sinc}(ct)\,w(ct/Z).
 \]
-whose three parameters are as follows. The \emph{cutoff} $c$, a number between
-0 and 1, is the highest frequency kept, as a fraction of the input Nyquist
-frequency; when the rate is lowered, $c$ is slightly below
-$f_\text{out}/f_\text{in}$. $Z = 24$ is the number of zero crossings of the sinc
-kept on each side, which sets how many input samples contribute to each output
-sample. $w$ is a Kaiser window, a bell-shaped taper that falls smoothly to zero
-at $\pm 1$ so that cutting the sinc short does not cause ripples; its shape
-parameter $\beta = 8.6$ trades a sharper cutoff against stronger suppression of
-the removed frequencies. Evaluating $h$ anew for every output sample would be
-slow, but fortunately the fractional part of $t_n$ takes only a few values.
+Three parameters shape this filter. The \emph{cutoff} $c \in (0, 1]$ is the
+highest frequency kept, as a fraction of the input Nyquist frequency; when the
+rate is lowered, it lies just below $f_\text{out}/f_\text{in}$. $Z = 24$ is the
+number of zero crossings of the sinc kept on each side, which sets how many
+input samples feed each output sample. And $w$ is a Kaiser window, a
+bell-shaped taper that reaches zero at $\pm 1$ so that truncating the sinc
+causes no ripples; its shape parameter $\beta = 8.6$ trades a sharper cutoff
+against stronger suppression of the removed frequencies. Evaluating $h$ afresh
+for every output sample would be slow, but the fractional part of $t_n$ takes
+only a few distinct values.
 
-\paragraph{A worked example.} For a conversion from $f_\text{in} = 44\,100$\,Hz
-to $f_\text{out} = 24\,000$\,Hz, the greatest common divisor of the two rates is
-300, so $t_n = n \cdot 44\,100 / 24\,000 = 147n/80$ input samples. For $n = 1$ we
-obtain $t_1 = 1 + 67/80$: the second output sample lies $67/80$ of the way from
-input sample 1 to input sample 2. Every $t_n$ has a fractional part of the form
-$p/80$ with $p \in [0, 80)$, so exactly 80 sets of filter weights are needed.
-These sets are called the \emph{phases} of a polyphase filter, and they are
-computed once.
+\paragraph{A worked example.} Converting from $f_\text{in} = 44\,100$\,Hz (the
+rate of a CD) to $f_\text{out} = 24\,000$\,Hz, the two rates share the greatest
+common divisor 300, so $t_n = n \cdot 44\,100 / 24\,000 = 147n/80$ input
+samples. For $n = 1$, $t_1 = 1 + 67/80$: the second output sample lies $67/80$
+of the way from input sample 1 to input sample 2. Every $t_n$ has a fractional
+part $p/80$ with $p \in [0, 80)$, so exactly 80 sets of filter weights suffice.
+These sets are the \emph{phases} of a polyphase filter, and each is computed
+once.
 
 \begin{procedure}{\proc{Resample}$(x, f_\text{in}, f_\text{out})$}
 {the samples $x_0, x_1, \dots$ of a recording (numbers between $-1$ and $1$),
@@ -235,38 +243,64 @@ second; one second of input gives $f_\text{out}$ output samples.}
 \li \}
 \end{procedure}
 
-Lines 1--5 determine the geometry of the filter. $g$ is the greatest common
-divisor of the two rates, $L$ is the number of distinct fractional positions
-(phases), and $M/L = f_\text{in}/f_\text{out}$ is the distance between
-consecutive output samples, measured in input samples. $R$ is the number of
-input samples used on each side of $t_n$; it grows as $c$ shrinks, because a
-lower cutoff needs a wider filter. Lines 6--10 compute the $L$ phases once,
-each a list of $2R + 1$ weights $h_p[j]$, and line 14 is the single dot product
-needed for each output sample. The factor 0.97 in line 4 places the cutoff at
-97\,\% of the new Nyquist frequency, so that the filter has a narrow band in
-which to fall from full strength to zero before aliasing could begin. A test
-confirms that the filter does its job: when 48\,kHz audio is converted to
-24\,kHz, a 15\,kHz tone, which the new rate cannot represent, is attenuated by
-more than 80\,dB, a factor of $10^{8}$ in power.
+Lines 1--5 fix the geometry of the filter: $L$ is the number of phases,
+$M/L = f_\text{in}/f_\text{out}$ is the distance between consecutive output
+samples in input samples, and $R$ is how many input samples are used on each
+side of $t_n$, which grows as $c$ shrinks because a lower cutoff needs a wider
+filter. Lines 6--10 compute each phase once, a list of $2R + 1$ weights, after
+which line 14 costs one short dot product per output sample. Setting the
+cutoff at 97\,\% of the new Nyquist frequency (line 4) leaves the filter a
+narrow band in which to fall from full strength to zero before aliasing could
+begin. A test confirms the result: converting 48\,kHz audio to 24\,kHz
+attenuates a 15\,kHz tone, which the new rate cannot represent, by more than
+80\,dB, a factor of $10^{8}$ in power.
+
+\subsection{Measuring energy over time and frequency}
+
+A spectrogram cuts the signal into short, overlapping \emph{frames} and
+measures the strength of each frequency within each frame. Four choices fix
+how fine the resulting picture is (\cref{tab:analysis}).
+
+\begin{table}[htbp]
+\centering
+\caption{Analysis settings and what each one means.}
+\label{tab:analysis}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{0.2\linewidth}p{0.24\linewidth}p{0.47\linewidth}@{}}
+\toprule
+setting & value & meaning \\
+\midrule
+frame length & $N = 1\,024$ samples (42.7\,ms), Hann window & long enough to separate frequencies 23.4\,Hz apart; the window fades each frame in and out so its edges create no spurious frequencies \\
+hop & $H = 256$ samples (10.7\,ms) & 93.75 frames per second, each overlapping the next by three quarters \\
+frequency bands & 128 mel bands, 0 to 12\,kHz & narrow at low frequencies and wide at high ones, matching the ear's resolution \cite{slaney1998auditory} \\
+compression & natural logarithm, floor $10^{-5}$ & loudness is perceived roughly logarithmically; the floor keeps silence finite \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Speech systems usually use 80 to 100 bands; music, with harmonic detail across
+a wider range, benefits from 128. One second of audio becomes a grid of about
+94 frames by 128 bands, a far more compact description than 24\,000 samples.
 
 \subsection{The spectrogram as a matrix product}
 
-The signal is divided into overlapping \emph{frames} of $N = 1024$ samples
-(42.7\,ms at 24\,kHz), a new frame starting every $H = 256$ samples (10.7\,ms).
-Each frame is multiplied by a Hann window, $w[n] = \sin^2(\pi n / N)$, which
-fades the frame in and out so that its abrupt edges do not appear as spurious
-frequencies. The strength of each frequency in each frame is usually computed
-with the fast Fourier transform (FFT).
-We computed it instead with a matrix product, so that the spectrogram runs on
-the same GPU kernel as the Transformer and benefits from the same tests
+Frequencies are usually measured with the fast Fourier transform (FFT). A
+Fourier transform can also be written as an ordinary matrix product: each
+frequency is a fixed pattern of sines and cosines, and multiplying a frame by
+the matrix that holds these patterns measures how strongly each one is
+present. Written this way, analyzing a whole recording is one large matrix
+product, and pooling frequencies into mel bands is a second
+(\cref{fig:stft-gemm}). StaleyNET computes its spectrograms this way, so that
+they run on the same GPU kernel as the Transformer and inherit its tests
 (\cref{sec:gpu}).
 
 \begin{definition}[Log-mel spectrogram]
 Let $F$ be the matrix whose row $f$ holds the $N$ samples of frame $f$, and let
 $W$ be the $N \times (N/2 + 1)$ matrix with entries $W_{nk} = w[n]\,e^{-2\pi i
 kn/N}$, where $n \in [0, N)$ indexes the samples of a frame, $k \in [0, N/2]$
-indexes the frequencies, $w$ is the Hann window and $i = \sqrt{-1}$. The
-log-mel spectrogram is
+indexes the frequencies, $w[n] = \sin^2(\pi n / N)$ is the Hann window and
+$i = \sqrt{-1}$. The log-mel spectrogram is
 \[
 S \;=\; \ln \max\!\big(|FW|^2 B,\; 10^{-5}\big),
 \]
@@ -288,30 +322,29 @@ same matrix-product kernel serves the spectrogram and the Transformer.}
 
 Column $k$ of $W$ holds a windowed cosine (real part) and sine (imaginary part)
 at frequency $k f_\text{s}/N = k \cdot 23.4$\,Hz, so entry $(f, k)$ of $FW$
-measures how much of that frequency frame $f$ contains, and its square $|FW|^2$
-is the energy at that frequency. The mel filters then pool these 513
-frequencies into 128 bands. The \emph{mel} scale follows pitch perception: it is
-linear below 1\,kHz and logarithmic above, so the centers of neighboring bands
-are about 26\,Hz apart at low frequencies and about 330\,Hz apart near 12\,kHz,
-much as the ear
-distinguishes low notes more finely than high ones. The logarithm reflects the
-roughly logarithmic perception of loudness, and the floor $10^{-5}$ keeps
-silence finite. The real and imaginary parts of $W$ are two real matrices, and
-$B$ adds a third product. This formulation needs about $N/\log_2 N \approx 100$ times the
-arithmetic of an FFT, because a matrix product computes each frequency
-separately, whereas the FFT shares work between frequencies. Even so, on the Orin NX it analyses 60\,s of audio in
-47\,ms, against 73\,ms for a multithreaded CPU FFT (\cref{tab:bench-other}),
-and it agrees with the FFT to within $10^{-2}$ log units.
+measures how much of that frequency frame $f$ contains, and $|FW|^2$ is its
+energy. The mel filters then pool the 513 frequencies into 128 bands. Like
+pitch perception, the \emph{mel} scale is linear below 1\,kHz and logarithmic
+above: centers of neighboring bands lie about 26\,Hz apart at low frequencies
+and about 330\,Hz apart near 12\,kHz, much as the ear tells low notes apart
+more finely than high ones.
 
-\subsection{Estimating the phase}
+This formulation costs about $N/\log_2 N \approx 100$ times the arithmetic of
+an FFT, because a matrix product computes every frequency separately while the
+FFT shares work between them. Even so, on the Orin NX it analyzes 60\,s of audio
+in 47\,ms, against 73\,ms for a multithreaded CPU FFT (\cref{tab:bench-other}),
+and the two agree to within $10^{-2}$ log units in every audible band.
 
-A generated spectrogram tells us how strong each frequency is, but not its
-phase, and a waveform cannot be built without one. Not every pattern of
-magnitudes and phases belongs to a real waveform: neighboring frames overlap
-by three quarters, so they must agree about the samples they share. The
-Griffin-Lim algorithm \cite{griffin1984signal} estimates a phase by alternating
-between two requirements: the magnitudes should match the target, and the
-spectrogram should be that of an actual waveform (it should be
+\subsection{Turning a spectrogram back into sound}
+
+After generation, a spectrogram must become a waveform again, and this
+direction is harder: a spectrogram records how strong each frequency is but
+not its phase. The phase has to be estimated, and not every combination of
+magnitudes and phases belongs to a real waveform, because neighboring frames
+overlap by three quarters and must agree about the samples they share. The
+Griffin-Lim algorithm \cite{griffin1984signal} searches for a phase by
+alternating between two requirements: the magnitudes should match the
+target, and the spectrogram should be that of an actual waveform (it should be
 \emph{consistent}).
 
 \begin{procedure}{\proc{Griffin-Lim}$(\,|S|, T\,)$}
@@ -333,45 +366,65 @@ approximates $|S|$.}
 \li \kw{return} $x$
 \end{procedure}
 
-Here STFT (short-time Fourier transform) turns a waveform into its complex
-spectrogram, $FW$ in the notation above, and ISTFT turns a complex spectrogram
-back into a waveform by overlapping and adding its frames. Each entry of a
-complex spectrogram is a magnitude times $e^{i\phi}$, where $\phi$ is the phase
-in radians. In line 1, $X$ combines the target magnitudes with random phases.
-Line 5 replaces the current estimate by the spectrogram $P$ of a real waveform,
-and line 7 keeps the phase of each entry of $A$ while restoring its target
-magnitude. Line 6 is the acceleration
-proposed by Perraudin et al.\ \cite{perraudin2013fast}, which extrapolates
-along the last change with momentum $\alpha = 0.99$; in the first round it has
-no effect, because $P = P_\text{prev}$. We use $T = 64$ rounds. Because $S$
-holds logarithms of mel energies, the target magnitudes are obtained by
-undoing each step of the definition: $e^{S}$ gives the band energies, a
-regularized least-squares inverse of $B$ spreads them back over the 513
-frequencies, and a square root turns energy into magnitude.
+STFT (the short-time Fourier transform) turns a waveform into its complex
+spectrogram, $FW$ above, and ISTFT turns a complex spectrogram back into a
+waveform by overlapping and adding its frames. Every entry of a complex
+spectrogram is a magnitude times $e^{i\phi}$, with $\phi$ the phase in radians.
+Line 1 pairs the target magnitudes with random phases. Line 5 replaces the
+estimate by the spectrogram $P$ of a real waveform, and line 7 keeps the phase
+of each entry while restoring its target magnitude. Line 6 is the acceleration
+of Perraudin et al.\ \cite{perraudin2013fast}, which extrapolates along the
+last change with momentum $\alpha = 0.99$; in the first round it has no effect,
+because $P = P_\text{prev}$. We use $T = 64$ rounds. Since $S$ holds
+logarithms of mel energies, the target magnitudes come from undoing its
+definition step by step: $e^{S}$ gives the band energies, a regularized
+least-squares inverse of $B$ spreads them back over the 513 frequencies, and a
+square root turns energy into magnitude. Griffin-Lim needs no training, but its
+estimated phase leaves a faintly metallic, smeared quality, whose cost
+\cref{sec:pipeline} weighs against the other losses of the pipeline.
 
 \section{From spectrogram to tokens}
 \label{sec:tokenizer}
 
-A language model chooses each next symbol from a finite vocabulary, whereas a
-spectrogram consists of real numbers. The tokenizer bridges this gap by
-replacing each short stretch of spectrogram with a few integers, its
-\emph{codes}. Each band of the spectrogram is first standardized: its mean over
-the training set is subtracted and the result is divided by its standard
-deviation, so that quiet and loud bands carry similar weight and every value
-is a plain number without unit. A \emph{step} is then formed from consecutive
-frames; in our first tokenizer a step joins 2 frames, giving a vector of
-$D = 2 \cdot 128 = 256$ numbers that covers $2H/f_\text{s} = 21.3$\,ms of
-sound.
+A language model predicts the next item of a sequence by choosing from a
+fixed list of possibilities, its \emph{vocabulary}, just as a text model
+chooses the next word. A spectrogram, however, consists of real numbers that
+can take infinitely many values. Before a language model can learn from audio,
+each moment of the spectrogram must be replaced by choices from a finite list.
+This replacement is \emph{tokenization}, and its result is a sequence of
+\emph{tokens}, small integers that each stand for a piece of sound. Large
+systems use a pretrained neural codec for this purpose
+\cite{zeghidour2021soundstream,defossez2023encodec,kumar2023dac}. StaleyNET
+builds its own tokenizer, simple enough to train in minutes: $k$-means
+clustering applied in several rounds, known as residual vector quantization.
+
+\paragraph{What is tokenized.} Every band of the spectrogram is first
+standardized: its mean over the training set is subtracted and the result is
+divided by its standard deviation, so that quiet and loud bands weigh alike
+and every value is a plain number without unit. Consecutive frames are then
+grouped into \emph{steps}, the unit that receives tokens. In our first
+tokenizer a step joins 2 frames, a vector of $D = 2 \cdot 128 = 256$ numbers
+covering $2H/f_\text{s} = 21.3$\,ms of sound; a two-minute song becomes about
+5\,600 steps.
 
 \subsection{Residual quantization}
 
-One can think of residual quantization as describing a color first by its
-family, then by its shade within the family, and then by finer and finer
-corrections. Each level names the closest of $K$ prototypes to whatever the
-previous levels have left unexplained. A \emph{prototype} is a typical step,
-a vector of $D$ numbers, and a \emph{codebook} is a list of $K$ prototypes; the
-code chosen at a level is the position of the chosen prototype in its list,
-an integer in $[0, K)$.
+Suppose a collection of $K = 1\,024$ typical steps has been found. We call
+them \emph{prototypes}, and the list that holds them a \emph{codebook}. Any new
+step can then be described by naming the prototype that most resembles it:
+256 real numbers become one integer between 0 and 1\,023, the step's
+\emph{code}. Lloyd's $k$-means algorithm \cite{lloyd1982least} finds such
+prototypes, by alternately assigning every training step to its nearest
+prototype and moving each prototype to the average of its steps.
+
+One codebook captures only the broad shape of a step. The difference between
+the step and its prototype, the \emph{residual}, still holds useful detail, so
+residual quantization repeats the procedure on it: a second codebook is
+trained on the errors left by the first, a third on those left by the second,
+and so on. The idea resembles describing a color by its family, then its shade
+within the family, then finer and finer corrections. Each round, or
+\emph{level}, contributes one code, so a step is described by one code per
+level, ordered from coarse to fine (\cref{fig:rvq-levels}).
 
 \begin{definition}[Residual vector quantization]
 Let $E_0, \dots, E_{C-1}$ be $C$ codebooks (one per level $\ell$), each a list of
@@ -417,6 +470,10 @@ $r_2 = (-0.2, 0.2)$. The error falls from $\sqrt 2 \approx 1.41$ after one level
 $\sqrt{0.08} \approx 0.28$ after two.
 
 \subsection{Training the codebooks}
+
+Codebooks are trained level by level. Each level runs Lloyd's algorithm on
+what the levels before it left unexplained, then hands its own residuals to
+the next.
 
 \begin{procedure}{\proc{Train-Codebooks}$(X, C, K, I)$}
 {a matrix $X$ with one row per training step and $D$ standardized values per
@@ -471,19 +528,26 @@ after which a small kernel finds the smallest score in each row.
 \subsection{Quantizing groups of bands}
 \label{sec:band-groups}
 
-The analysis of \cref{sec:pipeline} led us to a refinement. Instead of
-quantizing a whole step at once, we divide its 128 bands into $G$ equal
-groups of neighboring bands, from the lowest frequencies to the highest, and
-give each group its own residual codebooks. With one frame per step and
-$G = 4$, each group is a vector of $128/4 = 32$ numbers, which $K = 1\,024$
-prototypes can describe more finely than a whole step of 128. In our experiments the grouping
-helped somewhat less than we expected, and the additional codes helped more
-(\cref{sec:appendix-tokenizer}). The codes of a
-step are ordered level by level: first the coarse codes of all $G$ groups, then
-their first corrections, and so on, so that the coarse-to-fine order relied on
-by the delay pattern (\cref{sec:model}) is preserved. With $G = 4$ groups and 4
-levels each, a step is described by 16 codes. \Cref{tab:tokenizer-study} in
-the appendix compares this and other configurations.
+The analysis of \cref{sec:pipeline} showed that four levels over a whole step
+lose too much detail: 256 numbers are a great deal to describe with four
+choices among 1\,024 prototypes. Our final tokenizer changes two things. A step
+becomes a single frame, 128 numbers covering 10.7\,ms, so that each code
+describes a shorter moment. And the 128 bands are divided into $G = 4$ groups
+of 32 neighboring bands, from the lowest frequencies to the highest, each with
+its own residual codebooks. A group of 32 numbers is far easier to describe
+with 1\,024 prototypes than a whole step: the same number of prototypes now
+covers a much smaller space, so each one lies closer to the vectors it stands
+for.
+
+Each group is quantized in 4 levels, so a step is described by $C = 4 \times 4
+= 16$ codes. They are ordered level by level: first the coarse code of every
+group, then their first corrections, and so on, which preserves the
+coarse-to-fine order on which the delay pattern relies (\cref{sec:model}). The
+change halves the reconstruction error (\cref{sec:pipeline}). A control with
+16 levels and no groups shows that most of that gain comes from the larger
+number of codes per step, and a smaller part from the grouping;
+\cref{tab:tokenizer-study} in the appendix compares all the configurations we
+tried.
 
 \section{The model}
 \label{sec:model}
