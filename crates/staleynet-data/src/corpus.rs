@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use staleynet_cuda::EMPTY_TOKEN;
 use staleynet_model::vocabulary::Conditioning;
 use staleynet_model::{DelayPattern, Random, TrainingBatch, Vocabulary};
+use std::ops::Range;
 
 /// A lyric line with a time span, measured or estimated.
 #[derive(Clone, Debug, PartialEq)]
@@ -291,45 +292,88 @@ impl BatchSampler {
     /// target being the next position's codes. Prompt dropout removes caption
     /// and lyrics together, giving the unconditional sequence.
     /// `mismatched` holds another track's lines under [`LyricsCondition::Mismatched`].
+    ///
+    /// The random draws happen in a fixed order (crop start, dropout, caption),
+    /// so a seed always gives the same crops.
     fn fill_sequence(&self, track: &TokenTrack, mismatched: Option<&str>, sequence: usize, batch: &mut TrainingBatch, random: &mut Random) {
-        let codebooks = self.vocabulary.codebooks;
-        let time = batch.shape.time;
+        let rows = SequenceRows { sequence, time: batch.shape.time, codebooks: self.vocabulary.codebooks };
         let prompt_positions = self.vocabulary.prompt_positions();
-        let audio_positions = time - prompt_positions;
-        let slot = |position: usize| (sequence * time + position) * codebooks;
+        let audio_positions = rows.time - prompt_positions;
 
-        let delayed_steps = self.pattern.delayed_steps(track.codes.len() / codebooks);
+        let delayed_steps = self.pattern.delayed_steps(track.codes.len() / rows.codebooks);
+        let first_step = self.crop_start(delayed_steps, audio_positions, random);
+        let lyrics = self.lyrics_for(track, mismatched, first_step, audio_positions);
+        let conditioning = self.conditioning(track, &lyrics, random);
+
+        self.vocabulary.write_prompt(conditioning, &mut batch.tokens[rows.slot(0)..rows.slot(prompt_positions)]);
+        self.write_crop(track, first_step..delayed_steps, rows, prompt_positions, batch);
+    }
+
+    /// The delayed step at which the crop begins: the start of the track with
+    /// probability `start_probability` (and whenever the track is no longer
+    /// than the crop), otherwise a uniformly random step.
+    fn crop_start(&self, delayed_steps: usize, audio_positions: usize, random: &mut Random) -> usize {
         let from_start = random.chance(self.options.start_probability) || delayed_steps <= audio_positions;
-        let first_step = if from_start { 0 } else { random.below(delayed_steps - audio_positions) };
+        if from_start { 0 } else { random.below(delayed_steps - audio_positions) }
+    }
 
-        let lyrics = match (self.options.lyrics, mismatched) {
+    /// The lyrics placed in the prompt under the sampler's lyrics condition.
+    fn lyrics_for(&self, track: &TokenTrack, mismatched: Option<&str>, first_step: usize, audio_positions: usize) -> String {
+        match (self.options.lyrics, mismatched) {
             (LyricsCondition::Removed, _) => String::new(),
             (LyricsCondition::Mismatched, Some(other)) => other.to_string(),
             (LyricsCondition::Aligned | LyricsCondition::Mismatched, _) => track.lyrics_between(first_step, audio_positions),
-        };
-        let conditioning = if random.chance(self.options.prompt_dropout) {
-            Conditioning::NONE
-        } else {
-            Conditioning { caption: &track.captions[random.below(track.captions.len())], lyrics: &lyrics }
-        };
-        self.vocabulary.write_prompt(conditioning, &mut batch.tokens[slot(0)..slot(prompt_positions)]);
+        }
+    }
 
-        // Offset `audio_positions` has no input slot; it only supplies the final target.
-        for offset in 0..=audio_positions {
-            let step = first_step + offset;
-            if step >= delayed_steps {
-                break;
-            }
+    /// The prompt: nothing with probability `prompt_dropout`, otherwise one of
+    /// the track's captions, chosen uniformly, with `lyrics`.
+    fn conditioning<'a>(&self, track: &'a TokenTrack, lyrics: &'a str, random: &mut Random) -> Conditioning<'a> {
+        if random.chance(self.options.prompt_dropout) {
+            return Conditioning::NONE;
+        }
 
-            for codebook in 0..codebooks {
+        Conditioning { caption: &track.captions[random.below(track.captions.len())], lyrics }
+    }
+
+    /// Writes the delayed codes of `steps` after the prompt: position `offset`
+    /// receives step `first + offset` as input, and the position before it
+    /// receives the same codes as its target. The position after the last
+    /// input has no input slot; it only supplies the final target.
+    fn write_crop(&self, track: &TokenTrack, steps: Range<usize>, rows: SequenceRows, prompt_positions: usize, batch: &mut TrainingBatch) {
+        let audio_positions = rows.time - prompt_positions;
+
+        for (offset, step) in steps.take(audio_positions + 1).enumerate() {
+            for codebook in 0..rows.codebooks {
                 let Some(code) = self.pattern.delayed_code(&track.codes, step, codebook) else { continue };
 
                 if offset < audio_positions {
-                    batch.tokens[slot(prompt_positions + offset) + codebook] = self.vocabulary.audio_token(codebook, code);
+                    batch.tokens[rows.slot(prompt_positions + offset) + codebook] = self.vocabulary.audio_token(codebook, code);
                 }
-                batch.targets[slot(prompt_positions - 1 + offset) + codebook] = code;
+                batch.targets[rows.slot(prompt_positions - 1 + offset) + codebook] = code;
             }
         }
+    }
+}
+
+/// Where one sequence of a batch lives in the flat `[sequence, position,
+/// codebook]` token and target arrays.
+#[derive(Clone, Copy)]
+struct SequenceRows {
+    /// Index of the sequence within the batch.
+    sequence: usize,
+
+    /// Positions per sequence.
+    time: usize,
+
+    /// Codes per position.
+    codebooks: usize,
+}
+
+impl SequenceRows {
+    /// Index of the first code of `position` in this sequence.
+    fn slot(&self, position: usize) -> usize {
+        (self.sequence * self.time + position) * self.codebooks
     }
 }
 
