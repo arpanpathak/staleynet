@@ -121,6 +121,7 @@ fn inspect_wav(bytes: &[u8]) -> Option<WavFacts> {
     let is_riff_wave = &header[0..4] == b"RIFF" && &header[8..12] == b"WAVE" && &header[36..40] == b"data";
     let is_mono_pcm16 = u16_at(20) == 1 && u16_at(22) == 1 && u16_at(34) == 16;
     let sample_rate = u32_at(24);
+
     if !is_riff_wave || !is_mono_pcm16 || !ACCEPTED_SAMPLE_RATES.contains(&sample_rate) {
         return None;
     }
@@ -144,17 +145,22 @@ fn is_valid_id(id: &str) -> bool {
 pub fn save(project: &Path, upload: Upload) -> Result<Recording, String> {
     let caption = upload.caption.trim();
     let lyrics = upload.lyrics.trim();
+
     if caption.is_empty() {
         return Err("describe the take (for example \"male voice singing softly with acoustic guitar\")".into());
     }
+
     if caption.chars().count() > MAX_CAPTION_CHARACTERS {
         return Err(format!("the description is longer than {MAX_CAPTION_CHARACTERS} characters"));
     }
+
     if lyrics.chars().count() > MAX_LYRICS_CHARACTERS {
         return Err(format!("the lyrics are longer than {MAX_LYRICS_CHARACTERS} characters"));
     }
 
-    let wav = base64::engine::general_purpose::STANDARD.decode(upload.wav_base64.as_bytes()).map_err(|error| format!("audio is not valid base64: {error}"))?;
+    let wav = base64::engine::general_purpose::STANDARD
+        .decode(upload.wav_base64.as_bytes())
+        .map_err(|error| format!("audio is not valid base64: {error}"))?;
     let Some(facts) = inspect_wav(&wav) else {
         return Err("audio must be a mono 16-bit PCM WAV at 16, 22.05, 44.1 or 48 kHz".into());
     };
@@ -176,6 +182,7 @@ pub fn save(project: &Path, upload: Upload) -> Result<Recording, String> {
 
     let root = directory(project);
     let write = |extension: &str, contents: &[u8]| std::fs::write(root.join(format!("{}.{extension}", recording.id)), contents);
+
     std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
     let record = serde_json::to_vec_pretty(&recording).map_err(|error| error.to_string())?;
 
@@ -228,8 +235,10 @@ mod tests {
     fn silent_wav(sample_rate: u32, samples: usize) -> Vec<u8> {
         let data_bytes = (samples * BYTES_PER_SAMPLE) as u32;
         let mut bytes = Vec::new();
+
         bytes.extend_from_slice(b"RIFF");
         bytes.extend_from_slice(&(36 + data_bytes).to_le_bytes());
+
         bytes.extend_from_slice(b"WAVEfmt ");
         bytes.extend_from_slice(&16u32.to_le_bytes());
         bytes.extend_from_slice(&1u16.to_le_bytes());
@@ -238,9 +247,11 @@ mod tests {
         bytes.extend_from_slice(&(sample_rate * 2).to_le_bytes());
         bytes.extend_from_slice(&2u16.to_le_bytes());
         bytes.extend_from_slice(&16u16.to_le_bytes());
+
         bytes.extend_from_slice(b"data");
         bytes.extend_from_slice(&data_bytes.to_le_bytes());
         bytes.resize(bytes.len() + samples * BYTES_PER_SAMPLE, 0);
+
         bytes
     }
 
@@ -252,6 +263,7 @@ mod tests {
 
         let mut stereo = silent_wav(48_000, 100);
         stereo[22] = 2;
+
         assert!(inspect_wav(&stereo).is_none());
         assert!(inspect_wav(&silent_wav(12_345, 100)).is_none());
         assert!(inspect_wav(b"RIFF").is_none());

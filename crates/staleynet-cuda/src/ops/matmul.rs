@@ -152,6 +152,7 @@ impl Gpu {
             MatmulKernel::Naive | MatmulKernel::Tiled => launch::matmul_tiles(spec.rows, spec.cols, spec.batch.count),
             MatmulKernel::Blocked => launch::matmul_blocks(spec.rows, spec.cols, spec.batch.count),
         };
+
         let product = spec.product();
         let kernels = &self.kernels.matmul;
         let (left, right, output) = (&left.buffer, &right.buffer, &mut output.buffer);

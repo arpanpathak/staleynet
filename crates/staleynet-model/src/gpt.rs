@@ -41,6 +41,7 @@ impl Gpt {
     /// A freshly initialised model; identical seeds give identical weights.
     pub fn new(gpu: &Gpu, config: ModelConfig, seed: u64) -> GpuResult<Self> {
         config.validate();
+
         let mut random = Random::new(seed);
         let vocabulary = Vocabulary::new(&config);
         let embedding_init = Init::Normal(INIT_STD);
@@ -89,9 +90,11 @@ impl Parameters for Gpt {
     fn visit_parameters(&mut self, visit: &mut dyn FnMut(&mut Parameter)) {
         visit(&mut self.token_embedding);
         visit(&mut self.position_embedding);
+
         for block in &mut self.blocks {
             block.visit_parameters(visit);
         }
+
         self.final_norm.visit_parameters(visit);
         self.head.visit_parameters(visit);
     }

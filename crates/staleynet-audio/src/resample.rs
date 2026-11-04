@@ -111,6 +111,7 @@ impl PolyphaseFilter {
         let position = index as u64 * self.step;
         let centre = (position / self.phases) as isize;
         let phase = (position % self.phases) as usize;
+
         let width = 2 * self.radius + 1;
         let phase_taps = &self.taps[phase * width..(phase + 1) * width];
         let first = centre - self.radius as isize;

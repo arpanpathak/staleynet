@@ -89,6 +89,7 @@ const CONDITIONS: [LyricsCondition; 3] = [LyricsCondition::Aligned, LyricsCondit
 /// model reads its lyrics.
 pub fn run(arguments: Arguments) -> Result<()> {
     let gpu = open_gpu()?;
+
     let checkpoint_directory = arguments.checkpoint.clone().unwrap_or_else(|| preferred_checkpoint(&arguments.run));
     let (model, metadata) = checkpoint::load(&gpu, &checkpoint_directory, None)?;
     ensure!(model.config.lyrics_bytes > 0, "{} has no lyrics field", checkpoint_directory.display());
@@ -97,15 +98,18 @@ pub fn run(arguments: Arguments) -> Result<()> {
         SplitArgument::Train => Split::Train,
         SplitArgument::Validation => Split::Validation,
     };
+
     let layout = CacheLayout::new(&arguments.cache);
     let manifest = DatasetManifest::load(&layout)?;
     let corpus = TokenCorpus::load(&layout, &manifest, split, &TrackFilter::default(), model.config.codebooks)?.retain_tracks_with_lyrics();
     ensure!(corpus.tracks.len() >= 2, "need at least two tracks with lyrics in the {split:?} split");
+
     eprintln!("{} (step {}), {} {split:?} tracks with lyrics", checkpoint_directory.display(), metadata.step, corpus.tracks.len());
 
     let mut scorer = Scorer::new(&gpu, &model, &corpus, &arguments)?;
     let mut scores = Vec::with_capacity(CONDITIONS.len());
     let mut batch_losses = Vec::with_capacity(CONDITIONS.len());
+
     for condition in CONDITIONS {
         let (score, losses) = scorer.score(condition)?;
         eprintln!("{:>10}: {:.4} {:.3?}", score.condition, score.loss, score.loss_per_codebook);
@@ -121,6 +125,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
         "checkpoint": checkpoint_directory, "step": metadata.step, "split": format!("{split:?}"), "scores": scores,
         "mismatched_minus_aligned": paired.mean, "standard_error": paired.standard_error, "verdict": verdict,
     });
+
     let name = format!("lyrics-evaluation-{split:?}-step-{}.json", metadata.step).to_lowercase();
     std::fs::write(arguments.run.join(name), serde_json::to_string_pretty(&report)?)?;
     Ok(())

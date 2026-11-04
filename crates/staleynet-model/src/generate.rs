@@ -130,6 +130,7 @@ impl ConditionedStream {
             AttentionMode::KvCache => audio_room / 2,
             AttentionMode::Recompute => audio_room,
         };
+
         let history_steps = history.len() / codebooks;
         let kept_steps = history_steps.min(window);
 
@@ -234,6 +235,7 @@ pub fn generate(gpu: &Gpu, model: &Gpt, prompt: Conditioning, config: &Generatio
     let mut lyrics = LyricsSchedule::new(prompt, vocabulary.lyrics_bytes, steps);
     let mut streams = GuidedStreams::new(gpu, model, lyrics.prompt_slots(&vocabulary), config.guidance)?;
     let mut codes = DelayedCodes::with_capacity(steps * vocabulary.codebooks);
+
     let mut random = Random::new(config.seed);
     let started = Instant::now();
 
@@ -374,6 +376,7 @@ impl DelayedCodes {
 
             let head_logits = &logits[codebook * codebook_size..(codebook + 1) * codebook_size];
             let code = sample(head_logits, config.sampling, random);
+
             self.history.push(vocabulary.audio_token(codebook, code));
             self.delayed.push(code);
         }

@@ -123,6 +123,7 @@ impl Decoder {
         let positions = model.vocabulary().position_ids(self.cached_positions, new_positions);
         gpu.copy_tokens_from_host(&mut scratch.tokens, token_slots)?;
         gpu.copy_tokens_from_host(&mut scratch.positions, &positions)?;
+
         model.embed(gpu, &scratch.tokens, &scratch.positions, &mut scratch.residual)?;
 
         for (block, cache) in model.blocks.iter().zip(&mut self.caches) {

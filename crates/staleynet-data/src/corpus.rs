@@ -69,6 +69,7 @@ impl TokenTrack {
     pub fn lyrics_from_random_line(&self, steps: usize, random: &mut Random) -> String {
         let choice = random.below(self.lyrics.len().max(1));
         let Some(line) = self.lyrics.get(choice) else { return String::new() };
+
         let first_step = (line.timing.start / self.seconds_per_step) as usize;
         self.lyrics_between(first_step, steps)
     }
@@ -108,8 +109,10 @@ fn contains_phrase(text: &str, phrase: &str) -> bool {
             .map(str::to_lowercase)
             .collect::<Vec<_>>()
     };
+
     let text_words = words(text);
     let phrase_words = words(phrase);
+
     if phrase_words.is_empty() {
         return false;
     }
@@ -193,12 +196,14 @@ impl TokenCorpus {
     pub fn retain_tracks_with_lyrics(self) -> Self {
         let mut kept = Self::default();
         let mut previous = 0.0;
+
         for (track, cumulative) in self.tracks.into_iter().zip(self.cumulative_weight) {
             if !track.lyrics.is_empty() {
                 kept.push(track, cumulative - previous);
             }
             previous = cumulative;
         }
+
         kept
     }
 
@@ -426,8 +431,10 @@ mod tests {
     fn weights_bias_sampling() {
         let track =
             |caption: &str| TokenTrack { captions: vec![caption.into()], lyrics: Vec::new(), codes: vec![0; 4], seconds_per_step: 0.1 };
+
         let mut corpus = TokenCorpus::default();
         corpus.push(track("light"), 1.0);
+
         let mut heavy = TokenCorpus::default();
         heavy.push(track("heavy"), 1.0);
         corpus.absorb(heavy, 3.0);
@@ -441,6 +448,7 @@ mod tests {
     fn every_target_is_the_next_positions_input() {
         let config = ModelConfig { prompt_bytes: 4, codebooks: 3, codebook_size: 10, context_length: 32, ..ModelConfig::default() };
         let vocabulary = Vocabulary::new(&config);
+
         let mut corpus = TokenCorpus::default();
         corpus.push(
             TokenTrack {
@@ -451,6 +459,7 @@ mod tests {
             },
             1.0,
         );
+
         let shape = SequenceShape { batch: 4, time: 20 };
         let mut batch = TrainingBatch::empty(shape, config.codebooks);
 

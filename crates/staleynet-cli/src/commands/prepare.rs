@@ -73,13 +73,16 @@ pub fn run(arguments: Arguments) -> Result<()> {
         DatasetSource::JamendoLyrics(root) => catalog::jamendo_lyrics(&root)?,
         DatasetSource::Folder(root) => catalog::folder(&root)?,
     };
+
     let with_lyrics = tracks.iter().filter(|track| !track.lyrics.is_empty()).count();
     let unlabelled = tracks.iter().filter(|track| track.captions.iter().all(|caption| caption.source == CaptionSource::FileName)).count();
+
     eprintln!("catalogue: {} recordings ({unlabelled} described only by file name, {with_lyrics} with lyrics)", tracks.len());
 
     let gpu = open_gpu()?;
     let layout = CacheLayout::new(&arguments.cache);
     let options = PrepareOptions { mel: MelConfig::default(), max_seconds: arguments.max_seconds };
+
     let total = tracks.len();
     let mut finished = 0;
 
@@ -95,6 +98,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
 
     let hours = manifest.tracks.iter().map(|entry| entry.seconds).sum::<f32>() / 3600.0;
     let validation = manifest.tracks.iter().filter(|entry| entry.track.split == Split::Validation).count();
+
     eprintln!("prepared {} recordings, {hours:.2} h ({validation} validation) → {}", manifest.tracks.len(), arguments.cache.display());
     Ok(())
 }

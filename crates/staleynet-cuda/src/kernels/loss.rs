@@ -63,6 +63,7 @@ pub mod kernels {
         if row >= rows {
             return;
         }
+
         let base = row * classifier.row_width + classifier.column_offset;
         let target = targets[row * classifier.target_stride + classifier.target_offset];
         let has_target = target != EMPTY_TOKEN;

@@ -228,6 +228,7 @@ fn best_logged_validation(metrics: &Path) -> Option<f32> {
 fn load_corpora(cache: &CacheLayout, config: &TrainingConfig) -> Result<(TokenCorpus, TokenCorpus)> {
     let codebooks = config.model.codebooks;
     let manifest = DatasetManifest::load(cache)?;
+
     let mut train = TokenCorpus::load(cache, &manifest, Split::Train, &config.track_filter, codebooks)?;
     let mut validation = TokenCorpus::load(cache, &manifest, Split::Validation, &config.track_filter, codebooks)?;
 
@@ -602,6 +603,7 @@ mod tests {
         let root = temp_root("metrics");
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("metrics.jsonl");
+
         std::fs::write(
             &path,
             concat!(
@@ -640,6 +642,7 @@ mod tests {
         let root = temp_root("checkpoint");
         let best = root.join("best");
         let latest = root.join("latest");
+
         std::fs::create_dir_all(&best).unwrap();
         std::fs::create_dir_all(&latest).unwrap();
 

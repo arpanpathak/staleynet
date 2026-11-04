@@ -92,12 +92,15 @@ impl GenerationRequest {
         if !SECONDS_RANGE.contains(&self.seconds) {
             return invalid(format!("seconds must be in {SECONDS_RANGE:?}"));
         }
+
         if !GUIDANCE_RANGE.contains(&self.guidance) {
             return invalid(format!("guidance must be in {GUIDANCE_RANGE:?}"));
         }
+
         if !TEMPERATURE_RANGE.contains(&self.temperature) {
             return invalid(format!("temperature must be in {TEMPERATURE_RANGE:?}"));
         }
+
         if !TOP_K_RANGE.contains(&self.top_k) {
             return invalid(format!("top_k must be in {TOP_K_RANGE:?}"));
         }

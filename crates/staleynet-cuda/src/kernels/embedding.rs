@@ -65,6 +65,7 @@ pub mod kernels {
         let element = index.get();
         let token = element / width;
         let col = element % width;
+
         if token + 1 >= row_offsets.len() {
             return;
         }

@@ -153,6 +153,7 @@ pub mod kernels {
         let batch = thread::blockIdx_z() as usize;
         let row = thread::blockIdx_y() as usize * MATMUL_TILE + thread::threadIdx_y() as usize;
         let col = thread::blockIdx_x() as usize * MATMUL_TILE + thread::threadIdx_x() as usize;
+
         if row >= product.rows || col >= product.cols {
             return;
         }
@@ -181,6 +182,7 @@ pub mod kernels {
         let batch = thread::blockIdx_z() as usize;
         let tile_row = thread::blockIdx_y() as usize * MATMUL_TILE;
         let tile_col = thread::blockIdx_x() as usize * MATMUL_TILE;
+
         let local_x = thread::threadIdx_x() as usize;
         let local_y = thread::threadIdx_y() as usize;
         let linear = local_y * MATMUL_TILE + local_x;
@@ -233,6 +235,7 @@ pub mod kernels {
         let batch = thread::blockIdx_z() as usize;
         let tile_row = thread::blockIdx_y() as usize * BLOCKED_TILE;
         let tile_col = thread::blockIdx_x() as usize * BLOCKED_TILE;
+
         let local_x = thread::threadIdx_x() as usize;
         let local_y = thread::threadIdx_y() as usize;
         let thread_index = local_y * BLOCKED_THREADS_PER_EDGE + local_x;

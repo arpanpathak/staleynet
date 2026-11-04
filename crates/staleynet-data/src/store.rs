@@ -267,6 +267,7 @@ mod tests {
         let root = temp_root("f16");
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("values.f16");
+
         let values = [0.0, 1.0, -0.5, 0.1];
 
         write_f16(&path, &values).unwrap();
@@ -285,6 +286,7 @@ mod tests {
         let root = temp_root("codes");
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("codes.u16");
+
         let codes = [0, 1, 1_024, 65_535];
 
         write_codes(&path, &codes).unwrap();
@@ -331,6 +333,7 @@ mod tests {
         let root = temp_root("manifest");
         let layout = CacheLayout::new(&root);
         layout.create().unwrap();
+
         let manifest = DatasetManifest {
             mel: MelSettings::from(MelConfig::default()),
             normalization: Normalization { mean: vec![0.0, 1.0], std: vec![1.0, 2.0] },

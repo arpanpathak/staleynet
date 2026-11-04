@@ -82,7 +82,9 @@ impl Studio {
         let path = url.split('?').next().unwrap_or_default();
 
         let reply = match (request.method(), path) {
-            (Method::Get, "/") => Reply { status: status::OK, content_type: "text/html; charset=utf-8", body: INDEX_HTML.as_bytes().to_vec() },
+            (Method::Get, "/") => {
+                Reply { status: status::OK, content_type: "text/html; charset=utf-8", body: INDEX_HTML.as_bytes().to_vec() }
+            }
             (Method::Get, "/api/runs") => Reply::json(status::OK, &runs::discover(&self.project)),
             (Method::Get, "/api/clips") => Reply::json(status::OK, &library::list(&self.project.join("samples"))),
             (Method::Post, "/api/generate") => self.generate(&mut request),
@@ -90,7 +92,9 @@ impl Studio {
             (Method::Get, "/api/recordings") => Reply::json(status::OK, &recordings::list(&self.project)),
             (Method::Post, "/api/recordings") => self.save_recording(&mut request),
             (Method::Delete, take) if take.starts_with("/api/recordings/") => self.delete_recording(&take["/api/recordings/".len()..]),
-            (Method::Get, take) if take.starts_with("/recordings/") => self.audio(&recordings::directory(&self.project), &take["/recordings/".len()..]),
+            (Method::Get, take) if take.starts_with("/recordings/") => {
+                self.audio(&recordings::directory(&self.project), &take["/recordings/".len()..])
+            }
             _ => Reply::error(status::NOT_FOUND, "not found"),
         };
 

@@ -137,6 +137,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
 
     let frames = (arguments.seconds * mel.frames_per_second() / tokenizer.config.frames_per_step as f32).ceil() as usize;
     eprintln!("{} (step {}): generating {frames} frames for {:.1}s", checkpoint_directory.display(), metadata.step, arguments.seconds);
+
     let prompt = Conditioning { caption: &arguments.prompt, lyrics: &lyrics };
     let generation = generate(&gpu, &model, prompt, &arguments.generation_config(frames))?;
 
@@ -148,6 +149,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
     let griffin = GriffinLimConfig { iterations: arguments.griffin_lim_iterations, seed: arguments.seed };
     let waveform = griffin_lim(&MelAnalyzer::new(mel), &tokenizer.decode(&generation.codes, tokenizer.config.codebooks), griffin);
     let vocoder_seconds = vocoder_started.elapsed().as_secs_f64();
+
     write_mono_pcm16(&arguments.out, &waveform, mel.sample_rate)?;
 
     let audio_seconds = waveform.len() as f32 / mel.sample_rate as f32;

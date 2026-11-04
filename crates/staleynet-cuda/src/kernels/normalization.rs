@@ -77,6 +77,7 @@ pub mod kernels {
         if row >= rows {
             return;
         }
+
         let base = row * cols;
         let inverse = inv_rms[row];
 

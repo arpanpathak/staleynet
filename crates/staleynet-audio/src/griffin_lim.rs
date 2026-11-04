@@ -166,6 +166,7 @@ pub fn griffin_lim(analyzer: &MelAnalyzer, log_mel: &[f32], config: GriffinLimCo
     if magnitudes.len() <= 1 {
         return Vec::new();
     }
+
     let sample_count = (magnitudes.len() - 1) * analyzer.config.hop_size;
     let mut phases = PhaseGenerator(config.seed | 1);
 

@@ -115,6 +115,7 @@ pub mod kernels {
         if element >= layout.element_count() {
             return;
         }
+
         let at = layout.element(element);
         store(&mut head_major, layout.head_major_index(at), packed[layout.packed_index(at)]);
     }
@@ -131,6 +132,7 @@ pub mod kernels {
         if element >= layout.element_count() {
             return;
         }
+
         let at = layout.element(element);
         store(&mut packed, layout.packed_index(at), head_major[layout.head_major_index(at)]);
     }
@@ -153,6 +155,7 @@ pub mod kernels {
         if row >= rows {
             return;
         }
+
         let base = row * keys;
         let visible_keys = (row % queries + query_offset + 1).min(keys);
 

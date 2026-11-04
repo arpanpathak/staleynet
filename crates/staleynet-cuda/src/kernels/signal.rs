@@ -20,6 +20,7 @@ pub mod kernels {
         let index = thread::index_1d();
         let element = index.get();
         let source = (element / frame_length) * hop + element % frame_length;
+
         if let Some(slot) = frames.get_mut(index) {
             *slot = signal[source];
         }

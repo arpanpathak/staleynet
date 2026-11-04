@@ -132,6 +132,7 @@ mod tests {
     fn normal_samples_are_finite_and_roughly_standard() {
         let mut random = Random::new(6);
         let values: Vec<f32> = (0..2_000).map(|_| random.normal()).collect();
+
         let mean = values.iter().sum::<f32>() / values.len() as f32;
         let variance = values.iter().map(|value| (value - mean).powi(2)).sum::<f32>() / values.len() as f32;
 

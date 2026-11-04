@@ -115,6 +115,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
     let gpu = open_gpu()?;
     let layout = CacheLayout::new(&arguments.cache);
     let manifest = DatasetManifest::load(&layout)?;
+
     let tokenizer = match &arguments.reuse {
         Some(path) => AudioTokenizer::load(path)?,
         None => train_tokenizer(&gpu, &arguments, &layout, &manifest)?,

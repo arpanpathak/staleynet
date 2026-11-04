@@ -110,6 +110,7 @@ fn time(gpu: &Gpu, mut work: impl FnMut() -> Result<()>) -> Result<f64> {
         work()?;
     }
     gpu.synchronize()?;
+
     Ok(started.elapsed().as_secs_f64() / REPETITIONS as f64)
 }
 
@@ -118,6 +119,7 @@ fn matmul_gflops(gpu: &Gpu, rows: usize, cols: usize, inner: usize) -> Result<f6
     let left = gpu.zeros(Shape::new(rows, inner))?;
     let right = gpu.zeros(Shape::new(inner, cols))?;
     let mut output = gpu.zeros(Shape::new(rows, cols))?;
+
     let spec = MatmulSpec::new(rows, cols, inner);
 
     let seconds = time(gpu, || Ok(gpu.matmul(&spec, &left, &right, &mut output)?))?;

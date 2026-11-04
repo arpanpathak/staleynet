@@ -59,11 +59,13 @@ pub mod kernels {
 
         let mean = settings.beta1 * load_owned(&mut first_moment, index) + (1.0 - settings.beta1) * grad;
         let variance = settings.beta2 * load_owned(&mut second_moment, index) + (1.0 - settings.beta2) * grad * grad;
+
         store(&mut first_moment, index, mean);
         store(&mut second_moment, index, variance);
 
         let mean_hat = mean / settings.first_correction;
         let variance_hat = variance / settings.second_correction;
+
         let weight = load_owned(&mut parameter, index);
         let update = mean_hat / (variance_hat.sqrt() + settings.epsilon) + settings.weight_decay * weight;
         store(&mut parameter, index, weight - settings.learning_rate * update);
@@ -99,11 +101,13 @@ pub mod kernels {
         if local != 0 {
             return;
         }
+
         let mut block_sum = 0.0f32;
         for warp_index in 0..WARPS_PER_BLOCK {
             // SAFETY: warp_index < 8; every warp wrote its slot before the barrier above.
             block_sum += unsafe { WARP_SUMS[warp_index] };
         }
+
         store(&mut partial_sums, thread::blockIdx_x() as usize, block_sum);
     }
 }

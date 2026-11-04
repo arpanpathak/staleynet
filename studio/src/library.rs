@@ -85,6 +85,7 @@ mod tests {
     fn lists_wavs_with_reports_and_groups() {
         let samples = temp_samples("list");
         std::fs::create_dir_all(samples.join("studio")).unwrap();
+
         std::fs::write(samples.join("a.wav"), b"wav").unwrap();
         std::fs::write(samples.join("a.json"), r#"{"prompt":"calm"}"#).unwrap();
         std::fs::write(samples.join("studio").join("b.wav"), b"wav").unwrap();
@@ -108,6 +109,7 @@ mod tests {
     fn resolve_accepts_files_inside_the_directory_only() {
         let samples = temp_samples("resolve");
         std::fs::create_dir_all(&samples).unwrap();
+
         std::fs::write(samples.join("a.wav"), b"wav").unwrap();
         std::fs::write(samples.join("a.txt"), b"text").unwrap();
 

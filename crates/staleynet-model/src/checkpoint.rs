@@ -122,6 +122,7 @@ pub fn load_weights(gpu: &Gpu, directory: &Path, model: &mut Gpt) -> Result<Weig
         };
 
         let grows_by_rows = copy_leading_values(gpu, source, parameter)?;
+
         let list = if grows_by_rows { &mut transfer.grown } else { &mut transfer.copied };
         list.push(parameter.name.clone());
         Ok(())
@@ -147,6 +148,7 @@ fn copy_leading_values(gpu: &Gpu, source: &[f32], parameter: &mut Parameter) -> 
     let mut current = gpu.download(&parameter.value)?;
     current[..source.len()].copy_from_slice(source);
     gpu.copy_from_host(&mut parameter.value, &current)?;
+
     Ok(grows_by_rows)
 }
 
@@ -229,6 +231,7 @@ fn upload_next(gpu: &Gpu, remaining: &mut &[f32], tensor: &mut Tensor) -> Result
     let (values, rest) = remaining.split_at(tensor.len());
     gpu.copy_from_host(tensor, values)?;
     *remaining = rest;
+
     Ok(())
 }
 

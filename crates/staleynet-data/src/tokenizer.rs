@@ -165,10 +165,12 @@ impl CentroidSearch {
 fn random_rows(points: &[f32], dim: usize, count: usize, random: &mut Random) -> Vec<f32> {
     let available = points.len() / dim;
     let mut rows = Vec::with_capacity(count * dim);
+
     for _ in 0..count {
         let row = random.below(available);
         rows.extend_from_slice(&points[row * dim..(row + 1) * dim]);
     }
+
     rows
 }
 
@@ -319,6 +321,7 @@ impl AudioTokenizer {
     ) -> GpuResult<Self> {
         let step_dim = config.frames_per_step * mel_bands;
         let groups = BandGroups::new(mel_bands, config.frames_per_step, config.band_groups);
+
         let mut random = Random::new(config.seed);
         if vectors.len() / step_dim > config.max_training_vectors {
             vectors = random_rows(&vectors, step_dim, config.max_training_vectors, &mut random);
@@ -347,6 +350,7 @@ impl AudioTokenizer {
     pub fn encode(&self, gpu: &Gpu, log_mel: &[f32]) -> GpuResult<Vec<u32>> {
         let config = &self.config;
         let groups = BandGroups::new(self.mel_bands, config.frames_per_step, config.band_groups);
+
         let vectors = Self::step_vectors(log_mel, self.mel_bands, config.frames_per_step, &self.normalization);
         let steps = vectors.len() / self.step_dim();
         let mut codes = vec![0u32; steps * config.codebooks];
@@ -375,6 +379,7 @@ impl AudioTokenizer {
         let config = &self.config;
         let groups = BandGroups::new(self.mel_bands, config.frames_per_step, config.band_groups);
         let group_dim = groups.group_dim();
+
         let mut log_mel = vec![0.0f32; codes.len() / config.codebooks * self.step_dim()];
         let mut piece = vec![0.0f32; group_dim];
 
@@ -423,18 +428,21 @@ mod tests {
 
         let low = groups.extract(&step, 0);
         let high = groups.extract(&step, 1);
+
         assert_eq!(low, vec![0.0, 1.0, 4.0, 5.0]);
         assert_eq!(high, vec![2.0, 3.0, 6.0, 7.0]);
 
         let mut rebuilt = vec![0.0; 8];
         groups.insert(&mut rebuilt, 0, &low);
         groups.insert(&mut rebuilt, 1, &high);
+
         assert_eq!(rebuilt, step);
     }
 
     #[test]
     fn codes_are_ordered_level_by_level() {
         let config = TokenizerConfig { codebooks: 8, band_groups: 4, ..TokenizerConfig::default() };
+
         assert_eq!(config.levels(), 2);
         assert_eq!((0..4).map(|group| config.code_index(0, group)).collect::<Vec<_>>(), vec![0, 1, 2, 3]);
         assert_eq!(config.code_index(1, 2), 6);

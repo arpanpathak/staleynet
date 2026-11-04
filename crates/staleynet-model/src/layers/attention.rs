@@ -198,6 +198,7 @@ impl CausalSelfAttention {
         let score_block = time * time;
 
         self.qkv.forward(gpu, input, &mut tensors.qkv)?;
+
         gpu.split_heads(&tensors.qkv, &mut tensors.queries, &self.layout(shape, 3 * width, Projection::Query.column_offset(width)))?;
         gpu.split_heads(&tensors.qkv, &mut tensors.keys, &self.layout(shape, 3 * width, Projection::Key.column_offset(width)))?;
         gpu.split_heads(&tensors.qkv, &mut tensors.values, &self.layout(shape, 3 * width, Projection::Value.column_offset(width)))?;
@@ -286,12 +287,14 @@ impl CausalSelfAttention {
 
         let key_layout = self.layout(single, 3 * width, Projection::Key.column_offset(width)).in_cache(capacity, cached_positions);
         let value_layout = self.layout(single, 3 * width, Projection::Value.column_offset(width)).in_cache(capacity, cached_positions);
+
         gpu.split_heads(&tensors.qkv, &mut cache.keys, &key_layout)?;
         gpu.split_heads(&tensors.qkv, &mut cache.values, &value_layout)?;
 
         let cache_block = capacity * head_dim;
         let query_block = new_positions * head_dim;
         let score_block = new_positions * capacity;
+
         let heads = BatchStrides { count: self.heads, left: query_block, right: cache_block, output: score_block };
 
         let scores = MatmulSpec::new(new_positions, capacity, head_dim).right_transposed().batched(heads);
@@ -300,6 +303,7 @@ impl CausalSelfAttention {
 
         let mix_strides = BatchStrides { count: self.heads, left: score_block, right: cache_block, output: query_block };
         let mix = MatmulSpec::new(new_positions, head_dim, capacity).batched(mix_strides);
+
         gpu.matmul(&mix, &tensors.probabilities, &cache.values, &mut tensors.context_heads)?;
         gpu.merge_heads(&tensors.context_heads, &mut tensors.context, &self.layout(single, width, 0))?;
 

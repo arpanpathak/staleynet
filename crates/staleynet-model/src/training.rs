@@ -102,12 +102,14 @@ impl TrainingWorkspace {
     /// Allocates every buffer for `shape`.
     pub fn new(gpu: &Gpu, config: &ModelConfig, shape: SequenceShape) -> GpuResult<Self> {
         assert!(shape.time <= config.sequence_capacity(), "sequence longer than the context");
+
         let rows = shape.rows();
         let stream = Shape::new(rows, config.width);
         let logits = Shape::new(rows, config.logits_width());
         let empty_slots = vec![EMPTY_TOKEN; rows * config.codebooks];
 
         let positions: Vec<u32> = Vocabulary::new(config).position_ids(0, shape.time).repeat(shape.batch);
+
         let mut residuals = Vec::with_capacity(config.layers + 1);
         let mut blocks = Vec::with_capacity(config.layers);
         for _ in 0..config.layers {
@@ -225,6 +227,7 @@ impl Gpt {
 
         let embedding_grad = &workspace.next_residual_grad;
         let token_index = TokenIndex::build(gpu, &batch.tokens, self.config.codebooks, self.token_embedding.value.shape().rows)?;
+
         gpu.embedding_backward(embedding_grad, &token_index, &mut self.token_embedding.gradient)?;
         gpu.embedding_backward(embedding_grad, &workspace.position_index, &mut self.position_embedding.gradient)
     }

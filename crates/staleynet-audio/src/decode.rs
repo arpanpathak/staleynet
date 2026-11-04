@@ -54,6 +54,7 @@ pub fn decode_mono(path: &Path) -> Result<MonoAudio> {
     let track = container.default_track().ok_or_else(|| anyhow!("no audio track in {}", path.display()))?;
     let track_id = track.id;
     let sample_rate = track.codec_params.sample_rate.ok_or_else(|| anyhow!("unknown sample rate in {}", path.display()))?;
+
     let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
 
     let mut samples = Vec::new();
@@ -76,6 +77,7 @@ pub fn decode_mono(path: &Path) -> Result<MonoAudio> {
 
         let spec = *decoded.spec();
         let channel_count = spec.channels.count().max(1);
+
         let mut interleaved = SampleBuffer::<f32>::new(decoded.capacity() as u64, spec);
         interleaved.copy_interleaved_ref(decoded);
 

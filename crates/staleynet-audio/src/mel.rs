@@ -337,9 +337,11 @@ mod tests {
     fn dft_basis_matches_fft() {
         let analyzer = MelAnalyzer::new(MelConfig::default());
         let signal = test_signal(4096);
+
         let spectrum = analyzer.stft(&signal);
         let basis = analyzer.windowed_dft_basis();
         let padded = analyzer.reflect_pad(&signal);
+
         let MelConfig { fft_size, hop_size, .. } = analyzer.config;
         let bins = analyzer.config.frequency_bins();
         let frame = 3;

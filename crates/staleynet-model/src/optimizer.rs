@@ -106,6 +106,7 @@ impl AdamW {
     pub fn new(gpu: &Gpu, config: OptimizerConfig, model: &mut impl Parameters) -> GpuResult<Self> {
         let mut moments = Vec::new();
         let mut result = Ok(());
+
         model.visit_parameters(&mut |parameter| {
             let shape = parameter.value.shape();
             let allocated = gpu.zeros(shape).and_then(|first| Ok(Moments { first, second: gpu.zeros(shape)? }));
@@ -124,6 +125,7 @@ impl AdamW {
         let gradient_norm = global_gradient_norm(gpu, model)? as f32;
         let clip_scale = if gradient_norm > self.config.max_gradient_norm { self.config.max_gradient_norm / gradient_norm } else { 1.0 };
         let learning_rate = self.config.learning_rate(self.steps_taken);
+
         self.steps_taken += 1;
 
         let config = &self.config;
@@ -164,10 +166,12 @@ impl AdamW {
 pub fn global_gradient_norm(gpu: &Gpu, model: &mut impl Parameters) -> GpuResult<f64> {
     let mut sum = 0.0;
     let mut result = Ok(());
+
     model.visit_parameters(&mut |parameter| match gpu.sum_of_squares(&parameter.gradient) {
         Ok(squares) => sum += squares,
         Err(error) => result = Err(error),
     });
+
     result?;
     Ok(sum.sqrt())
 }

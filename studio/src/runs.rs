@@ -91,6 +91,7 @@ mod tests {
         let run = project.join("runs").join(name);
         let checkpoint = run.join(kind);
         std::fs::create_dir_all(&checkpoint).unwrap();
+
         std::fs::write(checkpoint.join("model.json"), format!(r#"{{"model":{{"lyrics_bytes":{lyrics}}}}}"#)).unwrap();
         std::fs::write(run.join("metrics.jsonl"), metrics).unwrap();
     }
@@ -98,7 +99,13 @@ mod tests {
     #[test]
     fn discovers_and_sorts_runs_by_best_validation() {
         let project = temp_project("discover");
-        write_run(&project, "a", "best", 256, "{\"event\":\"validation\",\"loss\":2.0,\"step\":100,\"improved\":true}\n{\"event\":\"progress\",\"step\":150}\n");
+        write_run(
+            &project,
+            "a",
+            "best",
+            256,
+            "{\"event\":\"validation\",\"loss\":2.0,\"step\":100,\"improved\":true}\n{\"event\":\"progress\",\"step\":150}\n",
+        );
         write_run(&project, "b", "latest", 0, "{\"event\":\"validation\",\"loss\":3.0,\"step\":50,\"improved\":true}\n");
         std::fs::create_dir_all(project.join("runs").join("empty")).unwrap();
 

@@ -60,9 +60,11 @@ struct TlsFiles {
 /// inside the checkout.
 fn parse_settings() -> Result<Settings, String> {
     let mut settings = Settings { address: DEFAULT_ADDRESS.into(), project: PathBuf::from(".."), binary: PathBuf::new(), tls: None };
+
     let mut binary = None;
     let mut certificate = None;
     let mut private_key = None;
+
     let mut arguments = std::env::args().skip(1);
 
     while let Some(flag) = arguments.next() {
@@ -120,8 +122,10 @@ fn main() {
             std::process::exit(1);
         }
     };
+
     let server = Arc::new(server);
     let studio = Arc::new(Studio { project: settings.project, binary: settings.binary, generation_lock: Mutex::new(()) });
+
     eprintln!("StaleyNET Studio on {scheme}://{}  (project {})", settings.address, studio.project.display());
 
     let workers: Vec<_> = (0..WORKER_THREADS)

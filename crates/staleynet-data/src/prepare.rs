@@ -83,6 +83,7 @@ pub fn prepare(
     mut report: impl FnMut(&PrepareOutcome),
 ) -> Result<DatasetManifest> {
     layout.create()?;
+
     let analyzer = MelAnalyzer::new(options.mel);
     let extractor = GpuMelExtractor::new(gpu, &analyzer)?;
     let mut prepared = Vec::with_capacity(tracks.len());

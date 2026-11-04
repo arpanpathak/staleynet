@@ -78,6 +78,7 @@ impl GpuMelExtractor {
         let transform = MatmulSpec::new(frame_count, bins, config.fft_size);
         let mut real = gpu.zeros(spectrum)?;
         let mut imaginary = gpu.zeros(spectrum)?;
+
         gpu.matmul(&transform, &frames, &self.real_basis, &mut real)?;
         gpu.matmul(&transform, &frames, &self.imaginary_basis, &mut imaginary)?;
 
