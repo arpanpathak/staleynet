@@ -101,7 +101,15 @@ impl Studio {
         };
 
         let header = Header::from_bytes("Content-Type", reply.content_type).expect("static header is valid");
-        let response = Response::from_data(reply.body).with_status_code(StatusCode(reply.status)).with_header(header);
+        let mut response = Response::from_data(reply.body).with_status_code(StatusCode(reply.status)).with_header(header);
+
+        // The page and the listings change whenever the studio is rebuilt or a run
+        // trains further, so browsers must never show a stored copy of them.
+        if !reply.content_type.starts_with("audio/") {
+            response.add_header(Header::from_bytes("Cache-Control", "no-store").expect("static header is valid"));
+        }
+
+
         if let Err(error) = request.respond(response) {
             eprintln!("could not send response for {url}: {error}");
         }
