@@ -6,6 +6,7 @@ members = [
     "crates/staleynet-model",
     "crates/staleynet-data",
     "crates/staleynet-train",
+    "crates/staleynet-vocoder",
     "crates/staleynet-cli",
 ]
 default-members = ["crates/staleynet-cli"]
