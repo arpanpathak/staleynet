@@ -1,0 +1,13 @@
+[package]
+name = "staleynet-audio"
+description = "Audio decoding, resampling, log-mel analysis and Griffin-Lim reconstruction."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+hound.workspace = true
+rayon.workspace = true
+rustfft.workspace = true
+symphonia.workspace = true
