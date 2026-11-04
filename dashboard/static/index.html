@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StaleyNET Training</title>
+<style>
+/* ------------------------------------------------------------- tokens ----
+   Colors by role. Series slots are the validated reference palette, light and
+   dark steps chosen separately; status colors are reserved for run state and
+   always come with an icon and a label. */
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3ef;
+  --surface-1: #fcfcfb;
+  --hairline: #e3e1da;
+  --grid: #ecebe6;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --accent: #b7410e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --hairline: #2c2c2a;
+    --grid: #252523;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8e8d86;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --accent: #e08a4b;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211;
+  --surface-1: #1a1a19;
+  --hairline: #2c2c2a;
+  --grid: #252523;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8e8d86;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --accent: #e08a4b;
+}
+
+/* ------------------------------------------------------------- layout ---- */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", "DejaVu Sans", sans-serif;
+}
+header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 28px; border-bottom: 1px solid var(--hairline); background: var(--surface-1);
+}
+header h1 { font: 600 20px/1.2 Georgia, "DejaVu Serif", serif; margin: 0; }
+header h1 span { color: var(--accent); }
+header .spacer { flex: 1; }
+.muted { color: var(--text-muted); }
+.secondary { color: var(--text-secondary); }
+main { padding: 20px 28px 48px; max-width: 1600px; margin: 0 auto; }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 18px; }
+.filters label { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+select, button {
+  font: inherit; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--hairline); border-radius: 8px; padding: 6px 10px;
+}
+button { cursor: pointer; }
+input[type=range] { accent-color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--hairline); background: var(--surface-1); cursor: pointer;
+}
+.chip[aria-pressed="true"] { border-color: var(--text-secondary); font-weight: 600; }
+.chip .key { width: 14px; height: 2px; border-radius: 1px; }
+
+section { margin-top: 26px; }
+section > h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); margin: 0 0 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 12px; padding: 12px 14px; }
+.tile .label { font-size: 12px; color: var(--text-secondary); }
+.tile .value { font-size: 24px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .note { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.bar { height: 6px; background: var(--grid); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); border-radius: 3px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px; }
+.card { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 12px; padding: 14px 16px 10px; position: relative; }
+.card h3 { font-size: 14px; margin: 0; }
+.card .subtitle { font-size: 12px; color: var(--text-muted); margin: 2px 0 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .key { width: 16px; height: 2px; border-radius: 1px; }
+.legend .key.dot { width: 8px; height: 8px; border-radius: 50%; }
+.chart { width: 100%; height: 230px; position: relative; transition: opacity .2s; }
+.chart.loading { opacity: .55; }
+.chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.chart text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .direct { fill: var(--text-secondary); font-size: 11px; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .axis { stroke: var(--hairline); stroke-width: 1; }
+.chart .resume { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 4; }
+.chart .crosshair { stroke: var(--text-muted); stroke-width: 1; }
+.chart .empty { fill: var(--text-muted); font-size: 13px; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 5; min-width: 150px;
+  background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 18px rgb(0 0 0 / .18); display: none;
+}
+.tooltip .step { color: var(--text-muted); margin-bottom: 4px; }
+.tooltip .row { display: flex; align-items: center; gap: 8px; }
+.tooltip .row .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.tooltip .row strong { font-variant-numeric: tabular-nums; }
+.tooltip .row span { color: var(--text-secondary); }
+details { margin-top: 6px; font-size: 12px; color: var(--text-secondary); }
+details table { margin-top: 6px; }
+
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+th { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+td.number, th.number { text-align: right; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+tbody tr[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.table-wrap { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: 12px; overflow-x: auto; }
+
+.status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.status .icon { width: 10px; height: 10px; flex: none; }
+.status.live .icon { background: var(--good); border-radius: 50%; box-shadow: 0 0 0 0 var(--good); animation: pulse 2s infinite; }
+.status.finished .icon { background: var(--text-muted); border-radius: 2px; }
+.status.stopped .icon { background: var(--warning); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--critical); color: var(--text-primary); }
+.badge::before { content: "▲"; color: var(--critical); font-size: 10px; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .status.live .icon { animation: none; } .chart { transition: none; } }
+@media (max-width: 640px) { main, header { padding-left: 16px; padding-right: 16px; } .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>StaleyNET <span>Training</span></h1>
+  <div class="spacer"></div>
+  <div class="muted" id="refreshed" aria-live="polite"></div>
+  <button id="theme" type="button" aria-label="Switch between light and dark">Theme</button>
+</header>
+
+<main>
+  <div class="filters">
+    <label>Run <select id="run-select"></select></label>
+    <label>Smoothing <input id="smoothing" type="range" min="0" max="0.98" step="0.02" value="0.8"> <span id="smoothing-value"></span></label>
+    <label>Compare held-out loss <div class="chips" id="compare"></div></label>
+  </div>
+
+  <section>
+    <h2 id="run-title">Run</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section>
+    <h2>Learning</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Loss</h3>
+        <div class="subtitle" id="loss-subtitle"></div>
+        <div class="legend" id="loss-legend"></div>
+        <div class="chart" id="loss-chart"></div>
+        <details><summary>Held-out values</summary><table id="held-out-table"></table></details>
+      </div>
+      <div class="card">
+        <h3>Generalization gap</h3>
+        <div class="subtitle">Held-out loss minus the mean training loss over the previous 1,000 steps. Rising while the held-out loss stalls means overfitting.</div>
+        <div class="chart" id="gap-chart"></div>
+      </div>
+      <div class="card">
+        <h3 id="parts-title">Held-out loss by part</h3>
+        <div class="subtitle" id="parts-subtitle"></div>
+        <div class="legend" id="parts-legend"></div>
+        <div class="chart" id="parts-chart"></div>
+      </div>
+      <div class="card">
+        <h3>Held-out loss, compared</h3>
+        <div class="subtitle">The runs chosen above, on one axis.</div>
+        <div class="legend" id="compare-legend"></div>
+        <div class="chart" id="compare-chart"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Optimization</h2>
+    <div class="grid">
+      <div class="card"><h3>Learning rate</h3><div class="subtitle">At the last step of each logged span.</div><div class="chart" id="lr-chart"></div></div>
+      <div class="card"><h3>Gradient norm</h3><div class="subtitle">Before clipping, smoothed.</div><div class="chart" id="grad-chart"></div></div>
+      <div class="card"><h3>Time per step</h3><div class="subtitle">Wall-clock seconds; rises when another job shares the GPU.</div><div class="chart" id="speed-chart"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Machine</h2>
+    <div class="tiles" id="system-tiles"></div>
+    <div class="grid" style="margin-top:14px">
+      <div class="card"><h3>GPU load</h3><div class="subtitle">Percent busy, last hour.</div><div class="chart" id="gpu-chart"></div></div>
+      <div class="card"><h3>Memory in use</h3><div class="subtitle">GiB, last hour; shared with the GPU on Jetson modules.</div><div class="chart" id="memory-chart"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>All runs</h2>
+    <div class="table-wrap"><table id="runs-table"></table></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// ------------------------------------------------------------ constants ----
+
+/** Seconds between refreshes of the numbers. */
+const REFRESH_SECONDS = 10;
+
+/** Series slots, in fixed order; a series keeps its slot for as long as it exists. */
+const SLOTS = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5", "--series-6", "--series-7", "--series-8"];
+
+/** At most this many runs share the comparison chart. */
+const MAX_COMPARED = SLOTS.length;
+
+/** Series up to this count also get a label at the end of their line. */
+const MAX_DIRECT_LABELS = 4;
+
+/** Chart margins in pixels: room for the axis labels and the direct labels. */
+const MARGIN = { top: 12, right: 18, bottom: 26, left: 56 };
+const DIRECT_LABEL_ROOM = 118;
+
+/** Rough number of ticks per axis. */
+const TICKS = 5;
+
+/** Radius of a validation marker, and the surface ring drawn around it. */
+const MARKER_RADIUS = 4;
+
+// ---------------------------------------------------------------- state ----
+
+const state = {
+  runs: [],
+  focus: null,
+  compared: new Set(),
+  detail: null,
+  details: new Map(),
+  system: null,
+};
+
+const $ = (id) => document.getElementById(id);
+
+// ----------------------------------------------------------- formatting ----
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function formatLoss(value) {
+  return value == null ? "–" : value.toFixed(3);
+}
+
+function formatSteps(value) {
+  return value == null ? "–" : value.toLocaleString("en-US");
+}
+
+function formatDuration(seconds) {
+  if (seconds == null) return "–";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.round((seconds % 3600) / 60);
+  return hours > 0 ? `${hours} h ${minutes} m` : `${minutes} min`;
+}
+
+/** Decimals that tell ticks `step` apart, and no more. */
+function decimalsFor(step) {
+  return Math.max(0, Math.min(6, -Math.floor(Math.log10(step) + 1e-9)));
+}
+
+/** A tick label with as many decimals as the tick spacing needs; a tiny value is zero. */
+function formatTick(value, step) {
+  const clean = Math.abs(value) < step * 1e-6 ? 0 : value;
+  const magnitude = Math.abs(clean);
+  if (magnitude !== 0 && (magnitude < 1e-3 || magnitude >= 1e5)) return clean.toExponential(1);
+  return clean.toFixed(decimalsFor(step));
+}
+
+/** A clock time for a time-axis tick, with seconds when the ticks are close together. */
+function formatClock(seconds, step) {
+  const options = step < 60 ? { hour: "2-digit", minute: "2-digit", second: "2-digit" } : { hour: "2-digit", minute: "2-digit" };
+  return new Date(seconds * 1000).toLocaleTimeString([], options);
+}
+
+function formatAgo(seconds) {
+  if (seconds < 90) return `${Math.round(seconds)} s ago`;
+  if (seconds < 5400) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 172800) return `${Math.round(seconds / 3600)} h ago`;
+  return `${Math.round(seconds / 86400)} days ago`;
+}
+
+function formatCompact(value) {
+  if (value == null) return "–";
+  const magnitude = Math.abs(value);
+  if (magnitude !== 0 && (magnitude < 0.001 || magnitude >= 100000)) return value.toExponential(1);
+  if (magnitude >= 100) return value.toFixed(0);
+  if (magnitude >= 10) return value.toFixed(1);
+  return value.toFixed(magnitude >= 1 ? 2 : 3);
+}
+
+// ------------------------------------------------------------ smoothing ----
+
+/** An exponential moving average with bias correction, as TensorBoard draws it. */
+function smooth(points, weight) {
+  if (weight <= 0) return points;
+  let average = 0;
+  return points.map((point, index) => {
+    average = average * weight + point.value * (1 - weight);
+    return { step: point.step, value: average / (1 - Math.pow(weight, index + 1)) };
+  });
+}
+
+// --------------------------------------------------------------- charts ----
+
+/** Round tick values covering [low, high], and the spacing between them. */
+function niceTicks(low, high, count) {
+  if (!(high > low)) { high = low + 1; }
+  const rough = (high - low) / count;
+  const power = Math.pow(10, Math.floor(Math.log10(rough)));
+  const step = [1, 2, 2.5, 5, 10].map((factor) => factor * power).find((candidate) => candidate >= rough);
+  const values = [];
+  for (let tick = Math.ceil(low / step) * step; tick <= high + step * 1e-9; tick += step) values.push(+tick.toPrecision(12));
+  return { values, step };
+}
+
+function svgElement(name, attributes) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
+  return element;
+}
+
+function legend(container, series) {
+  container.replaceChildren();
+  if (series.length < 2) return;
+  for (const line of series.filter((entry) => !entry.faint)) {
+    const item = document.createElement("span");
+    const key = document.createElement("i");
+    key.className = line.markersOnly ? "key dot" : "key";
+    key.style.background = css(line.color);
+    item.append(key, document.createTextNode(line.name));
+    container.append(item);
+  }
+}
+
+/**
+ * Draws a line chart into `container`.
+ * series: [{ name, color, points: [{step, value}], faint?, markers?, markersOnly? }]
+ * options: { format, unit, domain: [low, high], verticals: [{step, label}], zero, timeAxis, emptyText }
+ * `format` writes values in the tooltip; tick labels take their decimals from the tick spacing.
+ */
+function lineChart(container, series, options = {}) {
+  const format = options.format || formatCompact;
+  container.replaceChildren();
+
+  const drawn = series.filter((line) => line.points.length > 0);
+  const width = container.clientWidth || 600;
+  const height = container.clientHeight || 230;
+  const svg = svgElement("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": options.label || "chart" });
+  container.append(svg);
+
+  if (drawn.length === 0) {
+    svg.append(Object.assign(svgElement("text", { x: width / 2, y: height / 2, "text-anchor": "middle", class: "empty" }), { textContent: options.emptyText || "No data yet" }));
+    return;
+  }
+
+  const labelled = drawn.filter((line) => !line.faint).length <= MAX_DIRECT_LABELS && drawn.filter((line) => !line.faint).length > 1;
+  const right = MARGIN.right + (labelled ? DIRECT_LABEL_ROOM : 0);
+  const steps = drawn.flatMap((line) => line.points.map((point) => point.step));
+  const values = drawn.flatMap((line) => line.points.map((point) => point.value)).filter(Number.isFinite);
+  if (options.zero) values.push(0);
+
+  const xLow = Math.min(...steps);
+  const xHigh = Math.max(...steps, xLow + 1);
+  let yLow = Math.min(...values);
+  let yHigh = Math.max(...values);
+  const padding = (yHigh - yLow || Math.abs(yHigh) || 1) * 0.08;
+  yLow -= padding;
+  yHigh += padding;
+  if (options.domain) {
+    yLow = options.domain[0];
+    yHigh = options.domain[1];
+  }
+
+  const yTicks = niceTicks(yLow, yHigh, TICKS);
+  yLow = Math.min(yLow, yTicks.values[0]);
+  yHigh = Math.max(yHigh, yTicks.values[yTicks.values.length - 1]);
+  const unit = options.unit || "";
+
+  const x = (step) => MARGIN.left + (step - xLow) / (xHigh - xLow) * (width - MARGIN.left - right);
+  const y = (value) => MARGIN.top + (1 - (value - yLow) / (yHigh - yLow)) * (height - MARGIN.top - MARGIN.bottom);
+
+  for (const tick of yTicks.values) {
+    svg.append(svgElement("line", { x1: MARGIN.left, x2: width - right, y1: y(tick), y2: y(tick), class: "gridline" }));
+    svg.append(Object.assign(svgElement("text", { x: MARGIN.left - 8, y: y(tick) + 4, "text-anchor": "end" }), { textContent: formatTick(tick, yTicks.step) + unit }));
+  }
+
+  const xTicks = niceTicks(xLow, xHigh, TICKS);
+  for (const tick of xTicks.values) {
+    if (tick < xLow || tick > xHigh) continue;
+    const label = options.timeAxis ? formatClock(tick, xTicks.step) : formatCompact(tick);
+    svg.append(Object.assign(svgElement("text", { x: x(tick), y: height - 6, "text-anchor": "middle" }), { textContent: label }));
+  }
+  svg.append(svgElement("line", { x1: MARGIN.left, x2: width - right, y1: height - MARGIN.bottom, y2: height - MARGIN.bottom, class: "axis" }));
+
+  for (const vertical of options.verticals || []) {
+    if (vertical.step < xLow || vertical.step > xHigh) continue;
+    svg.append(svgElement("line", { x1: x(vertical.step), x2: x(vertical.step), y1: MARGIN.top, y2: height - MARGIN.bottom, class: "resume" }));
+    svg.append(Object.assign(svgElement("text", { x: x(vertical.step) + 4, y: MARGIN.top + 10 }), { textContent: vertical.label }));
+  }
+
+  const surface = css("--surface-1");
+  for (const line of drawn) {
+    const color = css(line.color);
+    if (!line.markersOnly) {
+      const path = line.points.map((point, index) => `${index ? "L" : "M"}${x(point.step).toFixed(1)},${y(point.value).toFixed(1)}`).join("");
+      svg.append(svgElement("path", {
+        d: path, fill: "none", stroke: color, "stroke-width": line.faint ? 1 : 2,
+        "stroke-opacity": line.faint ? 0.28 : 1, "stroke-linejoin": "round", "stroke-linecap": "round",
+      }));
+    }
+    if (line.markers || line.markersOnly) {
+      for (const point of line.points) {
+        svg.append(svgElement("circle", { cx: x(point.step), cy: y(point.value), r: MARKER_RADIUS, fill: color, stroke: surface, "stroke-width": 2 }));
+      }
+    }
+  }
+
+  if (labelled) {
+    const ends = drawn
+      .filter((line) => !line.faint)
+      .map((line) => ({ line, y: y(line.points[line.points.length - 1].value) }))
+      .sort((a, b) => a.y - b.y);
+    for (let index = 1; index < ends.length; index++) ends[index].y = Math.max(ends[index].y, ends[index - 1].y + 13);
+    for (const end of ends) {
+      const lastX = x(end.line.points[end.line.points.length - 1].step);
+      svg.append(svgElement("line", { x1: lastX + 6, x2: lastX + 16, y1: end.y, y2: end.y, stroke: css(end.line.color), "stroke-width": 2 }));
+      svg.append(Object.assign(svgElement("text", { x: lastX + 20, y: end.y + 4, class: "direct" }), { textContent: end.line.name }));
+    }
+  }
+
+  // Hover: a crosshair snaps to the nearest logged step; one tooltip lists every series there.
+  const crosshair = svgElement("line", { class: "crosshair", y1: MARGIN.top, y2: height - MARGIN.bottom, visibility: "hidden" });
+  svg.append(crosshair);
+  const tooltip = document.createElement("div");
+  tooltip.className = "tooltip";
+  container.append(tooltip);
+  const allSteps = [...new Set(steps)].sort((a, b) => a - b);
+
+  const hit = svgElement("rect", { x: MARGIN.left, y: 0, width: Math.max(0, width - MARGIN.left - right), height, fill: "transparent", tabindex: 0 });
+  svg.append(hit);
+
+  const show = (clientX) => {
+    const box = svg.getBoundingClientRect();
+    const pointer = (clientX - box.left) * (width / box.width);
+    let nearest = allSteps[0];
+    for (const step of allSteps) if (Math.abs(x(step) - pointer) < Math.abs(x(nearest) - pointer)) nearest = step;
+
+    crosshair.setAttribute("x1", x(nearest));
+    crosshair.setAttribute("x2", x(nearest));
+    crosshair.setAttribute("visibility", "visible");
+
+    tooltip.replaceChildren();
+    const heading = document.createElement("div");
+    heading.className = "step";
+    heading.textContent = options.timeAxis ? new Date(nearest * 1000).toLocaleTimeString() : `step ${formatSteps(nearest)}`;
+    tooltip.append(heading);
+
+    for (const line of drawn.filter((entry) => !entry.faint)) {
+      const closest = line.points.reduce((best, point) => Math.abs(point.step - nearest) < Math.abs(best.step - nearest) ? point : best);
+      const row = document.createElement("div");
+      row.className = "row";
+      const key = document.createElement("i");
+      key.className = "key";
+      key.style.background = css(line.color);
+      const value = document.createElement("strong");
+      value.textContent = format(closest.value);
+      const name = document.createElement("span");
+      name.textContent = closest.step === nearest ? line.name : `${line.name} (step ${formatSteps(closest.step)})`;
+      row.append(key, value, name);
+      tooltip.append(row);
+    }
+
+    tooltip.style.display = "block";
+    const left = x(nearest) / width * box.width;
+    tooltip.style.left = `${Math.min(left + 12, box.width - tooltip.offsetWidth - 4)}px`;
+    tooltip.style.top = "8px";
+  };
+
+  const hide = () => {
+    crosshair.setAttribute("visibility", "hidden");
+    tooltip.style.display = "none";
+  };
+
+  hit.addEventListener("pointermove", (event) => show(event.clientX));
+  hit.addEventListener("pointerleave", hide);
+  hit.addEventListener("focus", () => show(svg.getBoundingClientRect().right - 1));
+  hit.addEventListener("blur", hide);
+}
+
+// --------------------------------------------------------------- render ----
+
+function statusElement(status) {
+  const element = document.createElement("span");
+  element.className = `status ${status}`;
+  const icon = document.createElement("i");
+  icon.className = "icon";
+  const label = { live: "Live", finished: "Finished", stopped: "Stopped" }[status] || status;
+  element.append(icon, document.createTextNode(label));
+  return element;
+}
+
+function tile(label, value, note, extra) {
+  const element = document.createElement("div");
+  element.className = "tile";
+  const labelElement = Object.assign(document.createElement("div"), { className: "label", textContent: label });
+  const valueElement = document.createElement("div");
+  valueElement.className = "value";
+  if (value instanceof Node) valueElement.append(value); else valueElement.textContent = value;
+  element.append(labelElement, valueElement);
+  if (note) element.append(Object.assign(document.createElement("div"), { className: "note", textContent: note }));
+  if (extra) element.append(extra);
+  return element;
+}
+
+function renderTiles() {
+  const summary = state.detail?.summary;
+  const tiles = $("tiles");
+  tiles.replaceChildren();
+  if (!summary) return;
+
+  $("run-title").textContent = `${summary.name} · ${summary.source} · ${summary.kind === "vocoder" ? "neural vocoder" : "language model"}`;
+
+  const fraction = summary.step != null && summary.target_steps ? Math.min(1, summary.step / summary.target_steps) : null;
+  const bar = document.createElement("div");
+  bar.className = "bar";
+  const fill = document.createElement("div");
+  fill.style.width = `${(fraction ?? 0) * 100}%`;
+  bar.append(fill);
+
+  const statusNote = summary.status === "live" ? `updated ${formatAgo(summary.seconds_since_update)}` : `last update ${formatAgo(summary.seconds_since_update)}`;
+  tiles.append(tile("Status", statusElement(summary.status), statusNote));
+  tiles.append(tile("Step", formatSteps(summary.step), summary.target_steps ? `of ${formatSteps(summary.target_steps)} · ${Math.round((fraction ?? 0) * 100)} %` : "", bar));
+  tiles.append(tile("Time left", summary.eta_seconds != null ? formatDuration(summary.eta_seconds) : "–", summary.milliseconds_per_step ? `${(summary.milliseconds_per_step / 1000).toFixed(2)} s per step` : ""));
+  tiles.append(tile("Training loss", formatLoss(summary.training_loss), "mean of the last 1,000 steps"));
+  tiles.append(tile("Best held-out loss", formatLoss(summary.best_held_out?.value), summary.best_held_out ? `at step ${formatSteps(summary.best_held_out.step)}` : ""));
+
+  const gapNote = summary.validations_since_best > 0 ? `${summary.validations_since_best} validations since the best` : "held-out loss still improving";
+  let gapExtra = null;
+  if (summary.overfitting) {
+    gapExtra = Object.assign(document.createElement("div"), { className: "badge", textContent: "Overfitting" });
+    gapExtra.style.marginTop = "6px";
+  }
+  tiles.append(tile("Generalization gap", formatLoss(summary.gap), gapNote, gapExtra));
+
+  const started = summary.started;
+  if (started?.parameters) {
+    const data = started.train_tracks ? `${formatSteps(started.train_tracks)} training tracks${started.tracks_with_lyrics != null ? `, ${formatSteps(started.tracks_with_lyrics)} with lyrics` : ""}` : "";
+    tiles.append(tile("Model", `${(started.parameters / 1e6).toFixed(1)} M`, data));
+  }
+}
+
+function renderLearning() {
+  const detail = state.detail;
+  const history = detail?.history || {};
+  const weight = +$("smoothing").value;
+  const verticals = (history.resumes || []).map((step) => ({ step, label: "resumed" }));
+  const units = detail?.summary.kind === "vocoder" ? "spectral loss" : "nats per code";
+
+  $("loss-subtitle").textContent = `In ${units}. Training loss is smoothed; the faint line is unsmoothed.`;
+  const lossSeries = [
+    { name: "Training (raw)", color: "--series-1", points: history.training || [], faint: true },
+    { name: "Training", color: "--series-1", points: smooth(history.training || [], weight) },
+    { name: "Held-out", color: "--series-2", points: history.held_out || [], markers: true },
+  ];
+  legend($("loss-legend"), lossSeries);
+  lineChart($("loss-chart"), lossSeries, { format: formatLoss, verticals, label: "training and held-out loss" });
+
+  const table = $("held-out-table");
+  table.replaceChildren();
+  const head = table.createTHead().insertRow();
+  for (const label of ["Step", "Held-out", "Gap"]) head.append(Object.assign(document.createElement("th"), { textContent: label, className: label === "Step" ? "" : "number" }));
+  const gaps = new Map((history.gap || []).map((point) => [point.step, point.value]));
+  const body = table.createTBody();
+  for (const point of [...(history.held_out || [])].reverse()) {
+    const row = body.insertRow();
+    row.insertCell().textContent = formatSteps(point.step);
+    Object.assign(row.insertCell(), { className: "number", textContent: formatLoss(point.value) });
+    Object.assign(row.insertCell(), { className: "number", textContent: formatLoss(gaps.get(point.step)) });
+  }
+
+  lineChart($("gap-chart"), [{ name: "Gap", color: "--series-1", points: history.gap || [], markers: true }], { format: formatLoss, zero: true, verticals, label: "generalization gap", emptyText: "Appears after the first validation" });
+
+  const isVocoder = detail?.summary.kind === "vocoder";
+  $("parts-title").textContent = isVocoder ? "Held-out loss by resolution" : "Held-out loss by residual level";
+  $("parts-subtitle").textContent = isVocoder
+    ? "Each spectral comparison the vocoder is trained on."
+    : "Mean over each level's codebooks; finer levels hold detail closer to noise and stay harder to predict.";
+  const parts = (history.held_out_parts || []).map((series, index) => ({ name: series.name, color: SLOTS[index % SLOTS.length], points: series.points }));
+  legend($("parts-legend"), parts);
+  lineChart($("parts-chart"), parts, { format: formatLoss, verticals, label: "held-out loss by part" });
+
+  lineChart($("lr-chart"), [{ name: "Learning rate", color: "--series-1", points: history.learning_rate || [] }], { verticals, label: "learning rate" });
+  lineChart($("grad-chart"), [{ name: "Gradient norm", color: "--series-1", points: smooth(history.gradient_norm || [], weight) }], { verticals, label: "gradient norm" });
+  const seconds = (history.milliseconds_per_step || []).map((point) => ({ step: point.step, value: point.value / 1000 }));
+  lineChart($("speed-chart"), [{ name: "Seconds per step", color: "--series-1", points: seconds }], { format: (value) => `${value.toFixed(2)} s`, unit: " s", verticals, label: "time per step" });
+}
+
+function renderCompare() {
+  // A run's color is its slot in the order the runs were first chosen, so
+  // adding or removing another run never repaints it.
+  const chosen = [...state.compared].slice(0, MAX_COMPARED);
+  const series = chosen
+    .map((id, index) => ({ name: id, color: SLOTS[index], points: state.details.get(id)?.history.held_out || [], markers: true }))
+    .filter((line) => line.points.length > 0);
+  legend($("compare-legend"), series);
+  lineChart($("compare-chart"), series, { format: formatLoss, label: "held-out loss of several runs", emptyText: "Choose runs above to compare" });
+}
+
+function renderRuns() {
+  const select = $("run-select");
+  const previous = select.value;
+  select.replaceChildren(...state.runs.map((run) => Object.assign(document.createElement("option"), { value: run.id, textContent: `${run.id}${run.status === "live" ? " · live" : ""}` })));
+  select.value = state.focus || previous;
+
+  const chips = $("compare");
+  chips.replaceChildren();
+  const chosen = [...state.compared];
+  for (const run of state.runs.filter((entry) => entry.latest_held_out)) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.setAttribute("aria-pressed", state.compared.has(run.id));
+    const slot = chosen.indexOf(run.id);
+    if (slot >= 0) {
+      const key = document.createElement("i");
+      key.className = "key";
+      key.style.background = css(SLOTS[slot]);
+      chip.append(key);
+    }
+    chip.append(document.createTextNode(run.id));
+    chip.addEventListener("click", () => toggleCompared(run.id));
+    chips.append(chip);
+  }
+
+  const table = $("runs-table");
+  table.replaceChildren();
+  const head = table.createTHead().insertRow();
+  const columns = [["Status", ""], ["Run", ""], ["Machine", ""], ["Kind", ""], ["Step", "number"], ["Progress", "number"], ["Best held-out", "number"], ["Gap", "number"], ["s / step", "number"], ["Updated", ""]];
+  for (const [label, className] of columns) head.append(Object.assign(document.createElement("th"), { textContent: label, className }));
+
+  const body = table.createTBody();
+  for (const run of state.runs) {
+    const row = body.insertRow();
+    row.setAttribute("aria-selected", run.id === state.focus);
+    row.tabIndex = 0;
+    row.insertCell().append(statusElement(run.status));
+    const name = row.insertCell();
+    name.textContent = run.name;
+    if (run.overfitting) { name.append(" "); name.append(Object.assign(document.createElement("span"), { className: "badge", textContent: "Overfitting" })); }
+    row.insertCell().textContent = run.source;
+    row.insertCell().textContent = run.kind === "vocoder" ? "vocoder" : "language model";
+    Object.assign(row.insertCell(), { className: "number", textContent: formatSteps(run.step) });
+    Object.assign(row.insertCell(), { className: "number", textContent: run.target_steps && run.step != null ? `${Math.min(100, Math.round(run.step / run.target_steps * 100))} %` : "–" });
+    Object.assign(row.insertCell(), { className: "number", textContent: run.best_held_out ? `${formatLoss(run.best_held_out.value)} @ ${formatCompact(run.best_held_out.step)}` : "–" });
+    Object.assign(row.insertCell(), { className: "number", textContent: formatLoss(run.gap) });
+    Object.assign(row.insertCell(), { className: "number", textContent: run.milliseconds_per_step ? (run.milliseconds_per_step / 1000).toFixed(2) : "–" });
+    row.insertCell().textContent = formatAgo(run.seconds_since_update);
+    const open = () => focusRun(run.id);
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
+  }
+}
+
+function renderSystem() {
+  const system = state.system;
+  const tiles = $("system-tiles");
+  tiles.replaceChildren();
+  if (!system) return;
+
+  const now = system.now;
+  tiles.append(tile("GPU load", now.gpu_percent != null ? `${Math.round(now.gpu_percent)} %` : "–", now.gpu_percent == null ? "not reported on this machine" : ""));
+  tiles.append(tile("Memory", now.memory_used_gib != null ? `${now.memory_used_gib.toFixed(1)} GiB` : "–", now.memory_total_gib ? `of ${now.memory_total_gib.toFixed(0)} GiB` : ""));
+  tiles.append(tile("CPU load", now.load_one_minute != null ? now.load_one_minute.toFixed(1) : "–", `${now.cpus} CPUs, one-minute average`));
+  const hottest = [...now.temperatures].sort((a, b) => b.celsius - a.celsius)[0];
+  if (hottest) tiles.append(tile("Hottest zone", `${hottest.celsius.toFixed(0)} °C`, hottest.zone));
+
+  const gpu = system.history.filter((sample) => sample.gpu_percent != null).map((sample) => ({ step: sample.time, value: sample.gpu_percent }));
+  lineChart($("gpu-chart"), [{ name: "GPU load", color: "--series-1", points: gpu }], { format: (value) => `${value.toFixed(0)} %`, unit: " %", domain: [0, 100], timeAxis: true, label: "GPU load over the last hour", emptyText: "Collecting…" });
+  const memory = system.history.filter((sample) => sample.memory_used_gib != null).map((sample) => ({ step: sample.time, value: sample.memory_used_gib }));
+  lineChart($("memory-chart"), [{ name: "Memory in use", color: "--series-1", points: memory }], { format: (value) => `${value.toFixed(1)} GiB`, unit: " GiB", domain: [0, now.memory_total_gib || Math.max(1, ...memory.map((point) => point.value))], timeAxis: true, label: "memory in use over the last hour", emptyText: "Collecting…" });
+}
+
+function renderAll() {
+  renderRuns();
+  renderTiles();
+  renderLearning();
+  renderCompare();
+  renderSystem();
+}
+
+// ----------------------------------------------------------------- data ----
+
+async function getJson(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+  return response.json();
+}
+
+async function loadDetail(id) {
+  const detail = await getJson(`/api/runs/${id.split("/").map(encodeURIComponent).join("/")}`);
+  state.details.set(id, detail);
+  return detail;
+}
+
+async function refresh() {
+  for (const chart of document.querySelectorAll(".chart")) chart.classList.add("loading");
+  try {
+    state.runs = await getJson("/api/runs");
+    if (!state.focus || !state.runs.some((run) => run.id === state.focus)) state.focus = state.runs[0]?.id ?? null;
+    if (state.compared.size === 0 && state.focus) state.compared.add(state.focus);
+
+    const wanted = new Set([state.focus, ...state.compared].filter(Boolean));
+    await Promise.all([...wanted].map(loadDetail));
+    state.detail = state.focus ? state.details.get(state.focus) : null;
+    state.system = await getJson("/api/system");
+
+    renderAll();
+    $("refreshed").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  } catch (error) {
+    $("refreshed").textContent = `Could not refresh: ${error.message}`;
+  } finally {
+    for (const chart of document.querySelectorAll(".chart")) chart.classList.remove("loading");
+  }
+}
+
+async function focusRun(id) {
+  state.focus = id;
+  state.detail = state.details.get(id) || await loadDetail(id);
+  renderAll();
+}
+
+async function toggleCompared(id) {
+  if (state.compared.has(id)) state.compared.delete(id);
+  else if (state.compared.size < MAX_COMPARED) state.compared.add(id);
+  if (!state.details.has(id)) await loadDetail(id);
+  renderRuns();
+  renderCompare();
+}
+
+// ------------------------------------------------------------- controls ----
+
+$("run-select").addEventListener("change", (event) => focusRun(event.target.value));
+
+$("smoothing").addEventListener("input", () => {
+  $("smoothing-value").textContent = (+$("smoothing").value).toFixed(2);
+  renderLearning();
+});
+$("smoothing-value").textContent = (+$("smoothing").value).toFixed(2);
+
+$("theme").addEventListener("click", () => {
+  const dark = getComputedStyle(document.documentElement).colorScheme === "dark";
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("staleynet-dashboard-theme", document.documentElement.dataset.theme); } catch (error) { /* storage unavailable */ }
+  renderAll();
+});
+try {
+  const saved = localStorage.getItem("staleynet-dashboard-theme");
+  if (saved) document.documentElement.dataset.theme = saved;
+} catch (error) { /* storage unavailable */ }
+
+let resizeTimer = null;
+new ResizeObserver(() => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(renderAll, 120);
+}).observe(document.querySelector("main"));
+
+refresh();
+setInterval(refresh, REFRESH_SECONDS * 1000);
+</script>
+</body>
+</html>
