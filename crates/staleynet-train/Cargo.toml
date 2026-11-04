@@ -1,0 +1,14 @@
+[package]
+name = "staleynet-train"
+description = "Training loop: sampling, optimisation, validation, metrics and checkpoints."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+staleynet-cuda = { path = "../staleynet-cuda" }
+staleynet-data = { path = "../staleynet-data" }
+staleynet-model = { path = "../staleynet-model" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
