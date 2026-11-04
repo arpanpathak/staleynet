@@ -1,0 +1,15 @@
+% Figure "rvq", shared by the paper and (as SVG) the book.
+\begin{tikzpicture}[figure, scale=0.85]
+  \fill[blockgray, rounded corners=4pt] (-0.7,-0.7) rectangle (4.7,4.7);
+  \foreach \x in {0,...,4} \draw[white, line width=0.8pt] (\x,-0.7) -- (\x,4.7);
+  \foreach \y in {0,...,4} \draw[white, line width=0.8pt] (-0.7,\y) -- (4.7,\y);
+  \foreach \p in {(0,0),(0,4),(4,4)} \fill[accent!45] \p circle (4pt);
+  \fill[accent] (4,0) circle (4.5pt);
+  \node[below, font=\sffamily\scriptsize] at (4,-0.1) {$E_0[1] = (4,0)$};
+  \draw[->, accent, line width=1.4pt] (0,0) -- (3.93,0);
+  \draw[->, teal!70!black, line width=1.4pt] (4,0) -- (3.25,0.75);
+  \fill[orange!85!black] (3,1) circle (4pt);
+  \node[above, font=\sffamily\scriptsize] at (3,1.08) {$x = (3,1)$};
+  \fill[teal!70!black] (3.2,0.8) circle (3pt);
+  \node[left, font=\sffamily\scriptsize, teal!60!black] at (3.1,0.55) {$\hat x = (3.2, 0.8)$};
+\end{tikzpicture}

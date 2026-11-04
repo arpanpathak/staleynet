@@ -1,0 +1,11 @@
+% Figure "blocking", shared by the paper and (as SVG) the book.
+\begin{tikzpicture}[figure, x=4.6mm, y=4.6mm]
+  \foreach \r in {0,...,7} \foreach \c in {0,...,7} {
+    \pgfmathtruncatemacro{\own}{(mod(\r,4)==1) && (mod(\c,4)==2)}
+    \ifnum\own=1 \fill[accent!70, rounded corners=1pt] (\c,-\r) rectangle +(0.88,-0.88);
+    \else \fill[blockgray, rounded corners=1pt] (\c,-\r) rectangle +(0.88,-0.88); \fi
+  }
+  \node[caption text, anchor=south] at (4,0.25) {output tile of one block, $8 \times 8$};
+  \node[caption text, anchor=west, align=left] at (8.6,-2.2) {thread $(t_x, t_y) = (2, 1)$ owns\\rows $1, 5$ and columns $2, 6$};
+  \node[caption text, anchor=west, align=left] at (8.6,-5.4) {neighbouring threads read\\neighbouring words of \textit{tileB}};
+\end{tikzpicture}

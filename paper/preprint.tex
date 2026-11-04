@@ -1,0 +1,22 @@
+% Single-column preprint (arXiv and technical-report format).
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.6cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\input{macros}
+\usepackage[colorlinks,linkcolor=accent,citecolor=accent,urlcolor=accent]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+\newenvironment{widetable}{\begin{table}[htbp]\centering}{\end{table}}
+\newenvironment{widefigure}{\begin{figure}[t]\centering}{\end{figure}}
+\setlength{\parskip}{0.35em}
+
+\title{\includegraphics[width=4.2cm]{figures/emblem}\\[0.6em]\textbf{StaleyNET: Text-Conditioned Music Generation\\Trained from Scratch on Edge GPUs in Rust}}
+\author{Arpan Pathak}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+\input{body}
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}

@@ -1,0 +1,16 @@
+% Figure "errors", shared by the paper and (as SVG) the book.
+\begin{tikzpicture}
+\begin{axis}[
+  xbar, bar width=9pt, width=72mm, height=46mm, scale only axis,
+  xmin=0, xmax=1.1, xlabel={\sffamily\small mean error, log units per mel band},
+  symbolic y coords={tokens to Griffin-Lim, tokenizer 4 levels, tokenizer 1 level, Griffin-Lim on exact mel},
+  ytick=data, y dir=reverse, axis line style={draw=none}, tick style={draw=none},
+  yticklabel style={font=\sffamily\small}, xticklabel style={font=\sffamily\scriptsize},
+  xmajorgrids, grid style={white!85!black}, enlarge y limits=0.2,
+  nodes near coords, nodes near coords style={font=\sffamily\scriptsize},
+  every node near coord/.append style={xshift=1pt}]
+\addplot[fill=accent!55, draw=none] coordinates {
+  (0.194,Griffin-Lim on exact mel) (0.953,tokenizer 1 level)
+  (0.704,tokenizer 4 levels) (0.710,tokens to Griffin-Lim)};
+\end{axis}
+\end{tikzpicture}

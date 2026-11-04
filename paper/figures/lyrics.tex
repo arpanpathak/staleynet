@@ -1,0 +1,21 @@
+% Figure "lyrics", shared by the paper and (as SVG) the book.
+\begin{tikzpicture}[figure, x=1mm, y=1mm]
+  \node[block, fill=blockgray, minimum width=8mm] (b) at (0,0) {B};
+  \node[block, fill=blockamber, minimum width=20mm, right=1.5mm of b] (c) {caption};
+  \node[block, fill=blockrose, minimum width=24mm, right=1.5mm of c] (l) {lyrics};
+  \node[block, fill=blockgray, minimum width=8mm, right=1.5mm of l] (s) {S};
+  \node[block, fill=blockblue, minimum width=16mm, right=1.5mm of s] (a) {audio \dots};
+  \node[block, fill=blockgray, minimum width=8mm, below=10mm of b] (rb) {0};
+  \node[block, fill=blockamber, minimum width=20mm, right=1.5mm of rb] (rc) {1--126};
+  \node[block, fill=blockgray, minimum width=8mm, right=1.5mm of rc] (rs) {127};
+  \node[block, fill=blockblue, minimum width=16mm, right=1.5mm of rs] (ra) {128 \dots};
+  \node[block, fill=blockrose, minimum width=24mm, right=5mm of ra] (rl) {768--1023};
+  \draw[flow] (b) -- (rb);
+  \draw[flow] (c) -- (rc);
+  \draw[flow] (s) -- (rs);
+  \draw[flow] (a) -- (ra);
+  \draw[flow] (l.south) -- (rl.north);
+  \node[caption text, anchor=east] at ($(b.west)+(-1,0)$) {sequence};
+  \node[caption text, anchor=east] at ($(rb.west)+(-1,0)$) {table row};
+  \node[caption text, anchor=north] at (rl.south) {new rows};
+\end{tikzpicture}

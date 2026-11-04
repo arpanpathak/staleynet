@@ -1,0 +1,17 @@
+% Figure "delay", shared by the paper and (as SVG) the book.
+\begin{tikzpicture}[figure, x=8.5mm, y=7.5mm]
+  \definecolor{levelzero}{HTML}{EFE6D2}
+  \definecolor{levelone}{HTML}{E4B27C}
+  \definecolor{leveltwo}{HTML}{C8692F}
+  \foreach \l/\name/\c in {0/a/levelzero,1/b/levelone,2/c/leveltwo} {
+    \node[caption text, anchor=east] at (-0.55,-\l) {level \l};
+    \foreach \f in {0,...,3} {
+      \pgfmathtruncatemacro{\t}{\f+\l}
+      \node[block, fill=\c, minimum width=7mm, minimum height=5.8mm, inner sep=0pt] at (\t,-\l) {$\name_{\f}$};
+    }
+  }
+  \foreach \t in {0,...,5} \node[caption text] at (\t,0.75) {\t};
+  \node[caption text, anchor=east] at (-0.55,0.75) {position};
+  \draw[accent, line width=1pt, rounded corners=4pt] (1.55,0.42) rectangle (2.45,-2.42);
+  \node[caption text, text=accent, anchor=north] at (2,-2.5) {predicted together};
+\end{tikzpicture}

@@ -1,0 +1,26 @@
+% Figure "overview", shared by the paper and (as SVG) the book.
+\begin{tikzpicture}[figure, node distance=6mm and 7mm]
+  \node[block, fill=blockgray, minimum width=22mm] (audio) {recording\\[-1pt]\scriptsize 24\,kHz};
+  \node[block, fill=blockblue, minimum width=27mm, right=of audio] (mel) {log-mel spectrogram\\[-1pt]\scriptsize STFT as a matrix product};
+  \node[block, fill=blockblue, minimum width=27mm, right=of mel] (rvq) {residual $k$-means\\[-1pt]\scriptsize 4 levels $\times$ 1\,024};
+  \node[block, fill=blockblue, minimum width=22mm, right=of rvq] (delay) {delay pattern\\[-1pt]\scriptsize staircase of tokens};
+  \node[block, fill=blockviolet, minimum width=27mm, minimum height=13mm, right=of delay] (model) {\textbf{Transformer}\\[-1pt]\scriptsize 6 blocks};
+  \node[block, fill=blockamber, minimum width=22mm, anchor=south] (caption) at ($(model.north)+(-13mm,8mm)$) {caption bytes};
+  \node[block, fill=blockrose, minimum width=22mm, anchor=south] (lyrics) at ($(model.north)+(13mm,8mm)$) {lyrics bytes};
+  \node[block, fill=blockgreen, minimum width=27mm, below=11mm of model] (sample) {sampled tokens\\[-1pt]\scriptsize top-$k$ and guidance};
+  \node[block, fill=blockgreen, minimum width=27mm, left=of sample] (decode) {sum of prototypes\\[-1pt]\scriptsize log-mel spectrogram};
+  \node[block, fill=blockgreen, minimum width=27mm, left=of decode] (gl) {Griffin-Lim\\[-1pt]\scriptsize phase estimation};
+  \node[block, fill=blockgray, minimum width=22mm, left=of gl] (out) {music\\[-1pt]\scriptsize 24\,kHz};
+  \draw[flow] (audio) -- (mel);
+  \draw[flow] (mel) -- (rvq);
+  \draw[flow] (rvq) -- (delay);
+  \draw[flow] (delay) -- (model);
+  \draw[flow] (caption.south) -- ($(model.north)+(-4mm,0)$);
+  \draw[flow] (lyrics.south) -- ($(model.north)+(4mm,0)$);
+  \draw[flow] (model) -- node[right, caption text] {one step at a time} (sample);
+  \draw[flow] (sample) -- (decode);
+  \draw[flow] (decode) -- (gl);
+  \draw[flow] (gl) -- (out);
+  \node[caption text, above=1.5mm of mel.north east, anchor=south] {training};
+  \node[caption text, below=1.5mm of decode.south west, anchor=north] {generation};
+\end{tikzpicture}
