@@ -105,10 +105,10 @@
       <label for="gen-lyrics">Lyrics <span class="counter" id="gen-lyrics-note"></span></label>
       <textarea id="gen-lyrics" maxlength="8000" style="min-height:70px" placeholder="Optional. One sung line per line. Only runs marked “reads lyrics” use them."></textarea>
 
-      <label for="run">Model run</label>
+      <label for="run">Step 1 · Song model <span class="counter">writes the melody, voice and rhythm</span></label>
       <select id="run"></select>
 
-      <label for="vocoder">Vocoder</label>
+      <label for="vocoder">Step 2 · Vocoder <span class="counter">turns what step 1 wrote into sound</span></label>
       <select id="vocoder"><option value="">Griffin-Lim (no training)</option></select>
 
       <div class="row">
