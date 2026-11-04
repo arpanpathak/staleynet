@@ -470,10 +470,12 @@ $(-0.8, 0.8)$.}
 E_0 &= \{(0,0),\ (4,0),\ (0,4),\ (4,4)\},\\
 E_1 &= \{(0.8,0.8),\ (-0.8,0.8),\ (-0.8,-0.8),\ (0.8,-0.8)\},
 \end{align*}
-and the point $x = (3,1)$ (\cref{fig:rvq}). The squared distances from $x$ to
-the prototypes of $E_0$ are $10, 2, 18, 10$, so $c_0 = 1$ and $r_1 = (-1, 1)$.
-The closest entry of $E_1$ to $(-1, 1)$ is $(-0.8, 0.8)$, so $c_1 = 1$ and
-$r_2 = (-0.2, 0.2)$. The error falls from $\sqrt 2 \approx 1.41$ after one level to
+and the point $x = (3,1)$ (\cref{fig:rvq}). Its squared distances to the
+prototypes of $E_0$ are $10, 2, 18, 10$, so level 0 picks $c_0 = 1$, the
+prototype $(4, 0)$, and leaves the residual $r_1 = (-1, 1)$. Of the corrections
+in $E_1$, $(-0.8, 0.8)$ lies closest to that residual, so $c_1 = 1$ and only
+$r_2 = (-0.2, 0.2)$ remains. Two small integers now describe the point, and
+its error falls from $\sqrt 2 \approx 1.41$ after one level to
 $\sqrt{0.08} \approx 0.28$ after two.
 
 \subsection{Training the codebooks}
@@ -622,18 +624,21 @@ small cost.
 
 \subsection{One sequence for text and audio}
 
-The model reads a sequence of \emph{positions}, and at each position it
-receives one or more symbols from a fixed vocabulary. The vocabulary contains
-the 256 possible byte values of UTF-8 text \cite{xue2022byt5}, three markers
-(\code{BEGIN}, \code{SEPARATOR} and \code{PADDING}) and $C \cdot K$ audio
-symbols, one for each prototype of each codebook. The caption is given as raw
-bytes, so no separate text encoder is needed. The text occupies a fixed 128
-positions, namely \code{BEGIN}, up to 126 caption bytes (padded when shorter)
-and \code{SEPARATOR}, so that the audio always begins at the same position. An
-audio position carries all $C$ codes of one step. Every symbol and every
-position has an \emph{embedding}, a learned vector of $d$ numbers, and the
-input vector of an audio position is the sum of the embeddings of its $C$ codes
-and of the position.
+A Transformer reads a sequence of \emph{positions}, and each position holds
+one or more symbols from a shared vocabulary. StaleyNET's vocabulary combines
+three kinds of symbol: the 256 possible values of a byte, so that any text can
+be written directly as its UTF-8 bytes with no separate text encoder
+\cite{xue2022byt5}; three markers, \code{BEGIN}, \code{SEPARATOR} and
+\code{PADDING}, which delimit the parts of the sequence; and $C \cdot K$ audio
+symbols, one for each prototype of each codebook. Text always fills 128
+positions: \code{BEGIN}, up to 126 caption bytes (padded when shorter) and
+\code{SEPARATOR}. Keeping that length fixed makes the audio start at the same
+position in every sequence, which simplifies both training and generation.
+
+Each audio position carries all $C$ codes of one step. A learned vector of $d$
+numbers, its \emph{embedding}, represents every symbol and every position, and
+an audio position enters the model as the sum of the embeddings of its $C$
+codes and of the position itself.
 
 \subsection{The delay pattern}
 
@@ -878,9 +883,12 @@ content.
 \section{Generation}
 \label{sec:generation}
 
-Generation repeats a single step: the model predicts a distribution for each
-codebook at the next position, one code is drawn from each, and the drawn codes
-are appended to the sequence.
+Generation follows the factorization of \cref{sec:probability} forward. Given
+the text, the model predicts a distribution over the codes at the next
+position, one code is drawn from each of these distributions, the drawn codes
+are appended to the sequence, and the step repeats until the piece reaches its
+requested length. Two refinements make this loop practical: a cache that
+avoids recomputing the past, and sampling rules that shape each draw.
 
 \subsection{The key/value cache}
 
@@ -1271,14 +1279,15 @@ matrix of scores \cite{dao2022flashattention}.
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have described StaleyNET, a complete text-to-music system written in Rust
-and trained from scratch on embedded GPUs. Building every stage ourselves
-allowed us to measure each one separately, and these measurements pointed to
-the tokenizer, rather than the language model, as the main limitation on
-sound quality. A revised tokenizer that quantizes groups of frequency bands
-roughly halved the reconstruction error, and a larger model is now being
-trained on it. We hope that the worked examples, the stage-by-stage analysis
-and the paired lyrics test will be of use to others who build similar systems
-on modest hardware.
+StaleyNET models music as a sequence of tokens whose probability given a text
+is factorized by the chain rule, learns every factor with one autoregressive
+Transformer, and generates by sampling the factors in turn. Building each
+stage ourselves, in Rust and on embedded GPUs, made it possible to measure each
+one in isolation. Those measurements located the main limitation on sound
+quality in the tokenizer rather than in the language model, and a tokenizer
+that quantizes groups of frequency bands with more codes per step halved the
+reconstruction error; a larger model is now training on it. We hope the worked
+examples, the stage-by-stage analysis and the paired lyrics test will help
+others who build similar systems on modest hardware.
 
 \FloatBarrier
