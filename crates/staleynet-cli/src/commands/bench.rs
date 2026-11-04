@@ -72,7 +72,10 @@ struct BenchResults {
     /// See `train_step_naive_ms`.
     train_step_tiled_ms: f64,
 
-    /// Positions per second with the tiled kernel.
+    /// See `train_step_naive_ms`.
+    train_step_blocked_ms: f64,
+
+    /// Positions per second with the register-blocked kernel, the default.
     train_positions_per_second: f64,
 
     /// Generation latency per step with the KV cache, ms.
@@ -196,7 +199,8 @@ pub fn run(arguments: Arguments) -> Result<()> {
         log_mel_cpu_ms,
         train_step_naive_ms: step_ms[0],
         train_step_tiled_ms: step_ms[1],
-        train_positions_per_second: shape.rows() as f64 / (step_ms[1] / 1e3),
+        train_step_blocked_ms: step_ms[2],
+        train_positions_per_second: shape.rows() as f64 / (step_ms[2] / 1e3),
         decode_cached_ms_per_step: decode_ms[0],
         decode_recompute_ms_per_step: decode_ms[1],
     };

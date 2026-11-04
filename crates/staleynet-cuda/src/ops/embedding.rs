@@ -76,7 +76,7 @@ impl Gpu {
 
         // SAFETY: one thread per output element; out-of-range threads return early.
         unsafe {
-            self.kernels.embedding_forward(
+            self.kernels.embedding.embedding_forward(
                 &self.stream,
                 launch::elementwise(output.len()),
                 &table.buffer,
@@ -97,7 +97,7 @@ impl Gpu {
 
         // SAFETY: one thread per table element; out-of-range threads return early.
         unsafe {
-            self.kernels.embedding_backward(
+            self.kernels.embedding.embedding_backward(
                 &self.stream,
                 launch::elementwise(table_grad.len()),
                 &output_grad.buffer,
