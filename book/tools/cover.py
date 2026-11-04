@@ -2,10 +2,10 @@
 
     python3 book/tools/cover.py book/src/figures/cover.svg
 
-The cover sets the animated emblem (see emblem.py) beside the title. Behind
-the emblem, a faint spectrogram of 4 bands pulses in the colours of the
-emblem's 4 token levels, so the cover reads as one idea: music, turned into
-tokens, generated one step at a time.
+The cover sets the emblem (see emblem.py), a raised fist gripping a rusted
+chain, beside the title. Behind the emblem, a faint spectrogram of 4 bands
+pulses in the colours of the tokenizer's 4 residual levels, from bone (coarse)
+to rust (fine): music, turned into tokens, generated one step at a time.
 """
 import math
 import sys
@@ -80,7 +80,7 @@ def title():
         f'<text x="84" y="374" font-size="17" letter-spacing="1.6" fill="{NOTE_COLOUR}" {SANS}>RESIDUAL TOKENS · DELAY PATTERN · TRANSFORMER</text>'
         f'<text x="84" y="400" font-size="17" letter-spacing="1.6" fill="{NOTE_COLOUR}" {SANS}>RUST AND CUDA-OXIDE, TRAINED FROM SCRATCH</text>'
         f'<text x="84" y="560" font-size="17" font-style="italic" fill="{NOTE_COLOUR}">For Layne Staley (1967 to 2002) and Alice in Chains.</text>'
-        f'<text x="84" y="590" font-size="11" fill="{CREDIT_COLOUR}" {SANS}>Rust logo by the Rust Foundation, CC BY 4.0, modified. No endorsement implied.</text>'
+        f'<text x="84" y="590" font-size="11" fill="{CREDIT_COLOUR}" {SANS}>Hand: photograph by Tomas Gunnarsson, CC BY-SA 4.0. Rust logo by the Rust Foundation, CC BY 4.0, modified. No endorsement implied.</text>'
     )
 
 

@@ -19,3 +19,4 @@
 
 # Machine-local build settings (see docs/legacy-cuda-oxide.md).
 /.cargo/
+__pycache__/

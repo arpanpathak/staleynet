@@ -31,12 +31,22 @@ Third-party material and provenance
     JamendoLyrics.csv. https://github.com/f90/jamendolyrics
 
   Rust logo artwork
-    CC BY 4.0, Rust Foundation, modified in the book figures. See README.md.
+    CC BY 4.0, Rust Foundation, modified in the emblem and the book figures.
+    See README.md.
+
+  Emblem photograph of the hand
+    "Clenched fist.jpg" by Tomas Gunnarsson (Genusfotografen), CC BY-SA 4.0.
+    https://commons.wikimedia.org/wiki/File:Clenched_fist.jpg
+    The emblem and the cover adapt it and are shared under CC BY-SA 4.0.
+
+  Emblem rust texture
+    "Very rusty chain.jpg" by W.carter, CC0 1.0.
+    https://commons.wikimedia.org/wiki/File:Very_rusty_chain.jpg
 
   cuda-oxide
     External GPU compiler and runtime dependency, not vendored here.
     https://github.com/NVlabs/cuda-oxide
 
-The private Hugging Face repositories hold the checkpoints and derived data
+The public Hugging Face repositories hold the checkpoints and derived data
 caches. The raw third-party audio is not redistributed here; artifacts/README.md
 records how to obtain it.

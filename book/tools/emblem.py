@@ -1,349 +1,285 @@
 """Generates the StaleyNET emblem.
 
-    python3 book/tools/emblem.py book/src/figures/emblem.svg
+    python3 book/tools/emblem.py book/src/figures/emblem.png
 
 A raised fist grips a rusted chain, a tribute to Layne Staley of Alice in
-Chains. The chain runs through the closed hand: it leaves the thumb side
-upwards and hangs from the little-finger side, where it ends in the Rust logo,
-heavily rusted, for the language the whole system is written in. Where the
-links bite into the palm the hand bleeds; the blood pools along the crease,
-runs down the wrist and drips. When animated, the hanging chain swings gently
-and a drop falls from the wrist.
+Chains. The chain runs through the closed hand: it leaves the top of the fist
+on the little-finger side, and below it comes out of the gap under the index
+finger, where the links bite into the palm and the hand bleeds. From the last
+link hangs the Rust logo, rusted through, for the language the whole system is
+written in.
 
-The hand is drawn the way an illustrator would build it: the back of the hand
-in shadow behind four curled fingers (each with a knuckle dome, a wrinkled
-middle joint and a tucked fingertip), the thumb across the index and middle
-fingers with its nail facing out, and the forearm with two tendons, emerging
-from the rolled cuff of a flannel shirt. Every surface is shaded with gradients only, so the emblem renders identically in
-browsers, PDF readers and on GitHub.
+The emblem is built from real material rather than drawn:
 
-The Rust logo is the official single-path artwork of the Rust Foundation,
-licensed CC BY 4.0 (https://github.com/rust-lang/rust-artwork), modified here
-(rust colours and texture).
+* the hand is a photograph, "Clenched fist.jpg" by Tomas Gunnarsson
+  (Genusfotografen), CC BY-SA 4.0, cut out by `fist_cutout.py`;
+* the chain is rendered as three-dimensional geometry (see `shading.py`), each
+  link a tube lit from its true surface orientation, coloured with the
+  corrosion of "Very rusty chain.jpg" by W.carter, CC0;
+* the blood is a painted film raised into a liquid surface and given a sharp
+  highlight, which is what makes a bead of liquid read as wet;
+* the gear is the official Rust logo of the Rust Foundation, CC BY 4.0
+  (https://github.com/rust-lang/rust-artwork), embossed and rusted.
 
-`emblem()` returns the drawing as SVG elements in a 512 x 512 box, so the
-cover generator can place it at any size.
+The emblem is therefore shared under CC BY-SA 4.0. The script writes a square
+PNG with a transparent background and, next to it, an SVG of the same name
+that embeds a smaller copy, for the pages that expect SVG. `emblem()` returns
+that picture as SVG elements in a 512 x 512 box, for the cover generator.
 """
-import math
-import re
+import base64
+import io
 import sys
 from pathlib import Path
 
+import cairosvg
+import cv2
+import numpy as np
+from PIL import Image
+from scipy import ndimage
+
+from shading import VIEW, Layer, chain_along, detail_texture, link_centreline, lit, occlusion, relief_normals, roughen, soft_shadow
+
+ASSETS = Path(__file__).parent / "assets"
+FIST = ASSETS / "fist.webp"
+RUST_PHOTO = ASSETS / "rust-chain.jpg"
+RUST_LOGO = ASSETS / "rust-logo-single-path.svg"
+RENDERED = Path(__file__).parents[1] / "src" / "figures" / "emblem.png"
+
+# The working canvas, in pixels of the cut-out photograph (1280 x 1920).
+WIDTH, HEIGHT = 1800, 1960
+
+# Edge length of the square PNG, and of the copy embedded in the SVG.
+OUTPUT_SIZE = 1024
+EMBEDDED_SIZE = 512
+
+# Box of the SVG drawing, kept for the cover generator.
 BOX = 512
-CENTRE = BOX / 2
 
 # Colours of the four residual levels, coarse to fine; the cover's background
 # spectrogram uses them.
 LEVEL_COLOURS = ["#efe6d2", "#e4b27c", "#c8692f", "#8f3618"]
 
-# The Rust logo: its source file, the width of its own viewBox (mm), and the
-# offset that centres its path in that box.
-RUST_LOGO = Path(__file__).parent / "assets" / "rust-logo-single-path.svg"
-LOGO_SOURCE_SIZE = 27.781801
-LOGO_SOURCE_OFFSET = (41.583546, -3.0484439)
+# One chain link: wire radius, radius of its rounded ends, half the length of
+# its straight sides, and the distance between consecutive links.
+WIRE, END_RADIUS, HALF_STRAIGHT = 27, 60, 52
+LINK = {"wire": WIRE, "end_radius": END_RADIUS, "half_straight": HALF_STRAIGHT,
+        "pitch": 2 * (HALF_STRAIGHT + END_RADIUS) - 2 * WIRE + 4}
 
-# The chain: the centres of consecutive links leaving the thumb side, and of
-# the links hanging from the little-finger side, then the gear at the end.
-UPPER_CHAIN = [(150, 214), (112, 170), (92, 118), (98, 64), (124, 22)]
-HANGING_CHAIN = [(364, 236), (404, 276), (420, 326), (420, 376)]
-GEAR_CENTRE = (420, 432)
-GEAR_DIAMETER = 104
+# The chain above the fist enters behind the knuckles; the chain below leaves
+# through the gap under the index finger, whose lower edge is at HOLE_EDGE_Y.
+UPPER_CHAIN = [(660, 760), (640, 420), (575, 40)]
+LOWER_CHAIN = [(786, 960), (794, 1150), (806, 1330)]
+HOLE_EDGE_Y = 1088
 
-# Face-on links are ovals this wide with this stroke; edge-on links are bars
-# this thick. Each link reaches this far past the centres it joins.
-RING_WIDTH, RING_STROKE = 34, 15
-EDGE_THICKNESS = 15
-LINK_OVERLAP = 26
+# The gear, and the small hole at its top through which a shackle passes, as a
+# fraction of the logo's box. The shackle is a small edge-on ring.
+GEAR_SIZE = 330
+GEAR_HOLE = (0.498, 0.117)
+SHACKLE_WIRE, SHACKLE_RADIUS = 8, 17
 
-# The hanging chain swings about the point where it leaves the fist.
-SWING_DEGREES = 4
-SWING_SECONDS = 4.6
+# Materials: rust, the dark iron scale where it has flaked, and blood.
+RUST = np.array([0.60, 0.28, 0.12])
+SCALE = np.array([0.24, 0.13, 0.08])
+BLOOD = np.array([0.30, 0.012, 0.018])
 
-# The flannel cuff the forearm emerges from: where its top edge sits, and the
-# size of one plaid repeat.
-CUFF_TOP = 446
-PLAID = 26
+# Where the corrosion photograph is sampled for the chain and for the gear:
+# magnification, then the top-left corner of the crop.
+CHAIN_TEXTURE = (1.2, (60, 30))
+GEAR_TEXTURE = (1.3, (420, 60))
 
-# A drop falls from the end of the longest stream every cycle.
-DROP_START = (311, 470)
-DROP_FALL = 40
-DROP_SECONDS = 2.8
+# The forearm fades out over this many pixels above FOREARM_END.
+FOREARM_END, FOREARM_FADE = 1750, 300
 
-# Outline colour, shared by the hand and the metal.
-INK = "#1c0d08"
-
-# Skin from the lit surface to the deepest crease, and blood from its bright
-# highlight to the dried edge.
-SKIN_LIGHT, SKIN_MID, SKIN_DARK, SKIN_SHADOW = "#f1c7a3", "#d9996f", "#a8613f", "#5e2d1c"
-BLOOD_LIGHT, BLOOD, BLOOD_DARK = "#d4202a", "#8e0b12", "#4a0408"
-
-
-def defs(p):
-    """Gradients for skin, nail, metal, the gear and blood, and the corrosion
-    texture of the metal, with ids made unique by `p`."""
-    finger = (f'<linearGradient id="{p}-finger" x1="0" y1="0" x2="1" y2="0">'
-              f'<stop offset="0" stop-color="{SKIN_SHADOW}"/><stop offset="0.18" stop-color="{SKIN_DARK}"/>'
-              f'<stop offset="0.45" stop-color="{SKIN_LIGHT}"/><stop offset="0.7" stop-color="{SKIN_MID}"/>'
-              f'<stop offset="1" stop-color="{SKIN_SHADOW}"/></linearGradient>')
-    knuckle = (f'<radialGradient id="{p}-knuckle" cx="0.5" cy="0.25" r="0.6">'
-               f'<stop offset="0" stop-color="#fbe0c8" stop-opacity="0.9"/><stop offset="1" stop-color="{SKIN_LIGHT}" stop-opacity="0"/></radialGradient>')
-    thumb = (f'<linearGradient id="{p}-thumb" x1="0" y1="0" x2="0" y2="1">'
-             f'<stop offset="0" stop-color="{SKIN_LIGHT}"/><stop offset="0.55" stop-color="{SKIN_MID}"/>'
-             f'<stop offset="1" stop-color="{SKIN_SHADOW}"/></linearGradient>')
-    wrist = (f'<linearGradient id="{p}-wrist" x1="0" y1="0" x2="1" y2="0">'
-             f'<stop offset="0" stop-color="{SKIN_SHADOW}"/><stop offset="0.3" stop-color="{SKIN_MID}"/>'
-             f'<stop offset="0.55" stop-color="{SKIN_LIGHT}"/><stop offset="0.85" stop-color="{SKIN_DARK}"/>'
-             f'<stop offset="1" stop-color="{SKIN_SHADOW}"/></linearGradient>')
-    nail = (f'<linearGradient id="{p}-nail" x1="0" y1="0" x2="1" y2="1">'
-            f'<stop offset="0" stop-color="#f7e2d6"/><stop offset="1" stop-color="#c9958a"/></linearGradient>')
-    metal = (f'<linearGradient id="{p}-metal" x1="0" y1="0" x2="1" y2="1">'
-             '<stop offset="0" stop-color="#e3965a"/><stop offset="0.35" stop-color="#a9501f"/>'
-             '<stop offset="0.7" stop-color="#5e260d"/><stop offset="1" stop-color="#2a1006"/></linearGradient>')
-    gear = (f'<radialGradient id="{p}-gear" cx="0.38" cy="0.32" r="0.8">'
-            '<stop offset="0" stop-color="#e08a46"/><stop offset="0.4" stop-color="#a5481a"/>'
-            '<stop offset="0.75" stop-color="#5e260d"/><stop offset="1" stop-color="#2a1006"/></radialGradient>')
-    blood = (f'<linearGradient id="{p}-blood" x1="0" y1="0" x2="1" y2="0">'
-             f'<stop offset="0" stop-color="{BLOOD_DARK}"/><stop offset="0.4" stop-color="{BLOOD_LIGHT}"/>'
-             f'<stop offset="1" stop-color="{BLOOD}"/></linearGradient>')
-    corrode = (f'<filter id="{p}-corrode" x="-10%" y="-10%" width="120%" height="120%">'
-               '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise"/>'
-               '<feColorMatrix in="noise" type="matrix" values="0 0 0 0 0.25  0 0 0 0 0.08  0 0 0 0 0.02  0 0 0 1.8 -0.7" result="pits"/>'
-               '<feComposite in="pits" in2="SourceAlpha" operator="in" result="crust"/>'
-               '<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="crust"/></feMerge></filter>')
-    plaid = (f'<pattern id="{p}-plaid" width="{PLAID}" height="{PLAID}" patternUnits="userSpaceOnUse">'
-             f'<rect width="{PLAID}" height="{PLAID}" fill="#7a1b17"/>'
-             f'<rect width="{PLAID * 0.42}" height="{PLAID}" fill="#160807" opacity="0.55"/>'
-             f'<rect width="{PLAID}" height="{PLAID * 0.42}" fill="#160807" opacity="0.55"/>'
-             f'<rect x="{PLAID * 0.7}" width="1.6" height="{PLAID}" fill="#d9a441" opacity="0.5"/>'
-             f'<rect y="{PLAID * 0.7}" width="{PLAID}" height="1.6" fill="#d9a441" opacity="0.5"/></pattern>')
-    fold = (f'<linearGradient id="{p}-fold" x1="0" y1="0" x2="1" y2="0">'
-            '<stop offset="0" stop-color="#000" stop-opacity="0.55"/><stop offset="0.45" stop-color="#000" stop-opacity="0"/>'
-            '<stop offset="1" stop-color="#000" stop-opacity="0.6"/></linearGradient>')
-    return f"<defs>{finger}{knuckle}{thumb}{wrist}{nail}{metal}{gear}{blood}{corrode}{plaid}{fold}</defs>"
+# The blood: a pool along the finger's edge, and streams that run down the palm
+# (points, then widths in pixels), each ending in a drop.
+BLOOD_POOL = [(712, 1084), (740, 1068), (772, 1066), (806, 1072), (842, 1088), (846, 1102),
+              (812, 1100), (780, 1096), (750, 1102), (724, 1100)]
+BLOOD_STREAMS = [
+    ([(722, 1096), (714, 1136), (706, 1186), (709, 1236), (704, 1282), (706, 1318)], [30, 24, 17, 21, 14, 13]),
+    ([(842, 1100), (860, 1136), (870, 1180), (874, 1214)], [26, 18, 20, 14]),
+    ([(734, 1100), (742, 1124), (738, 1146)], [18, 13, 12]),
+    ([(794, 1096), (796, 1118), (793, 1132)], [30, 24, 18]),
+]
 
 
-# ---- chain -------------------------------------------------------------------
+def load_fist():
+    """The cut-out fist on the working canvas, fading out towards the elbow."""
+    fist = np.asarray(Image.open(FIST).convert("RGBA")).astype(np.float32) / 255
+    canvas = np.zeros((HEIGHT, WIDTH, 4), np.float32)
+    canvas[: fist.shape[0], : fist.shape[1]] = fist
 
-def ring_link(cx, cy, length, width, angle, p, stroke=RING_STROKE):
-    """A link seen face on: an oval ring along `angle` degrees."""
-    rx, ry = length / 2, width / 2
-    shape = f'cx="0" cy="0" rx="{rx}" ry="{ry}" fill="none"'
-    return (f'<g transform="translate({cx},{cy}) rotate({angle})">'
-            f'<ellipse {shape} stroke="{INK}" stroke-width="{stroke + 6}"/>'
-            f'<ellipse {shape} stroke="url(#{p}-metal)" stroke-width="{stroke}" filter="url(#{p}-corrode)"/>'
-            f'<path d="M {-rx * 0.55} {-ry - stroke * 0.15} Q 0 {-ry - stroke * 0.3} {rx * 0.5} {-ry - stroke * 0.1}" '
-            f'stroke="#f2b47d" stroke-width="2.4" fill="none" opacity="0.75" stroke-linecap="round"/></g>')
+    fade = np.clip((FOREARM_END - np.arange(HEIGHT)) / FOREARM_FADE, 0, 1)[:, None]
+    canvas[..., 3] *= fade
+    return canvas[..., :3], canvas[..., 3]
 
 
-def edge_link(cx, cy, length, thickness, angle, p):
-    """A link seen edge on: a bar with rounded ends."""
-    x = -length / 2
-    return (f'<g transform="translate({cx},{cy}) rotate({angle})">'
-            f'<rect x="{x - 3}" y="{-thickness / 2 - 3}" width="{length + 6}" height="{thickness + 6}" rx="{thickness / 2 + 3}" fill="{INK}"/>'
-            f'<rect x="{x}" y="{-thickness / 2}" width="{length}" height="{thickness}" rx="{thickness / 2}" fill="url(#{p}-metal)" filter="url(#{p}-corrode)"/>'
-            f'<rect x="{x + 6}" y="{-thickness / 2 + 3}" width="{length * 0.55}" height="2.4" rx="1.2" fill="#f2b47d" opacity="0.7"/></g>')
+def corrosion(size, texture, strength):
+    """Rust colour with photographed pitting, mixed with larger patches of dark
+    scale, as real corrosion is uneven. Also returns the pitting as a bump map."""
+    photo = np.asarray(Image.open(RUST_PHOTO).convert("RGB")).astype(np.float32) / 255
+    detail = detail_texture(photo, size, *texture)
+
+    noise = np.random.default_rng(1994).random(size).astype(np.float32)
+    patches = ndimage.gaussian_filter(noise, 22)
+    patches = np.clip((patches - patches.mean()) / (patches.std() + 1e-6) * 0.6 + 0.35, 0, 1)[..., None]
+
+    base = RUST * (1 - patches) + SCALE * patches
+    return base * (1 + (detail - 1) * strength), detail.mean(-1)
 
 
-def chain(points, p):
-    """Links between consecutive points, alternating face-on and edge-on, as
-    the links of a real chain turn a quarter turn each."""
-    parts = []
-    for index, ((x0, y0), (x1, y1)) in enumerate(zip(points, points[1:])):
-        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-        length = math.hypot(x1 - x0, y1 - y0) + LINK_OVERLAP
-        angle = math.degrees(math.atan2(y1 - y0, x1 - x0))
-        face_on = index % 2 == 0
-        parts.append(ring_link(cx, cy, length, RING_WIDTH, angle, p, RING_STROKE) if face_on
-                     else edge_link(cx, cy, length, EDGE_THICKNESS, angle, p))
-    return "".join(parts)
+def render_chain(path, with_gear):
+    """The rusted chain along `path`. With `with_gear`, a shackle hangs from
+    the last link; returns the colour, the coverage and the gear's centre."""
+    layer = Layer(HEIGHT, WIDTH)
+    tip = chain_along(path, LINK, layer, 1)
+
+    gear_centre = None
+    if with_gear:
+        hole = tip + np.array([0.0, 2.6 * SHACKLE_RADIUS, 0.0])
+        half = max(np.linalg.norm((hole - tip)[:2]) / 2 - SHACKLE_RADIUS + SHACKLE_WIRE, 1)
+        shackle = link_centreline((tip + hole) / 2, np.array([0.0, 1.0, 0.0]), VIEW, half, SHACKLE_RADIUS)
+        layer.tube(shackle, SHACKLE_WIRE, 1)
+        gear_centre = (int(hole[0] - (GEAR_HOLE[0] - 0.5) * GEAR_SIZE), int(hole[1] - (GEAR_HOLE[1] - 0.5) * GEAR_SIZE))
+
+    albedo, bump = corrosion((HEIGHT, WIDTH), CHAIN_TEXTURE, 0.5)
+    roughen(layer, bump, 4.0)
+
+    rgb = lit(layer.normal, albedo, ambient=0.2, diffuse=0.95, specular=0.14, shininess=10)
+    rgb *= occlusion(layer, 40, 0.7)[..., None]
+    return np.where(layer.coverage[..., None], rgb, 0), layer.coverage.astype(np.float32), gear_centre
 
 
-# ---- hand ---------------------------------------------------------------------
+def render_gear(centre):
+    """The Rust logo, embossed (its edges bevelled over a few pixels) and rusted."""
+    png = cairosvg.svg2png(bytestring=RUST_LOGO.read_bytes(), output_width=GEAR_SIZE, output_height=GEAR_SIZE)
+    mask = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA")).astype(np.float32)[..., 3] / 255
 
-# The four curled fingers seen from the front, index to little finger: left
-# edge, width, top of the big knuckle, and the bottom where the fingertip tucks
-# into the palm.
-FINGERS = [(152, 60, 152, 284), (209, 62, 136, 286), (268, 58, 146, 282), (322, 50, 170, 272)]
+    bevel = np.clip(ndimage.distance_transform_edt(mask > 0.5) / 7.0, 0, 1) ** 0.6 * 12
+    albedo, _ = corrosion(mask.shape, GEAR_TEXTURE, 0.7)
+    rgb = lit(relief_normals(bevel, 1.0), albedo, ambient=0.25, diffuse=0.9, specular=0.12, shininess=10)
 
-
-def finger_outline(x, w, top, bottom):
-    """A knuckle dome on top, a slight waist below the middle joint, and a
-    rounded end where the finger curls into the palm."""
-    mid = top + (bottom - top) * 0.5
-    return (f"M {x + w * 0.06} {top + w * 0.42} "
-            f"C {x + w * 0.04} {top - w * 0.02} {x + w * 0.96} {top - w * 0.02} {x + w * 0.94} {top + w * 0.42} "
-            f"C {x + w * 1.01} {mid - 12} {x + w * 0.99} {mid + 8} {x + w * 0.93} {mid + 22} "
-            f"C {x + w * 0.9} {bottom - 18} {x + w * 0.8} {bottom} {x + w * 0.5} {bottom} "
-            f"C {x + w * 0.2} {bottom} {x + w * 0.1} {bottom - 18} {x + w * 0.07} {mid + 22} "
-            f"C {x + w * 0.01} {mid + 8} {x - w * 0.01} {mid - 12} {x + w * 0.06} {top + w * 0.42} Z")
+    canvas_rgb = np.zeros((HEIGHT, WIDTH, 3), np.float32)
+    canvas_alpha = np.zeros((HEIGHT, WIDTH), np.float32)
+    x0, y0 = centre[0] - GEAR_SIZE // 2, centre[1] - GEAR_SIZE // 2
+    canvas_rgb[y0:y0 + GEAR_SIZE, x0:x0 + GEAR_SIZE] = rgb
+    canvas_alpha[y0:y0 + GEAR_SIZE, x0:x0 + GEAR_SIZE] = mask
+    return canvas_rgb, canvas_alpha
 
 
-def joint_wrinkles(cx, cy, w):
-    """The skin folds over the middle joint, which faces the viewer in a fist."""
-    folds = []
-    for i, (spread, depth, opacity) in enumerate([(0.34, 6, 0.85), (0.27, 9, 0.6), (0.2, 12, 0.45)]):
-        y = cy + i * 6
-        folds.append(f'<path d="M {cx - w * spread} {y} Q {cx} {y + depth} {cx + w * spread} {y}" '
-                     f'stroke="{SKIN_SHADOW}" stroke-width="{2.2 - i * 0.5}" fill="none" stroke-linecap="round" opacity="{opacity}"/>')
-    return "".join(folds)
+def stroke(mask, points, widths):
+    """Paints a stroke along `points` whose width varies as `widths`."""
+    for (start, start_width), (end, end_width) in zip(zip(points, widths), zip(points[1:], widths[1:])):
+        steps = max(int(np.hypot(end[0] - start[0], end[1] - start[1]) / 2), 1)
+
+        for t in np.linspace(0, 1, steps):
+            x, y = start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t
+            radius = max(int((start_width + (end_width - start_width) * t) / 2), 1)
+            cv2.circle(mask, (int(x), int(y)), radius, 1.0, -1, cv2.LINE_AA)
 
 
-def finger(x, w, top, bottom, p):
-    mid = top + (bottom - top) * 0.5
-    outline = finger_outline(x, w, top, bottom)
-    knuckle = f'<ellipse cx="{x + w * 0.5}" cy="{top + w * 0.3}" rx="{w * 0.3}" ry="{w * 0.26}" fill="url(#{p}-knuckle)"/>'
-    middle_joint = f'<ellipse cx="{x + w * 0.5}" cy="{mid - 4}" rx="{w * 0.26}" ry="12" fill="url(#{p}-knuckle)" opacity="0.6"/>'
-    tuck_shadow = (f'<path d="M {x + w * 0.14} {bottom - 30} C {x + w * 0.3} {bottom - 8} {x + w * 0.7} {bottom - 8} {x + w * 0.86} {bottom - 30}" '
-                   f'stroke="{SKIN_SHADOW}" stroke-width="5" fill="none" opacity="0.35" stroke-linecap="round"/>')
-    return (f'<path d="{outline}" fill="url(#{p}-finger)" stroke="{INK}" stroke-width="3" stroke-linejoin="round"/>'
-            f"{knuckle}{middle_joint}{joint_wrinkles(x + w * 0.5, mid - 2, w)}{tuck_shadow}")
+def render_blood():
+    """Blood where the chain bites under the index finger.
+
+    The film is painted as a shape first, then raised into a liquid surface
+    whose height swells from its edges, and lit with a broad sheen and a tight
+    highlight. Thin blood at the edges is translucent, so the skin shows through."""
+    mask = np.zeros((HEIGHT, WIDTH), np.float32)
+    cv2.fillPoly(mask, [np.array(BLOOD_POOL, np.int32)], 1.0, cv2.LINE_AA)
+
+    for points, widths in BLOOD_STREAMS:
+        stroke(mask, points, widths)
+        x, y = points[-1]
+        cv2.ellipse(mask, (x, y + 8), (int(widths[-1] * 0.95), int(widths[-1] * 1.25)), 0, 0, 360, 1.0, -1, cv2.LINE_AA)
+    mask = ndimage.gaussian_filter(mask, 1.2)
+
+    inside = ndimage.distance_transform_edt(mask > 0.5)
+    height = np.sqrt(np.clip(inside / 9.0, 0, 1)) * 9
+    normal = relief_normals(height, 1.5)
+
+    thickness = np.clip(inside / 6.0, 0, 1)[..., None]
+    sheen = lit(normal, BLOOD, ambient=0.45, diffuse=0.55, specular=0.1, shininess=14)
+    glint = lit(normal, np.zeros(3), ambient=0, diffuse=0, specular=0.85, shininess=140)
+    rgb = sheen * (0.65 + 0.35 * thickness) + glint
+
+    alpha = mask * (0.55 + 0.42 * np.clip(inside / 4.0, 0, 1))
+    return np.clip(rgb, 0, 1), np.clip(alpha, 0, 1)
 
 
-def back_of_hand(p):
-    """The back of the hand, seen between the knuckles: it slopes away from the
-    viewer, so it is drawn in shadow behind the fingers."""
-    return (f'<path d="M 156 214 C 170 150 340 130 372 196 C 378 214 376 236 368 250 L 160 250 Z" '
-            f'fill="{SKIN_DARK}" stroke="{INK}" stroke-width="3"/>'
-            f'<path d="M 172 200 C 200 162 320 150 356 196" stroke="{SKIN_SHADOW}" stroke-width="10" fill="none" opacity="0.5"/>')
+def over(below, above):
+    """`above` composited over `below`; each is a (colour, coverage) pair."""
+    (below_rgb, below_alpha), (rgb, alpha) = below, above
+    out_alpha = alpha + below_alpha * (1 - alpha)
+    weighted = rgb * alpha[..., None] + below_rgb * (below_alpha * (1 - alpha))[..., None]
+
+    return weighted / np.maximum(out_alpha, 1e-6)[..., None], out_alpha
 
 
-def wrist(p):
-    """The forearm, widening slightly towards the elbow, with two tendons."""
-    return (f'<path d="M 176 300 C 182 360 178 430 166 512 L 364 512 C 350 440 344 370 356 296 Z" '
-            f'fill="url(#{p}-wrist)" stroke="{INK}" stroke-width="3"/>'
-            f'<path d="M 232 330 C 236 390 236 450 230 512" stroke="{SKIN_LIGHT}" stroke-width="7" fill="none" opacity="0.45" stroke-linecap="round"/>'
-            f'<path d="M 222 330 C 226 390 226 450 220 512" stroke="{SKIN_DARK}" stroke-width="2.5" fill="none" opacity="0.35"/>'
-            f'<path d="M 292 326 C 290 390 292 450 298 512" stroke="{SKIN_LIGHT}" stroke-width="6" fill="none" opacity="0.4" stroke-linecap="round"/>'
-            f'<path d="M 302 326 C 300 390 302 450 308 512" stroke="{SKIN_DARK}" stroke-width="2.5" fill="none" opacity="0.3"/>')
+def framed(rgb, alpha):
+    """The smallest square around everything drawn, centred on it, with a
+    small margin."""
+    rows, columns = np.nonzero(alpha > 0.05)
+    side = int(max(rows.max() - rows.min(), columns.max() - columns.min()) * 1.04)
+    centre_y, centre_x = (rows.min() + rows.max()) // 2, (columns.min() + columns.max()) // 2
+
+    image = np.pad(np.dstack([rgb, alpha]), ((side, side), (side, side), (0, 0)))
+    top, left = centre_y - side // 2 + side, centre_x - side // 2 + side
+    return image[top:top + side, left:left + side]
 
 
-def cuff(p):
-    """A rolled flannel sleeve around the forearm, red and black plaid, with
-    its folds in shadow."""
-    outline = (f"M 150 {CUFF_TOP + 6} C 200 {CUFF_TOP - 8} 320 {CUFF_TOP - 8} 380 {CUFF_TOP + 4} "
-               f"L 392 {BOX} L 138 {BOX} Z")
-    roll = (f"M 150 {CUFF_TOP + 6} C 200 {CUFF_TOP - 8} 320 {CUFF_TOP - 8} 380 {CUFF_TOP + 4} "
-            f"L 382 {CUFF_TOP + 22} C 320 {CUFF_TOP + 12} 200 {CUFF_TOP + 12} 148 {CUFF_TOP + 24} Z")
-    return (f'<path d="{outline}" fill="url(#{p}-plaid)" stroke="{INK}" stroke-width="3" stroke-linejoin="round"/>'
-            f'<path d="{outline}" fill="url(#{p}-fold)"/>'
-            f'<path d="{roll}" fill="#000" opacity="0.28"/>'
-            f'<path d="M 152 {CUFF_TOP + 24} C 200 {CUFF_TOP + 12} 320 {CUFF_TOP + 12} 382 {CUFF_TOP + 22}" stroke="{INK}" stroke-width="2.5" fill="none"/>'
-            f'<path d="M 214 {CUFF_TOP + 30} C 220 {CUFF_TOP + 50} 216 {CUFF_TOP + 60} 212 {BOX}" stroke="#000" stroke-width="3" fill="none" opacity="0.3"/>'
-            f'<path d="M 330 {CUFF_TOP + 28} C 334 {CUFF_TOP + 46} 338 {CUFF_TOP + 58} 342 {BOX}" stroke="#000" stroke-width="3" fill="none" opacity="0.3"/>')
+def compose():
+    """The emblem as an RGBA image."""
+    fist_rgb, fist_alpha = load_fist()
+
+    upper = render_chain(UPPER_CHAIN, with_gear=False)[:2]
+    lower_rgb, lower_alpha, gear_centre = render_chain(LOWER_CHAIN, with_gear=True)
+    gear = render_gear(gear_centre)
+    blood_rgb, blood_alpha = render_blood()
+
+    # Above the gap under the index finger, the lower chain is inside the hand.
+    rows = np.arange(HEIGHT)[:, None]
+    lower_alpha = lower_alpha * np.where((rows < HOLE_EDGE_Y) & (fist_alpha > 0.5), 0, 1)
+
+    # The lower chain casts a soft shadow on the palm and the forearm.
+    shadow = soft_shadow(lower_alpha, (16, 10), 9, 0.55)
+    fist_rgb = fist_rgb * (1 - shadow * (fist_alpha > 0))[..., None]
+
+    picture = over(upper, (fist_rgb, fist_alpha))
+    picture = over(picture, (blood_rgb, blood_alpha * (fist_alpha > 0.3)))
+    picture = over(picture, gear)
+    picture = over(picture, (lower_rgb, lower_alpha))
+
+    # Where the chain bites, its top is wet with the same blood.
+    wet = blood_alpha * (lower_alpha > 0.5) * (rows < HOLE_EDGE_Y + 50)
+    picture = over(picture, (blood_rgb, wet))
+
+    square = framed(np.clip(picture[0], 0, 1), np.clip(picture[1], 0, 1))
+    return Image.fromarray((square * 255).astype(np.uint8), "RGBA")
 
 
-def palm(p):
-    """The heel of the hand behind the fingers; the chain runs through it."""
-    return (f'<path d="M 146 192 C 120 226 118 296 162 326 C 222 356 318 350 364 312 C 384 284 380 230 370 208 Z" '
-            f'fill="url(#{p}-wrist)" stroke="{INK}" stroke-width="3"/>')
+def svg_document(picture):
+    """An SVG that shows `picture`, embedded as PNG, in a BOX x BOX view."""
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {BOX} {BOX}">'
+            f"<title>StaleyNET emblem</title>{svg_image(picture)}</svg>")
 
 
-def thumb(p):
-    """The thumb crosses the index and middle fingers below their middle
-    joints: a fleshy base on the left, a joint crease, and the nail at the tip."""
-    body = ("M 122 222 C 104 262 120 312 170 318 C 210 322 250 314 280 304 "
-            "C 304 296 308 266 292 256 C 276 246 250 250 226 252 "
-            "C 200 254 180 246 164 230 C 150 216 134 212 122 222 Z")
-    nail = ("M 258 262 C 272 254 292 256 296 268 C 299 280 290 292 274 294 "
-            "C 260 295 252 288 252 278 C 252 270 253 266 258 262 Z")
-    return (f'<path d="{body}" fill="url(#{p}-thumb)" stroke="{INK}" stroke-width="3" stroke-linejoin="round"/>'
-            f'<path d="M 140 236 C 160 252 190 262 226 262" stroke="#fbe0c8" stroke-width="6" fill="none" opacity="0.5" stroke-linecap="round"/>'
-            f'<path d="{nail}" fill="url(#{p}-nail)" stroke="{SKIN_SHADOW}" stroke-width="2"/>'
-            f'<path d="M 262 266 C 272 261 286 262 291 269" stroke="#fff4ec" stroke-width="2" fill="none" opacity="0.75" stroke-linecap="round"/>'
-            f'<path d="M 220 258 C 228 272 228 290 220 308" stroke="{SKIN_SHADOW}" stroke-width="2" fill="none" opacity="0.65"/>'
-            f'<path d="M 228 262 C 234 274 234 288 228 302" stroke="{SKIN_SHADOW}" stroke-width="1.3" fill="none" opacity="0.45"/>'
-            f'<path d="M 170 318 C 210 330 260 322 290 304" stroke="{SKIN_SHADOW}" stroke-width="6" fill="none" opacity="0.3"/>')
-
-
-# ---- blood ---------------------------------------------------------------------
-
-def run(points, widths, p):
-    """A stream of blood along `points`, `widths[i]` wide at each, ending in a drop."""
-    left = [(x - w / 2, y) for (x, y), w in zip(points, widths)]
-    right = [(x + w / 2, y) for (x, y), w in zip(points, widths)]
-    path = f"M {left[0][0]} {left[0][1]} " + " ".join(f"L {x:.1f} {y:.1f}" for x, y in left[1:])
-    tip_x, tip_y = points[-1]
-    drop = widths[-1] * 1.25
-    path += f" C {tip_x - drop} {tip_y + drop * 0.8} {tip_x - drop * 0.6} {tip_y + drop * 2.2} {tip_x} {tip_y + drop * 2.2}"
-    path += f" C {tip_x + drop * 0.6} {tip_y + drop * 2.2} {tip_x + drop} {tip_y + drop * 0.8} {right[-1][0]} {right[-1][1]}"
-    path += " " + " ".join(f"L {x:.1f} {y:.1f}" for x, y in reversed(right[:-1])) + " Z"
-    shine = f'<ellipse cx="{tip_x - drop * 0.3}" cy="{tip_y + drop * 1.2}" rx="{drop * 0.22}" ry="{drop * 0.4}" fill="#ff9c9c" opacity="0.75"/>'
-    return f'<path d="{path}" fill="url(#{p}-blood)" stroke="{BLOOD_DARK}" stroke-width="1.2" stroke-linejoin="round"/>{shine}'
-
-
-def falling_drop(x, y, size, p):
-    """A single drop, pointed at the top."""
-    return (f'<path d="M {x} {y - size * 1.7} C {x + size * 0.4} {y - size * 0.6} {x + size} {y} {x} {y + size} '
-            f'C {x - size} {y} {x - size * 0.4} {y - size * 0.6} {x} {y - size * 1.7} Z" fill="url(#{p}-blood)" stroke="{BLOOD_DARK}" stroke-width="1"/>'
-            f'<ellipse cx="{x - size * 0.3}" cy="{y}" rx="{size * 0.2}" ry="{size * 0.35}" fill="#ff9c9c" opacity="0.7"/>')
-
-
-def blood(p):
-    """Blood seeps where the chain bites into the palm under the ring and little
-    fingers, pools along the crease, and runs down the wrist."""
-    pool = ("M 284 302 C 292 296 300 300 310 296 C 322 290 330 296 340 290 C 350 284 360 280 364 288 "
-            "C 368 298 360 306 352 312 C 344 318 338 314 330 320 C 318 328 306 322 296 324 "
-            "C 286 326 280 312 284 302 Z")
-    streams = (run([(348, 306), (350, 326), (347, 348), (343, 370), (342, 388)], [11, 10, 9, 8, 7], p)
-               + run([(308, 318), (305, 346), (303, 376), (305, 404), (309, 430), (311, 452)], [10, 9, 9, 8, 7, 6], p)
-               + run([(328, 320), (329, 334), (328, 346)], [8, 7, 6], p))
-    on_chain = run([(380, 248), (383, 262), (382, 274)], [7, 5, 4], p)
-    return f'<path d="{pool}" fill="url(#{p}-blood)" stroke="{BLOOD_DARK}" stroke-width="1.2" opacity="0.95"/>{streams}{on_chain}'
-
-
-# ---- the Rust gear -------------------------------------------------------------
-
-def rust_gear(cx, cy, diameter, p):
-    """The rusted Rust logo, `diameter` wide, centred on (`cx`, `cy`)."""
-    logo = re.search(r' d="([^"]+)"', RUST_LOGO.read_text()).group(1)
-    scale = diameter / LOGO_SOURCE_SIZE
-    half = LOGO_SOURCE_SIZE / 2
-    placement = (f"translate({cx},{cy}) scale({scale:.4f}) translate({-half:.4f},{-half:.4f}) "
-                 f"translate({LOGO_SOURCE_OFFSET[0]},{LOGO_SOURCE_OFFSET[1]})")
-    return (f'<path transform="{placement}" d="{logo}" fill="url(#{p}-gear)" stroke="{INK}" '
-            f'stroke-width="{2.2 / scale:.4f}" stroke-linejoin="round" filter="url(#{p}-corrode)"/>'
-            f'<path transform="translate(-1.5,-1.5) {placement}" d="{logo}" fill="none" stroke="#f6c08a" '
-            f'stroke-width="{0.7 / scale:.4f}" opacity="0.45"/>')
-
-
-def swinging(content, animated):
-    """`content`, swinging about the point where the chain leaves the fist."""
-    if not animated:
-        return f"<g>{content}</g>"
-
-    pivot = f"{HANGING_CHAIN[0][0]} {HANGING_CHAIN[0][1]}"
-    swing = (f'<animateTransform attributeName="transform" type="rotate" '
-             f'values="-{SWING_DEGREES} {pivot};{SWING_DEGREES} {pivot};-{SWING_DEGREES} {pivot}" '
-             f'dur="{SWING_SECONDS}s" repeatCount="indefinite"/>')
-    return f"<g>{swing}{content}</g>"
-
-
-def dripping(p, animated):
-    """A drop below the longest stream; when animated it falls and fades."""
-    x, y = DROP_START
-    drop = falling_drop(x, y, 6, p)
-    if not animated:
-        return drop
-
-    fall = (f'<animateTransform attributeName="transform" type="translate" values="0 0;0 {DROP_FALL}" '
-            f'keyTimes="0;1" dur="{DROP_SECONDS}s" repeatCount="indefinite"/>'
-            f'<animate attributeName="opacity" values="1;1;0" keyTimes="0;0.7;1" dur="{DROP_SECONDS}s" repeatCount="indefinite"/>')
-    return f"<g>{fall}{drop}</g>"
+def svg_image(picture):
+    """`picture` as an SVG image element filling the BOX x BOX box."""
+    buffer = io.BytesIO()
+    picture.resize((EMBEDDED_SIZE, EMBEDDED_SIZE), Image.LANCZOS).save(buffer, "PNG", optimize=True)
+    data = base64.b64encode(buffer.getvalue()).decode()
+    return f'<image width="{BOX}" height="{BOX}" href="data:image/png;base64,{data}"/>'
 
 
 def emblem(prefix="emblem", animated=True):
-    """The emblem as SVG elements in a 512 x 512 box, back to front."""
-    p = prefix
-    hanging = swinging(chain(HANGING_CHAIN, p) + rust_gear(*GEAR_CENTRE, GEAR_DIAMETER, p), animated)
-    fingers = "".join(finger(x, w, top, bottom, p) for x, w, top, bottom in FINGERS)
-    hand = f"{wrist(p)}{palm(p)}{chain(UPPER_CHAIN, p)}{back_of_hand(p)}{fingers}{thumb(p)}"
-    return f"{defs(p)}<g>{hanging}{hand}{blood(p)}{cuff(p)}{dripping(p, animated)}</g>"
+    """The rendered emblem as SVG elements in a BOX x BOX box. The emblem is a
+    picture, so `prefix` and `animated` are accepted for compatibility only."""
+    return svg_image(Image.open(RENDERED))
 
 
 def main(output):
-    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {BOX} {BOX}">'
-           f"<title>StaleyNET emblem</title>{emblem()}</svg>")
-    Path(output).write_text(svg)
+    picture = compose().resize((OUTPUT_SIZE, OUTPUT_SIZE), Image.LANCZOS)
+    picture.save(output, optimize=True)
+    Path(output).with_suffix(".svg").write_text(svg_document(picture))
 
 
 if __name__ == "__main__":

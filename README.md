@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/emblem.svg" width="96" alt="StaleyNET emblem: a rusted chain link enclosing a staircase of audio tokens">
+  <img src="docs/assets/emblem.svg" width="96" alt="StaleyNET emblem: a raised fist gripping a rusted chain, bleeding where the links bite, with the Rust logo hanging from the last link">
 </p>
 
 <h1 align="center">StaleyNET</h1>
@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="docs/assets/cover.svg">
-    <img src="docs/assets/cover.svg" alt="StaleyNET cover: a chain link around a staircase of audio tokens, with the words Music from a sentence" width="100%">
+    <img src="docs/assets/cover.svg" alt="StaleyNET cover: a raised fist gripping a rusted chain beside the words Music from a sentence" width="100%">
   </a>
 </p>
 
@@ -164,15 +164,25 @@ the dataset cards describe how to obtain it.
 ## Name
 
 StaleyNET is named for Layne Staley (1967 to 2002), singer of Alice in Chains.
-The emblem is a chain link enclosing the model's view of music: 4 rows of
-tokens, 1 per residual codebook from coarse (bone) to fine (rust), shifted
-into the staircase of the delay pattern. On the animated cover the columns
-light up in sequence, as the model generates step by step. Both are
-drawn by code:
+The emblem is a raised fist gripping a rusted chain. The chain runs through
+the closed hand; below it, where the links bite into the palm, the hand
+bleeds, and from the last link hangs the Rust logo, rusted through.
+
+It is built from real material rather than drawn. The hand is a photograph,
+[Clenched fist](https://commons.wikimedia.org/wiki/File:Clenched_fist.jpg) by
+Tomas Gunnarsson (Genusfotografen),
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), cut out by
+`book/tools/fist_cutout.py`. The chain is rendered as three-dimensional
+geometry, every link lit from its true surface orientation and coloured with
+the corrosion of a public-domain photograph of rusted chain
+([W.carter, CC0](https://commons.wikimedia.org/wiki/File:Very_rusty_chain.jpg)).
+As an adaptation of a CC BY-SA photograph, the emblem and the cover are shared
+under CC BY-SA 4.0; `book/tools/assets/SOURCES.md` lists every source.
 
 ```bash
-python3 book/tools/emblem.py book/src/figures/emblem.svg
-python3 book/tools/cover.py  book/src/figures/cover.svg
+python3 book/tools/fist_cutout.py book/tools/assets/fist.webp   # once, downloads the photograph
+python3 book/tools/emblem.py      book/src/figures/emblem.png
+python3 book/tools/cover.py       book/src/figures/cover.svg
 ```
 
 The Rust logo is the [official artwork](https://github.com/rust-lang/rust-artwork)

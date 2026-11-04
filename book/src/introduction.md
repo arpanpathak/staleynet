@@ -1,6 +1,6 @@
 # Introduction
 
-![StaleyNET: a rusted chain link enclosing a staircase of audio tokens](figures/cover.svg)
+![StaleyNET: a raised fist gripping a rusted chain, with the Rust logo hanging from the last link](figures/cover.svg)
 
 *StaleyNET is named in memory of Layne Staley (1967 to 2002), vocalist of
 Alice in Chains.*
