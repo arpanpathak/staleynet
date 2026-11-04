@@ -1,0 +1,14 @@
+[package]
+name = "staleynet-dashboard"
+description = "Live observability for StaleyNET training runs: losses, the generalization gap, progress and the machine."
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+# Standalone: not part of the GPU workspace, builds with plain `cargo` on any machine.
+[workspace]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tiny_http = "0.12"
