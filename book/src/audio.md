@@ -128,9 +128,10 @@ voices sound blurred even when the model predicts the right tokens.
 
 The remedy is a **neural vocoder**: a network that learns, from real
 recordings, how to turn a spectrogram into a waveform, phase included (Kong et
-al., 2020; Siuzdak, 2023). StaleyNET's vocoder is being built on the design of
-Vocos. For every frame it predicts the magnitude and the phase of each
-frequency from the mel spectrogram, and an inverse Fourier transform turns
-these into sound. It is trained on spectrograms decoded from StaleyNET's own
-tokens, with the original recordings as targets, so that it learns not only
-the phase but also part of the detail that the tokens lose.
+al., 2020; Siuzdak, 2023). StaleyNET's vocoder follows the design of Vocos.
+For every frame it predicts the magnitude and the phase of each frequency
+from the mel spectrogram, and an inverse Fourier transform turns these into
+sound. It is trained on spectrograms decoded from StaleyNET's own tokens, with
+the original recordings as targets, so that it learns not only the phase but
+also part of the detail that the tokens lose. [The Neural Vocoder](vocoder.md)
+describes it in full.

@@ -19,9 +19,12 @@ longer training of the language model cannot make voices intelligible.
 Griffin-Lim adds a further loss that the spectral measure understates: it
 estimates phase without ever having heard real audio, so harmonics lose their
 frame-to-frame coherence and voices take on a metallic smear (see
-[Audio Representation](audio.md#why-griffin-lim-smears-voices)). A neural
-vocoder in the style of Vocos, trained on spectrograms decoded from
-StaleyNET's own tokens, is being built to replace it.
+[Audio Representation](audio.md#why-griffin-lim-smears-voices)).
+[The neural vocoder](vocoder.md), trained on spectrograms decoded from
+StaleyNET's own tokens, is meant to replace it. It is trained with spectral
+losses only, and vocoders trained that way tend to sound slightly muffled in
+the highest frequencies; adversarial training, as in Vocos, would address
+this.
 
 The lyrics input does not yet influence the output measurably. The first
 models trained with it produced the same predictions with correct lyrics as
@@ -68,8 +71,9 @@ The analysis above suggests an order of priorities.
    similar number of tokens. A lighter intermediate step is to quantize
    single frames instead of pairs, or to use more and larger codebooks, and to
    measure the effect with `staleynet reconstruct`.
-2. **A learned vocoder** to replace Griffin-Lim, trained from scratch on the
-   same data.
+2. **Adversarial training for the vocoder**: discriminators that judge short
+   stretches of waveform and of spectrogram, added to the spectral losses
+   once those have converged.
 3. **More lyric-bearing singing data**, in particular short takes recorded with
    the studio, in which each line can be aligned with the audio.
 4. **Cross-attention to the lyrics**, so that every audio position can consult
