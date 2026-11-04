@@ -1,0 +1,21 @@
+[package]
+name = "staleynet-cli"
+description = "The `staleynet` command: prepare, tokenize, train, sing, bench."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "staleynet"
+path = "src/main.rs"
+
+[dependencies]
+staleynet-audio = { path = "../staleynet-audio" }
+staleynet-cuda = { path = "../staleynet-cuda" }
+staleynet-data = { path = "../staleynet-data" }
+staleynet-model = { path = "../staleynet-model" }
+staleynet-train = { path = "../staleynet-train" }
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
