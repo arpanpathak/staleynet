@@ -51,9 +51,14 @@ pub fn decode_mono(path: &Path) -> Result<MonoAudio> {
         .with_context(|| format!("probe {}", path.display()))?;
     let mut container = probed.format;
 
-    let track = container.default_track().ok_or_else(|| anyhow!("no audio track in {}", path.display()))?;
+    let track = container
+        .default_track()
+        .ok_or_else(|| anyhow!("no audio track in {}", path.display()))?;
     let track_id = track.id;
-    let sample_rate = track.codec_params.sample_rate.ok_or_else(|| anyhow!("unknown sample rate in {}", path.display()))?;
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .ok_or_else(|| anyhow!("unknown sample rate in {}", path.display()))?;
 
     let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
 
@@ -82,7 +87,12 @@ pub fn decode_mono(path: &Path) -> Result<MonoAudio> {
         interleaved.copy_interleaved_ref(decoded);
 
         let channel_weight = 1.0 / channel_count as f32;
-        samples.extend(interleaved.samples().chunks_exact(channel_count).map(|frame| frame.iter().sum::<f32>() * channel_weight));
+        samples.extend(
+            interleaved
+                .samples()
+                .chunks_exact(channel_count)
+                .map(|frame| frame.iter().sum::<f32>() * channel_weight),
+        );
     }
 
     Ok(MonoAudio { samples, sample_rate })

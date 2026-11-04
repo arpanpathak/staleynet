@@ -1,6 +1,6 @@
 //! The GPU handle and the device-resident tensor types.
 
-use crate::kernels::{attention, elementwise, embedding, loss, matmul, normalization, optimizer, signal};
+use crate::kernels::{attention, convolution, elementwise, embedding, loss, matmul, normalization, optimizer, overlap, signal, spectrum};
 use cuda_core::{CudaContext, CudaStream, DeviceBuffer, DriverError};
 use cuda_host::EmbeddedModuleError;
 use std::fmt;
@@ -72,6 +72,15 @@ pub struct Kernels {
 
     /// Spectrogram helpers and the nearest-prototype search.
     pub(crate) signal: signal::kernels::LoadedModule,
+
+    /// Overlap-add for the inverse STFT, and framing for the spectral losses.
+    pub(crate) overlap: overlap::kernels::LoadedModule,
+
+    /// The vocoder's predicted spectrum and its spectral-loss gradients.
+    pub(crate) spectrum: spectrum::kernels::LoadedModule,
+
+    /// Depthwise convolutions over time and the unfolding for convolution products.
+    pub(crate) convolution: convolution::kernels::LoadedModule,
 }
 
 impl Kernels {
@@ -86,6 +95,9 @@ impl Kernels {
             loss: loss::kernels::load(context)?,
             optimizer: optimizer::kernels::load(context)?,
             signal: signal::kernels::load(context)?,
+            overlap: overlap::kernels::load(context)?,
+            spectrum: spectrum::kernels::load(context)?,
+            convolution: convolution::kernels::load(context)?,
         })
     }
 }

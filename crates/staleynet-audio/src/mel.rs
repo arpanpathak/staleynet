@@ -111,7 +111,9 @@ fn mel_to_hz(mels: f32) -> f32 {
 /// Periodic Hann window, the usual choice for STFT analysis with 75 % overlap.
 /// See <https://en.wikipedia.org/wiki/Hann_function>
 fn periodic_hann(length: usize) -> Vec<f32> {
-    (0..length).map(|index| 0.5 - 0.5 * (2.0 * PI * index as f32 / length as f32).cos()).collect()
+    (0..length)
+        .map(|index| 0.5 - 0.5 * (2.0 * PI * index as f32 / length as f32).cos())
+        .collect()
 }
 
 /// Area-normalised triangular filterbank, row-major `[frequency bin][mel band]`.
@@ -121,8 +123,9 @@ fn slaney_filterbank(config: &MelConfig) -> Vec<f32> {
     let mel_span = hz_to_mel(config.max_frequency) - lowest_mel;
 
     // band_count + 2 edges: each band rises from edge b to b+1 and falls to b+2.
-    let edges_hz: Vec<f32> =
-        (0..band_count + 2).map(|edge| mel_to_hz(lowest_mel + mel_span * edge as f32 / (band_count + 1) as f32)).collect();
+    let edges_hz: Vec<f32> = (0..band_count + 2)
+        .map(|edge| mel_to_hz(lowest_mel + mel_span * edge as f32 / (band_count + 1) as f32))
+        .collect();
 
     let mut weights = vec![0.0; config.frequency_bins() * band_count];
     for band in 0..band_count {
@@ -184,7 +187,9 @@ impl MelAnalyzer {
             if folded > last { period - folded } else { folded }
         };
 
-        (-(padding as isize)..(signal.len() + padding) as isize).map(|index| signal[mirrored_index(index) as usize]).collect()
+        (-(padding as isize)..(signal.len() + padding) as isize)
+            .map(|index| signal[mirrored_index(index) as usize])
+            .collect()
     }
 
     /// Complex STFT of `signal`, one [`SpectrumFrame`] per hop.
@@ -196,8 +201,11 @@ impl MelAnalyzer {
             .into_par_iter()
             .map(|frame| {
                 let segment = &padded[frame * hop_size..frame * hop_size + fft_size];
-                let mut spectrum: Vec<Complex32> =
-                    segment.iter().zip(&self.window).map(|(sample, weight)| Complex32::new(sample * weight, 0.0)).collect();
+                let mut spectrum: Vec<Complex32> = segment
+                    .iter()
+                    .zip(&self.window)
+                    .map(|(sample, weight)| Complex32::new(sample * weight, 0.0))
+                    .collect();
 
                 self.forward_fft.process(&mut spectrum);
                 spectrum.truncate(self.config.frequency_bins());
@@ -211,7 +219,10 @@ impl MelAnalyzer {
         let band_count = self.config.mel_bands;
         let mut log_mel = vec![0.0; self.config.frame_count(signal.len()) * band_count];
 
-        log_mel.par_chunks_mut(band_count).zip(self.stft(signal)).for_each(|(mel_row, spectrum)| self.pool_into_bands(&spectrum, mel_row));
+        log_mel
+            .par_chunks_mut(band_count)
+            .zip(self.stft(signal))
+            .for_each(|(mel_row, spectrum)| self.pool_into_bands(&spectrum, mel_row));
         log_mel
     }
 
@@ -265,7 +276,10 @@ impl MelAnalyzer {
         let MelConfig { fft_size, hop_size, .. } = self.config;
         let padded_length = (frames.len() - 1) * hop_size + fft_size;
 
-        let time_frames: Vec<Vec<f32>> = frames.par_iter().map(|half_spectrum| self.inverse_frame(half_spectrum)).collect();
+        let time_frames: Vec<Vec<f32>> = frames
+            .par_iter()
+            .map(|half_spectrum| self.inverse_frame(half_spectrum))
+            .collect();
 
         let mut signal = vec![0.0; padded_length];
         let mut window_energy = vec![0.0; padded_length];
@@ -301,7 +315,11 @@ impl MelAnalyzer {
         self.inverse_fft.process(&mut spectrum);
 
         let scale = 1.0 / fft_size as f32;
-        spectrum.iter().zip(&self.window).map(|(value, weight)| value.re * scale * weight).collect()
+        spectrum
+            .iter()
+            .zip(&self.window)
+            .map(|(value, weight)| value.re * scale * weight)
+            .collect()
     }
 }
 
@@ -319,7 +337,9 @@ mod tests {
     use super::*;
 
     fn test_signal(length: usize) -> Vec<f32> {
-        (0..length).map(|index| (index as f32 * 0.05).sin() * 0.5 + (index as f32 * 0.31).cos() * 0.2).collect()
+        (0..length)
+            .map(|index| (index as f32 * 0.05).sin() * 0.5 + (index as f32 * 0.31).cos() * 0.2)
+            .collect()
     }
 
     #[test]
@@ -329,7 +349,11 @@ mod tests {
 
         let reconstructed = analyzer.istft(&analyzer.stft(&signal), signal.len());
 
-        let worst_error = signal.iter().zip(&reconstructed).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+        let worst_error = signal
+            .iter()
+            .zip(&reconstructed)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f32::max);
         assert!(worst_error < 1e-4, "worst error {worst_error}");
     }
 
@@ -348,8 +372,16 @@ mod tests {
 
         for bin in [0, 1, 100, bins - 1] {
             let segment = &padded[frame * hop_size..frame * hop_size + fft_size];
-            let real: f32 = segment.iter().enumerate().map(|(sample, value)| value * basis.real[sample * bins + bin]).sum();
-            let imaginary: f32 = segment.iter().enumerate().map(|(sample, value)| value * basis.imaginary[sample * bins + bin]).sum();
+            let real: f32 = segment
+                .iter()
+                .enumerate()
+                .map(|(sample, value)| value * basis.real[sample * bins + bin])
+                .sum();
+            let imaginary: f32 = segment
+                .iter()
+                .enumerate()
+                .map(|(sample, value)| value * basis.imaginary[sample * bins + bin])
+                .sum();
 
             assert!((real - spectrum[frame][bin].re).abs() < 1e-3);
             assert!((imaginary - spectrum[frame][bin].im).abs() < 1e-3);
@@ -367,11 +399,15 @@ mod tests {
     fn a_1_khz_tone_peaks_in_the_band_containing_1_khz() {
         let config = MelConfig::default();
         let analyzer = MelAnalyzer::new(config);
-        let tone: Vec<f32> = (0..24_000).map(|index| (2.0 * PI * 1000.0 * index as f32 / 24_000.0).sin()).collect();
+        let tone: Vec<f32> = (0..24_000)
+            .map(|index| (2.0 * PI * 1000.0 * index as f32 / 24_000.0).sin())
+            .collect();
 
         let log_mel = analyzer.log_mel(&tone);
         let middle_frame = &log_mel[20 * config.mel_bands..21 * config.mel_bands];
-        let loudest_band = (0..config.mel_bands).max_by(|&a, &b| middle_frame[a].total_cmp(&middle_frame[b])).unwrap();
+        let loudest_band = (0..config.mel_bands)
+            .max_by(|&a, &b| middle_frame[a].total_cmp(&middle_frame[b]))
+            .unwrap();
 
         let bin_for_1khz = (1000.0 * config.fft_size as f32 / config.sample_rate as f32).round() as usize;
         assert!(analyzer.filterbank[bin_for_1khz * config.mel_bands + loudest_band] > 0.0);
@@ -425,7 +461,11 @@ mod edge_tests {
         let frames = analyzer.stft(&vec![0.0f32; 2_400]);
 
         assert_eq!(frames.len(), analyzer.config.frame_count(2_400));
-        assert!(frames.iter().all(|frame| frame.len() == analyzer.config.frequency_bins()));
+        assert!(
+            frames
+                .iter()
+                .all(|frame| frame.len() == analyzer.config.frequency_bins())
+        );
     }
 
     #[test]

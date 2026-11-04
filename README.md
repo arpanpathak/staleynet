@@ -39,7 +39,7 @@ limitations are written up in a [paper](docs/assets/paper-preprint.pdf) and a
 ## How it works
 
 <p align="center">
-  <img src="docs/assets/diagrams/overview.svg" width="100%" alt="Training: a recording becomes a log-mel spectrogram, residual k-means tokens, and a delayed staircase that the Transformer learns from caption and lyrics bytes. Generation: the Transformer samples tokens one step at a time, the tokens become a spectrogram, and Griffin-Lim recovers the waveform.">
+  <img src="docs/assets/diagrams/overview.svg" width="100%" alt="Training: a recording becomes a log-mel spectrogram, residual k-means tokens, and a delayed staircase that the Transformer learns from caption and lyrics bytes. Generation: the Transformer samples tokens one step at a time, the tokens become a spectrogram, and a vocoder, Griffin-Lim or the learned one, recovers the waveform.">
 </p>
 
 **Training (top row).** A recording is resampled to 24,000 samples per second
@@ -50,8 +50,9 @@ the Transformer learns to predict the next codes from the caption, the lyrics
 and the codes so far.
 
 **Generation (bottom row).** The Transformer produces codes one step at a time,
-the codes are turned back into a spectrogram, and the Griffin-Lim algorithm
-estimates the phase that the spectrogram does not store, giving a waveform.
+the codes are turned back into a spectrogram, and a vocoder supplies the phase
+that the spectrogram does not store, giving a waveform: the Griffin-Lim
+algorithm, or the neural vocoder described below.
 The diagram shows the first configuration; the current tokenizer uses 16
 codes per step, described below.
 
@@ -88,6 +89,25 @@ first model (6 blocks of width 256, 7.1 million parameters); the larger models
 use 8 blocks of width 512 (42.9 million) and 12 blocks of width 768
 (111.5 million).
 
+### The neural vocoder
+
+<p align="center">
+  <img src="docs/assets/diagrams/vocoder.svg" width="44%" alt="The neural vocoder: a log-mel spectrogram decoded from tokens is standardized, lifted to 512 numbers per frame by a convolution over time, passed through eight ConvNeXt blocks, and turned by a linear head into the log-magnitude and phase of 513 frequencies; the inverse STFT turns that spectrum into samples">
+</p>
+
+Griffin-Lim guesses the missing phase by making neighboring frames agree, and
+voices come out with a metallic smear. The neural vocoder learns the phase
+from real recordings instead. Following Vocos, it stays at the frame rate:
+eight ConvNeXt blocks (13.6 million parameters) predict the log-magnitude and
+the phase of all 513 frequencies of each frame, and an inverse STFT, written
+as two matrix products and an overlap-add, turns that spectrum into samples.
+It trains on spectrograms *decoded from our own tokens*, with the original
+recordings as targets, so it also learns to restore part of the detail the
+tokens lose. The loss compares log energies at three frame lengths (512,
+1,024 as mel bands, and 2,048 samples), and every gradient, including those
+of the inverse STFT and the losses, is derived by hand and checked against
+finite differences.
+
 ## Results so far
 
 <p align="center">
@@ -106,24 +126,42 @@ use 8 blocks of width 512 (42.9 million) and 12 blocks of width 768
   without ever hearing real audio, so sustained harmonics, the substance of a
   sung vowel, lose their coherence and voices take on a metallic smear. Even on
   a perfect spectrogram it adds 0.19 log units of error per band, and the
-  audible damage is larger than that number shows. A neural vocoder in the
-  style of Vocos, trained on spectrograms decoded from our own tokens with the
-  original recordings as targets, is being built to replace it.
+  audible damage is larger than that number shows. The neural vocoder above,
+  which learns phase from recordings, is training to replace it.
 * **Lyrics are not yet used.** A paired test that compares the loss with the
   right, no and wrong lyrics finds no reliable difference on held-out songs.
   The lyrics corpus (78 songs) is small, and a larger one is in preparation.
 
 ### Training now
 
-The 42.9-million-parameter model `pq-large` is training on the AGX Thor. Its
-curves are published to Hugging Face every two hours and appear here
-automatically:
+The first 42.9-million-parameter model, `pq-large`, overfitted. Its training
+loss kept falling while its held-out loss stopped at 5.06 nats per code, and it
+returned nearly the same song for different prompts. The cause was sampling:
+the small lyrics corpus and two recorded takes were weighted so heavily that
+each lyrics song was drawn about 650 times and each take more than 1,600 times.
+The [book](https://arpanpathak.github.io/staleynet/training.html#overfitting-and-how-often-each-song-is-seen)
+explains how to compute these counts.
+
+`pq-rock-balanced` replaces it on the AGX Thor: the same model trained on
+30,054 songs (Song Describer, JamendoLyrics and 29,314 FMA rock tracks), with
+weights chosen so that no song is drawn more than about 16 times in 30,000
+steps. Its curves are published to Hugging Face every two hours and appear here
+automatically; the number to watch is the gap between the training and the
+held-out loss.
 
 <p align="center">
-  <img src="https://huggingface.co/arpanpathak/staleynet-checkpoints/resolve/main/plots/pq-large.png" width="100%" alt="pq-large training curves: training and validation loss against step, validation loss per codebook grouped by residual level, and throughput">
+  <img src="https://huggingface.co/arpanpathak/staleynet-checkpoints/resolve/main/plots/pq-rock-balanced.png" width="100%" alt="pq-rock-balanced training curves: training and validation loss against step, validation loss per codebook grouped by residual level, and throughput">
 </p>
 
-Next, `pq-xl` (111.5 million parameters) trains on about 300 hours of music:
+The neural vocoder `vocoder-rock` trains beside it on the 273 hours of FMA
+rock, 200,000 steps of 16 windows of 0.71 s each. Its curves and its renderings
+of held-out clips are published the same way:
+
+<p align="center">
+  <img src="https://huggingface.co/arpanpathak/staleynet-checkpoints/resolve/main/plots/vocoder-rock.png" width="100%" alt="vocoder-rock training curves: spectral loss against step, validation loss per resolution, and milliseconds per step">
+</p>
+
+Next, `pq-xl` (111.5 million parameters) trains on the same balanced mix, about 300 hours of music:
 the 23 hours of the Song Describer Dataset with human-written captions, the
 JamendoLyrics songs with timed lyrics, and 32,923 rock-family clips from the
 Free Music Archive (punk, garage, grunge-adjacent loud and noise rock,
@@ -171,6 +209,19 @@ Training writes `latest/` (weights, AdamW moments and the step) every
 `checkpoint_every` steps; `--resume` continues from it without losing the
 optimizer state, and `--steps N` extends a finished run. `evaluate` runs the
 paired lyrics test.
+
+### Neural vocoder
+
+```bash
+staleynet vocoder prepare --cache data/cache-fma-rock   # store each clip's samples beside its tokens
+staleynet vocoder train   --cache data/cache-fma-rock --run runs/vocoder-rock --config configs/vocoder-rock-thor.json
+staleynet vocoder render  --cache data/cache-fma-rock --run runs/vocoder-rock --out samples/vocoder
+staleynet sing --run runs/pq-large --vocoder runs/vocoder-rock --prompt "gritty rock vocal, distorted guitars" --out song.wav
+```
+
+Training resumes from `latest/` by itself, and every 5,000 steps it renders
+held-out clips beside the recordings and their Griffin-Lim versions. The
+studio lists trained vocoders next to Griffin-Lim.
 
 ## Training on a second Jetson
 
@@ -226,9 +277,9 @@ page are drawn from the same TikZ sources.
 |---|---|
 | [`staleynet-audio`](crates/staleynet-audio) | decoding, polyphase resampling, log-mel spectrogram, Griffin-Lim; [on crates.io](https://crates.io/crates/staleynet-audio) |
 | `staleynet-cuda` | GPU kernels in Rust (one module per topic), tensors, shape-checked operations, CPU references |
-| `staleynet-model` | the Transformer with hand-derived gradients, AdamW, cached decoding, sampling, checkpoints |
+| `staleynet-model` | the networks: the Transformer and the neural vocoder (ConvNeXt network, inverse STFT, spectral losses), all with hand-derived gradients; AdamW, cached decoding, sampling, checkpoints |
 | `staleynet-data` | dataset catalogs, GPU log-mel, the residual k-means tokenizer, batch sampling |
-| `staleynet-train` | the training loop, validation, metrics and checkpoint policy |
+| `staleynet-train` | the training loops of the language model and the vocoder: batches, validation, metrics and checkpoint policy |
 | `staleynet-cli` | the `staleynet` command |
 
 `studio/` is a small web app for listening and recording, `deploy/` holds the

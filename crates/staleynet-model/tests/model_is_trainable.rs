@@ -14,7 +14,10 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 
 fn gpu() -> MutexGuard<'static, Gpu> {
     static GPU: OnceLock<Mutex<Gpu>> = OnceLock::new();
-    let guard = GPU.get_or_init(|| Mutex::new(Gpu::new(0).expect("CUDA device 0"))).lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let guard = GPU
+        .get_or_init(|| Mutex::new(Gpu::new(0).expect("CUDA device 0")))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     guard.bind_to_current_thread().expect("bind CUDA context");
     guard
 }
@@ -98,7 +101,9 @@ fn analytic_gradients_match_finite_differences() {
     let mut model = Gpt::new(&gpu, config.clone(), 3).unwrap();
     let mut workspace = TrainingWorkspace::new(&gpu, &config, shape).unwrap();
 
-    model.accumulate_gradients(&gpu, &mut workspace, &batch).unwrap();
+    model
+        .accumulate_gradients(&gpu, &mut workspace, &batch)
+        .unwrap();
     let mut analytic: Vec<(String, Vec<f32>)> = Vec::new();
     model.visit_parameters(&mut |parameter| analytic.push((parameter.name.clone(), gpu.download(&parameter.gradient).unwrap())));
 
@@ -111,9 +116,15 @@ fn analytic_gradients_match_finite_differences() {
             let original = read_parameter(&gpu, &mut model, parameter_index, element);
 
             write_parameter(&gpu, &mut model, parameter_index, element, original + step);
-            let loss_up = model.forward_loss(&gpu, &mut workspace, &batch).unwrap().mean;
+            let loss_up = model
+                .forward_loss(&gpu, &mut workspace, &batch)
+                .unwrap()
+                .mean;
             write_parameter(&gpu, &mut model, parameter_index, element, original - step);
-            let loss_down = model.forward_loss(&gpu, &mut workspace, &batch).unwrap().mean;
+            let loss_down = model
+                .forward_loss(&gpu, &mut workspace, &batch)
+                .unwrap()
+                .mean;
             write_parameter(&gpu, &mut model, parameter_index, element, original);
 
             let numeric = (loss_up - loss_down) / (2.0 * step);
@@ -153,16 +164,24 @@ fn assert_cached_decoding_matches(config: ModelConfig) {
     let mut decoder = Decoder::new(&gpu, &model).unwrap();
     let prefill = 7;
     let mut fed = prefill;
-    let mut logits = decoder.feed(&gpu, &model, &batch.tokens[..prefill * codebooks]).unwrap();
+    let mut logits = decoder
+        .feed(&gpu, &model, &batch.tokens[..prefill * codebooks])
+        .unwrap();
     loop {
         let expected = &full_logits[(fed - 1) * logits_width..fed * logits_width];
-        let worst = expected.iter().zip(&logits).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+        let worst = expected
+            .iter()
+            .zip(&logits)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f32::max);
         assert!(worst < 1e-4, "position {}: max difference {worst}", fed - 1);
 
         if fed == shape.time {
             break;
         }
-        logits = decoder.feed(&gpu, &model, &batch.tokens[fed * codebooks..(fed + 1) * codebooks]).unwrap();
+        logits = decoder
+            .feed(&gpu, &model, &batch.tokens[fed * codebooks..(fed + 1) * codebooks])
+            .unwrap();
         fed += 1;
     }
 }
@@ -179,10 +198,16 @@ fn a_fixed_batch_is_memorised() {
         OptimizerConfig { peak_learning_rate: 1e-2, final_learning_rate: 1e-2, warmup_steps: 1, weight_decay: 0.0, ..Default::default() };
     let mut optimizer = AdamW::new(&gpu, optimizer_config, &mut model).unwrap();
 
-    let initial = model.accumulate_gradients(&gpu, &mut workspace, &batch).unwrap().mean;
+    let initial = model
+        .accumulate_gradients(&gpu, &mut workspace, &batch)
+        .unwrap()
+        .mean;
     let mut last = initial;
     for _ in 0..300 {
-        last = model.accumulate_gradients(&gpu, &mut workspace, &batch).unwrap().mean;
+        last = model
+            .accumulate_gradients(&gpu, &mut workspace, &batch)
+            .unwrap()
+            .mean;
         optimizer.step(&gpu, &mut model).unwrap();
     }
 

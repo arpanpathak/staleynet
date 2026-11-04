@@ -9,7 +9,7 @@
   \node[block, fill=blockrose, minimum width=22mm, anchor=south] (lyrics) at ($(model.north)+(13mm,8mm)$) {lyrics bytes};
   \node[block, fill=blockgreen, minimum width=27mm, below=11mm of model] (sample) {sampled tokens\\[-1pt]\scriptsize top-$k$ and guidance};
   \node[block, fill=blockgreen, minimum width=27mm, left=of sample] (decode) {sum of prototypes\\[-1pt]\scriptsize log-mel spectrogram};
-  \node[block, fill=blockgreen, minimum width=27mm, left=of decode] (gl) {Griffin-Lim\\[-1pt]\scriptsize phase estimation};
+  \node[block, fill=blockgreen, minimum width=27mm, left=of decode] (gl) {vocoder\\[-1pt]\scriptsize Griffin-Lim or learned};
   \node[block, fill=blockgray, minimum width=22mm, left=of gl] (out) {music\\[-1pt]\scriptsize 24\,kHz};
   \draw[flow] (audio) -- (mel);
   \draw[flow] (mel) -- (rvq);

@@ -10,6 +10,7 @@ use staleynet_audio::{MelAnalyzer, MelConfig};
 use staleynet_data::store::{CacheLayout, DatasetManifest, write_codes};
 use staleynet_data::tokenizer::AudioTokenizer;
 use staleynet_model::generate::{AttentionMode, GenerationConfig, GenerationStats, Guidance, Sampling, generate};
+use staleynet_model::vocoder;
 use staleynet_model::{Conditioning, checkpoint};
 use staleynet_train::{RUN_TOKENIZER, preferred_checkpoint};
 use std::path::{Path, PathBuf};
@@ -83,9 +84,14 @@ pub struct Arguments {
     #[arg(long)]
     save_codes: Option<PathBuf>,
 
-    /// Griffin-Lim iterations for the waveform.
+    /// Griffin-Lim iterations for the waveform, when no neural vocoder is given.
     #[arg(long, default_value_t = 64)]
     griffin_lim_iterations: usize,
+
+    /// A trained neural vocoder run (`staleynet vocoder train`) to turn the
+    /// spectrogram into samples instead of Griffin-Lim.
+    #[arg(long)]
+    vocoder: Option<PathBuf>,
 }
 
 /// What `sing` writes beside the WAV.
@@ -112,7 +118,10 @@ struct SingReport {
     /// Token sampling timing.
     generation: GenerationStats,
 
-    /// Seconds spent in Griffin-Lim.
+    /// The vocoder checkpoint used, or `None` for Griffin-Lim.
+    vocoder: Option<PathBuf>,
+
+    /// Seconds spent turning the spectrogram into samples.
     vocoder_seconds: f64,
 
     /// (sampling + vocoding time) / audio duration; below 1 is faster than real time.
@@ -145,9 +154,22 @@ pub fn run(arguments: Arguments) -> Result<()> {
         write_codes(path, &generation.codes)?;
     }
 
+    let log_mel = tokenizer.decode(&generation.codes, tokenizer.config.codebooks);
+    let vocoder_checkpoint = arguments
+        .vocoder
+        .as_deref()
+        .map(staleynet_train::vocoder::preferred_checkpoint);
     let vocoder_started = Instant::now();
-    let griffin = GriffinLimConfig { iterations: arguments.griffin_lim_iterations, seed: arguments.seed };
-    let waveform = griffin_lim(&MelAnalyzer::new(mel), &tokenizer.decode(&generation.codes, tokenizer.config.codebooks), griffin);
+    let waveform = match &vocoder_checkpoint {
+        Some(directory) => {
+            let restored = vocoder::checkpoint::load(&gpu, directory)?;
+            restored.vocoder.synthesize(&gpu, &log_mel)?
+        }
+        None => {
+            let griffin = GriffinLimConfig { iterations: arguments.griffin_lim_iterations, seed: arguments.seed };
+            griffin_lim(&MelAnalyzer::new(mel), &log_mel, griffin)
+        }
+    };
     let vocoder_seconds = vocoder_started.elapsed().as_secs_f64();
 
     write_mono_pcm16(&arguments.out, &waveform, mel.sample_rate)?;
@@ -159,6 +181,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
         model_reads_lyrics,
         checkpoint: checkpoint_directory,
         checkpoint_step: metadata.step,
+        vocoder: vocoder_checkpoint,
         audio_seconds,
         generation: generation.stats,
         vocoder_seconds,

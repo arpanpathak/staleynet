@@ -15,6 +15,7 @@
 - [Lyrics Conditioning](lyrics.md)
 - [Training](training.md)
 - [Generation](generation.md)
+- [The Neural Vocoder](vocoder.md)
 - [GPU Implementation](gpu.md)
 
 # Evaluation

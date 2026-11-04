@@ -126,7 +126,8 @@ fn stable_hash(text: &str) -> u64 {
     const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0000_0100_0000_01b3;
 
-    text.bytes().fold(OFFSET_BASIS, |hash, byte| (hash ^ byte as u64).wrapping_mul(PRIME))
+    text.bytes()
+        .fold(OFFSET_BASIS, |hash, byte| (hash ^ byte as u64).wrapping_mul(PRIME))
 }
 
 /// The split of a group: a deterministic ~[`VALIDATION_PERCENT`] % hold-out.
@@ -136,7 +137,9 @@ pub fn split_for(group: &str) -> Split {
 
 /// Keeps ASCII letters, digits, `-` and `_`; replaces everything else.
 fn file_safe(text: &str) -> String {
-    text.chars().map(|character| if character.is_ascii_alphanumeric() || character == '-' { character } else { '_' }).collect()
+    text.chars()
+        .map(|character| if character.is_ascii_alphanumeric() || character == '-' { character } else { '_' })
+        .collect()
 }
 
 /// One row of `song_describer.csv` (only the columns used).
@@ -210,7 +213,9 @@ fn find_audio_root(directory: &Path) -> Result<PathBuf> {
 
 /// True for the two-digit shard folders (`00` … `99`) of the Jamendo layout.
 fn is_shard_directory(path: &Path) -> bool {
-    path.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.len() == 2 && name.bytes().all(|byte| byte.is_ascii_digit()))
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.len() == 2 && name.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 /// Resolves a caption-file path to an existing audio file, trying the
@@ -218,7 +223,9 @@ fn is_shard_directory(path: &Path) -> bool {
 fn locate_song_describer_audio(audio_root: &Path, relative: &str) -> Option<PathBuf> {
     let exact = audio_root.join(relative);
     let clip = audio_root.join(relative.replace(".mp3", ".2min.mp3"));
-    [exact, clip].into_iter().find(|candidate| candidate.is_file())
+    [exact, clip]
+        .into_iter()
+        .find(|candidate| candidate.is_file())
 }
 
 /// Every audio file under `root` (recursively), described by its sidecar
@@ -235,8 +242,15 @@ pub fn folder(root: &Path) -> Result<Vec<Track>> {
 
     let mut tracks = Vec::with_capacity(audio_files.len());
     for audio_path in audio_files {
-        let stem = audio_path.file_stem().map(|stem| stem.to_string_lossy().to_string()).unwrap_or_default();
-        let relative = audio_path.strip_prefix(root).unwrap_or(&audio_path).to_string_lossy().to_string();
+        let stem = audio_path
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let relative = audio_path
+            .strip_prefix(root)
+            .unwrap_or(&audio_path)
+            .to_string_lossy()
+            .to_string();
         let id = format!("own-{}", file_safe(&relative));
 
         let sidecar = audio_path.with_extension("txt");
@@ -250,8 +264,9 @@ pub fn folder(root: &Path) -> Result<Vec<Track>> {
             Err(_) => vec![Caption { text: stem.replace(['_', '-'], " "), source: CaptionSource::FileName }],
         };
 
-        let lyrics =
-            std::fs::read_to_string(audio_path.with_extension(LYRICS_SIDECAR_SUFFIX)).map(|text| untimed_lines(&text)).unwrap_or_default();
+        let lyrics = std::fs::read_to_string(audio_path.with_extension(LYRICS_SIDECAR_SUFFIX))
+            .map(|text| untimed_lines(&text))
+            .unwrap_or_default();
         let split_group = folder_split_group(root, &audio_path).unwrap_or_else(|| id.clone());
         tracks.push(Track { split: split_for(&split_group), split_group, id, audio_path, captions, lyrics });
     }
@@ -272,7 +287,11 @@ fn folder_split_group(root: &Path, audio_path: &Path) -> Option<String> {
 
 /// Non-empty lines of `text` as lyrics with unknown timing.
 fn untimed_lines(text: &str) -> Vec<LyricLine> {
-    text.lines().map(str::trim).filter(|line| !line.is_empty()).map(|line| LyricLine { text: line.to_string(), timing: None }).collect()
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| LyricLine { text: line.to_string(), timing: None })
+        .collect()
 }
 
 /// One row of `JamendoLyrics.csv` (only the columns used).
@@ -365,7 +384,9 @@ mod tests {
 
     #[test]
     fn splits_are_deterministic_and_roughly_ten_percent() {
-        let validation = (0..10_000).filter(|index| split_for(&format!("artist-{index}")) == Split::Validation).count();
+        let validation = (0..10_000)
+            .filter(|index| split_for(&format!("artist-{index}")) == Split::Validation)
+            .count();
         assert!((800..1200).contains(&validation), "{validation} validation groups");
         assert_eq!(split_for("artist-42"), split_for("artist-42"));
     }

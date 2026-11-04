@@ -70,8 +70,9 @@ twice the computation per step and somewhat less variety between samples.
 When all steps have been generated, the delay pattern is undone so that the
 four numbers of each step are back together. Each step is decoded by adding up
 its four prototypes, the standardization applied before tokenization is
-reversed, and the resulting spectrogram is converted into a waveform with 64
-rounds of Griffin-Lim. `staleynet sing` writes the waveform and a short report
+reversed, and the resulting spectrogram is converted into a waveform, either
+with 64 rounds of Griffin-Lim or, given `--vocoder`, with a trained
+[neural vocoder](vocoder.md). `staleynet sing` writes the waveform and a short report
 of the time spent in each stage, including the real-time factor: the time
 taken divided by the duration of the audio produced, so that a value below one
 means faster than real time.

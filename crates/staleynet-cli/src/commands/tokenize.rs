@@ -78,7 +78,12 @@ struct TrackReport {
 /// Mean absolute difference over the shorter of two log-mels.
 fn mean_absolute_error(reference: &[f32], estimate: &[f32]) -> f32 {
     let compared = reference.len().min(estimate.len());
-    reference[..compared].iter().zip(&estimate[..compared]).map(|(a, b)| (a - b).abs()).sum::<f32>() / compared.max(1) as f32
+    reference[..compared]
+        .iter()
+        .zip(&estimate[..compared])
+        .map(|(a, b)| (a - b).abs())
+        .sum::<f32>()
+        / compared.max(1) as f32
 }
 
 /// Fits a new tokenizer to the training split of the cache.
@@ -94,7 +99,11 @@ fn train_tokenizer(gpu: &Gpu, arguments: &Arguments, layout: &CacheLayout, manif
     };
 
     let mut vectors = Vec::new();
-    for entry in manifest.tracks.iter().filter(|entry| entry.track.split == Split::Train) {
+    for entry in manifest
+        .tracks
+        .iter()
+        .filter(|entry| entry.track.split == Split::Train)
+    {
         let log_mel = read_f16(&layout.mel(&entry.track.id))?;
         vectors.extend(AudioTokenizer::step_vectors(&log_mel, mel_bands, config.frames_per_step, &manifest.normalization));
     }
@@ -132,8 +141,9 @@ pub fn run(arguments: Arguments) -> Result<()> {
         let codes = tokenizer.encode(&gpu, &log_mel)?;
         write_codes(&layout.codes(id), &codes)?;
 
-        let errors =
-            (1..=tokenizer.config.levels()).map(|levels| mean_absolute_error(&log_mel, &tokenizer.decode(&codes, levels))).collect();
+        let errors = (1..=tokenizer.config.levels())
+            .map(|levels| mean_absolute_error(&log_mel, &tokenizer.decode(&codes, levels)))
+            .collect();
         reports.push(TrackReport { id: id.clone(), split: entry.track.split, log_mel_error_by_levels: errors });
 
         let Some(listen) = &arguments.listen else { continue };
@@ -178,13 +188,23 @@ fn render_listening_pair(
 /// Prints the mean reconstruction error of `split`'s tracks after decoding
 /// with 1, 2, … `levels` residual levels. Prints nothing for an empty split.
 fn print_mean_errors(reports: &[TrackReport], split: Split, levels: usize) {
-    let selected: Vec<&TrackReport> = reports.iter().filter(|report| report.split == split).collect();
+    let selected: Vec<&TrackReport> = reports
+        .iter()
+        .filter(|report| report.split == split)
+        .collect();
     if selected.is_empty() {
         return;
     }
 
     let count = selected.len() as f32;
-    let mean_by_level: Vec<f32> =
-        (0..levels).map(|level| selected.iter().map(|report| report.log_mel_error_by_levels[level]).sum::<f32>() / count).collect();
+    let mean_by_level: Vec<f32> = (0..levels)
+        .map(|level| {
+            selected
+                .iter()
+                .map(|report| report.log_mel_error_by_levels[level])
+                .sum::<f32>()
+                / count
+        })
+        .collect();
     eprintln!("{split:?}: mean |log-mel error| by levels used {mean_by_level:.3?}");
 }

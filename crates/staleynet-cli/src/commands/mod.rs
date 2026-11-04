@@ -7,6 +7,7 @@ pub mod reconstruct;
 pub mod sing;
 pub mod tokenize;
 pub mod train;
+pub mod vocoder;
 
 use anyhow::{Context, Result};
 use staleynet_cuda::Gpu;

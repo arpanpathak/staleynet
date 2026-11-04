@@ -53,7 +53,8 @@ impl FeedForward {
 
     /// `output = FFN(input)`.
     pub fn forward(&self, gpu: &Gpu, input: &Tensor, activations: &mut FeedForwardTensors, output: &mut Tensor) -> GpuResult {
-        self.expand.forward(gpu, input, &mut activations.pre_activation)?;
+        self.expand
+            .forward(gpu, input, &mut activations.pre_activation)?;
         gpu.gelu_forward(&activations.pre_activation, &mut activations.hidden)?;
         self.project.forward(gpu, &activations.hidden, output)
     }
@@ -68,9 +69,11 @@ impl FeedForward {
         hidden_grads: &mut FeedForwardTensors,
         input_grad: &mut Tensor,
     ) -> GpuResult {
-        self.project.backward(gpu, &activations.hidden, output_grad, &mut hidden_grads.hidden)?;
+        self.project
+            .backward(gpu, &activations.hidden, output_grad, &mut hidden_grads.hidden)?;
         gpu.gelu_backward(&activations.pre_activation, &hidden_grads.hidden, &mut hidden_grads.pre_activation)?;
-        self.expand.backward(gpu, input, &hidden_grads.pre_activation, input_grad)
+        self.expand
+            .backward(gpu, input, &hidden_grads.pre_activation, input_grad)
     }
 }
 

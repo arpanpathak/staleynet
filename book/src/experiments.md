@@ -264,17 +264,16 @@ impression rather than a controlled evaluation.
 
 ### A larger model on the finer tokens (AGX Thor)
 
-With the finer tokens, a larger model is being trained on the Thor
+With the finer tokens, a larger model was trained on the Thor
 (`configs/pq-large-thor.json`): 8 blocks of width 512 with 8 heads, 42.9
-million parameters, with the lyrics field enabled from the start. It is trained
-on all 742 training songs of the combined corpora, with JamendoLyrics weighted
-4-fold and the author's two takes weighted 10-fold, in batches of 8 sequences
-of 1 408 positions. A step takes 2.0 seconds and about 11 GB of memory. At step
-10 500 of 20 000 the held-out loss is 5.09 nats per code, averaged over its 16
-codebooks, and still falling; because the vocabulary differs, this figure is
-not comparable with the losses above. Its curves are published on
-[Hugging Face](https://huggingface.co/arpanpathak/staleynet-checkpoints) every
-two hours.
+million parameters, with the lyrics field enabled from the start. It was
+trained on all 742 training songs of the combined corpora, with JamendoLyrics
+weighted 4-fold and the author's two takes weighted 10-fold, in batches of 8
+sequences. A step took 2.0 seconds and about 11 GB of memory. Its best held-out
+loss was 5.062 nats per code, averaged over its 16 codebooks, at step 18 500 of
+20 000; because the vocabulary differs, this figure is not comparable with the
+losses above. Its curves are published on
+[Hugging Face](https://huggingface.co/arpanpathak/staleynet-checkpoints).
 
 ![pq-large training curves](https://huggingface.co/arpanpathak/staleynet-checkpoints/resolve/main/plots/pq-large.png)
 
@@ -282,6 +281,44 @@ The per-codebook panel shows the coarse-to-fine structure directly: the four
 codebooks of the coarsest level are predicted at about 3.0 nats, each finer
 level is harder, and the finest approach the uniform guess of 6.93, because
 they encode residual detail that is close to noise.
+
+#### The model overfitted
+
+The table compares the training loss, averaged over the 1 000 steps before each
+point, with the held-out loss at that point. The training loss is measured with
+the prompt dropped from 10 % of the sequences, which raises it slightly, so the
+true gap is, if anything, larger.
+
+| Step | Training loss | Held-out loss | Gap |
+|---|---|---|---|
+| 2 500 | 5.080 | 5.333 | 0.253 |
+| 5 000 | 4.714 | 5.178 | 0.464 |
+| 10 000 | 4.443 | 5.091 | 0.648 |
+| 15 000 | 4.137 | 5.066 | 0.929 |
+| 20 000 | 4.091 | 5.066 | 0.975 |
+
+From step 15 000 the held-out loss no longer improved, while the training loss
+kept falling: everything the model learned in its last quarter applied only to
+its training songs. The gap grew to almost one nat per code, which means the
+model assigned to each code of its training songs, as a geometric mean,
+\\(e^{0.975} \approx 2.7\\) times the probability it assigned to a code of a song
+it had not heard. Listening
+agreed: different prompts produced nearly the same song, and a line of lyrics
+from a training song recurred. The cause was the sampling weights, under which
+each lyric-bearing song was drawn about 650 times and each of the author's
+takes more than 1 600 times
+([Training](training.md#overfitting-and-how-often-each-song-is-seen)).
+
+#### A balanced run
+
+A second run, `pq-large-rock`, added the 29 314 rock tracks of the Free Music
+Archive but kept the heavy weights on the small datasets, and was stopped
+after 1 000 steps for that reason. Its replacement, `pq-rock-balanced`
+(`configs/pq-rock-balanced-thor.json`), trains the same 42.9-million-parameter
+model on 30 054 songs for 30 000 steps, with weights chosen so that no song is
+drawn more than about 16 times. It is in progress; its curves are published
+alongside those of `pq-large`, and the quantity to watch is the gap between the
+two losses.
 
 ## 7. Lyrics conditioning
 

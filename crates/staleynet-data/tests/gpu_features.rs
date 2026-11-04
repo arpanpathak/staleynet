@@ -15,10 +15,15 @@ const AUDIBLE_LOG_ENERGY: f32 = -8.0;
 fn gpu_log_mel_matches_the_fft_reference() {
     let gpu = Gpu::new(0).unwrap();
     let analyzer = MelAnalyzer::new(MelConfig::default());
-    let signal: Vec<f32> = (0..100_000).map(|index| ((index as f32 * 0.031).sin() + 0.3 * (index as f32 * 0.17).cos()) * 0.5).collect();
+    let signal: Vec<f32> = (0..100_000)
+        .map(|index| ((index as f32 * 0.031).sin() + 0.3 * (index as f32 * 0.17).cos()) * 0.5)
+        .collect();
 
     let expected = analyzer.log_mel(&signal);
-    let actual = GpuMelExtractor::new(&gpu, &analyzer).unwrap().log_mel(&gpu, &analyzer, &signal).unwrap();
+    let actual = GpuMelExtractor::new(&gpu, &analyzer)
+        .unwrap()
+        .log_mel(&gpu, &analyzer, &signal)
+        .unwrap();
 
     assert_eq!(expected.len(), actual.len());
     let worst = expected
@@ -56,7 +61,12 @@ fn errors_by_level(band_groups: usize) -> Vec<f32> {
     (1..=levels)
         .map(|used| {
             let reconstruction = tokenizer.decode(&codes, used);
-            reconstruction.iter().zip(&log_mel).map(|(a, b)| (a - b).powi(2)).sum::<f32>() / log_mel.len() as f32
+            reconstruction
+                .iter()
+                .zip(&log_mel)
+                .map(|(a, b)| (a - b).powi(2))
+                .sum::<f32>()
+                / log_mel.len() as f32
         })
         .collect()
 }

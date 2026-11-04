@@ -105,7 +105,8 @@ impl Decoder {
 
     /// Frees scratch buffers that are not for `keep_positions`-sized feeds.
     pub fn release_scratch_except(&mut self, keep_positions: usize) {
-        self.scratch.retain(|&positions, _| positions == keep_positions);
+        self.scratch
+            .retain(|&positions, _| positions == keep_positions);
     }
 
     /// Feeds `token_slots` (`[new positions, codebooks]`) and returns the
@@ -120,7 +121,9 @@ impl Decoder {
             Entry::Vacant(entry) => entry.insert(FeedScratch::new(gpu, model, new_positions)?),
         };
 
-        let positions = model.vocabulary().position_ids(self.cached_positions, new_positions);
+        let positions = model
+            .vocabulary()
+            .position_ids(self.cached_positions, new_positions);
         gpu.copy_tokens_from_host(&mut scratch.tokens, token_slots)?;
         gpu.copy_tokens_from_host(&mut scratch.positions, &positions)?;
 
@@ -132,8 +135,12 @@ impl Decoder {
         }
         self.cached_positions += new_positions;
 
-        model.final_norm.forward(gpu, &scratch.residual, &mut scratch.final_normed, &mut scratch.final_inv_rms)?;
-        model.head.forward(gpu, &scratch.final_normed, &mut scratch.logits)?;
+        model
+            .final_norm
+            .forward(gpu, &scratch.residual, &mut scratch.final_normed, &mut scratch.final_inv_rms)?;
+        model
+            .head
+            .forward(gpu, &scratch.final_normed, &mut scratch.logits)?;
 
         let logits_width = model.config.logits_width();
         let mut all_logits = gpu.download(&scratch.logits)?;

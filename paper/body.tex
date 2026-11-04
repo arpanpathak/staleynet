@@ -147,8 +147,9 @@ line-level timings of the JamendoLyrics benchmark
 \cite{zeghidour2021soundstream,defossez2023encodec,kumar2023dac} and neural
 vocoders \cite{kong2020hifigan,siuzdak2023vocos} achieve far higher fidelity
 than $k$-means tokens and the Griffin-Lim algorithm
-\cite{griffin1984signal,perraudin2013fast}, at a training cost beyond our
-setting; \cref{sec:pipeline} measures what our simpler choices cost.
+\cite{griffin1984signal,perraudin2013fast}. A codec costs more training than our
+setting allows; \cref{sec:pipeline} measures what our simpler tokens cost, and
+\cref{sec:vocoder} adapts Vocos to replace Griffin-Lim.
 
 \section{From sound to spectrogram and back}
 \label{sec:representation}
@@ -400,8 +401,122 @@ pre-echo. Even on a perfect spectrogram the method adds a spectral error of
 0.19 log units per band (\cref{tab:reconstruction}), and the artifacts it
 causes are larger than that number suggests, because a spectral error measures
 magnitudes only. A neural vocoder, which learns phase from real recordings
-\cite{kong2020hifigan,siuzdak2023vocos}, removes these artifacts; we are
-building one in the same framework (\cref{sec:limitations}).
+\cite{kong2020hifigan,siuzdak2023vocos}, avoids these artifacts;
+\cref{sec:vocoder} describes ours.
+
+\subsection{A learned vocoder}
+\label{sec:vocoder}
+
+Our vocoder follows Vocos \cite{siuzdak2023vocos}. Many neural vocoders
+generate the waveform sample by sample, or upsample it through a stack of
+transposed convolutions; Vocos instead stays at the frame rate, predicts the
+magnitude and the phase of every frequency of every frame, and leaves the
+step to 24\,000 samples per second to an inverse STFT (\cref{fig:vocoder}). The network therefore
+runs on 94 frames per second instead of 24\,000 samples, and the inverse
+transform is the same pair of matrix products as the analysis, read in the
+other direction.
+
+\begin{figure}[htbp]
+\centering
+\input{figures/vocoder}
+\caption{The learned vocoder. A convolution lifts each frame's mel bands to
+$D$ numbers, $L$ ConvNeXt blocks mix neighboring frames, and a head predicts
+the log-magnitude and phase of every frequency. The inverse STFT turns that
+spectrum into samples with two matrix products and overlap-add.}
+\label{fig:vocoder}
+\end{figure}
+
+\paragraph{Input.} The input is a log-mel spectrogram $S$ with $F$ frames
+(rows) and $M = 128$ bands (columns), decoded from tokens. Each band is first
+standardized with the tokenizer's statistics, $\hat S_{f,m} = (S_{f,m} -
+\mu_m)/\sigma_m$, where $\mu_m$ and $\sigma_m$ are the mean and standard
+deviation of band $m$ over the training recordings, so that every band enters
+the network on a similar scale.
+
+\paragraph{Network.} A convolution over time with $K = 7$ taps maps the $M$
+values of each frame and of its three neighbors on either side to a vector of
+$D = 512$ numbers. We compute it as one matrix product, after copying each
+frame's neighborhood into a row of $KM$ numbers. A stack of $L = 8$ ConvNeXt
+blocks \cite{liu2022convnext} follows. With $h$ the $F \times D$ matrix of
+frame vectors entering a block, the block computes
+\[
+h \leftarrow h + \gamma \odot \bigl(\operatorname{GELU}(\operatorname{Norm}
+(\operatorname{DW}(h))\,W_1 + b_1)\,W_2 + b_2\bigr),
+\]
+where $\operatorname{DW}$ filters each of the $D$ channels over time with its
+own $K$ taps (a \emph{depthwise} convolution, which mixes neighboring frames
+but not channels), $\operatorname{Norm}$ is RMS normalization
+\cite{zhang2019rmsnorm}, $W_1$ is $D \times 3D$ and $W_2$ is $3D \times D$, so
+that the feed-forward part mixes channels within a frame, $b_1$ and $b_2$ are
+biases, and $\gamma$ is a vector of $D$ per-channel scales, initialized to
+$1/L$ so that each block starts as a small correction to its input. A final
+normalization and a linear map, $D \times 2(N/2 + 1)$, give each frame a
+log-magnitude $a_{f,k}$ and a phase $\phi_{f,k}$ (in radians) for each of the
+513 frequencies $k$. The complex spectrum is
+\[
+X_{f,k} = e^{\min(a_{f,k},\, a_\text{max})}\,(\cos\phi_{f,k} + i\sin\phi_{f,k}),
+\]
+with $a_\text{max} = 4.6$, so that no magnitude exceeds $e^{4.6} \approx 100$
+and an untrained network cannot overflow. The network has 13.6 million
+parameters.
+
+\paragraph{Inverse STFT.} Frame $f$ becomes $N$ samples through the inverse
+Fourier transform of a real signal,
+\[
+y_f[n] = \frac{w[n]}{N}\sum_{k=0}^{N/2} c_k\bigl(\operatorname{Re}X_{f,k}\cos\tfrac{2\pi k n}{N} - \operatorname{Im}X_{f,k}\sin\tfrac{2\pi k n}{N}\bigr),
+\]
+where $n \in [0, N)$ is the sample within the frame, $w$ is the Hann window,
+and $c_k = 1$ for $k = 0$ and $k = N/2$ and $2$ otherwise, since every other
+frequency stands for itself and its mirror image. For all frames at once this
+is two matrix products, $(F \times 513)\cdot(513 \times N)$, with the cosines
+and sines, the window and $c_k/N$ folded into constant matrices. Overlap-add
+then places frame $f$ at samples $fH$ to $fH + N - 1$ and divides each sample
+by the sum of squared window values that cover it, which makes analysis
+followed by synthesis return the original signal \cite{griffin1984signal}.
+
+\paragraph{Loss.} The vocoder is trained to make its waveform $\hat x$ sound
+like the recording $x$ that the spectrogram came from, measured in the
+frequency domain at several resolutions, as in Parallel WaveGAN
+\cite{yamamoto2020parallel}. For a resolution with frame length $N_r$ and hop
+$H_r$, let $E_r(x)$ be the matrix of energies of $x$: the squared magnitudes of
+its STFT, pooled into mel bands for one of the resolutions. The loss is
+\[
+\mathcal{L} = \sum_r \lambda_r \operatorname{mean}\bigl|\ln\max(E_r(\hat x),\varepsilon) - \ln\max(E_r(x),\varepsilon)\bigr|,
+\]
+where the mean runs over all frames and frequencies (or bands), $\varepsilon =
+10^{-5}$ is the floor of \cref{tab:analysis}, and the three resolutions are
+log-mel energies at $(N_r, H_r) = (1024, 256)$ with weight $\lambda_r = 1$, and
+log energies at $(512, 128)$ and $(2048, 256)$ with weight $0.5$ each. The
+short frames reward sharp timing, the long ones fine frequency, and the mel
+term weighs errors roughly as the ear does \cite{kong2020hifigan}. Vocos also
+trains against learned discriminators; we begin with these spectral terms
+alone, which are differentiable in closed form and stable.
+
+\paragraph{Gradients.} As for the language model, every gradient is written by
+hand. One observation saves most of the work: cutting a signal into
+overlapping frames and overlap-adding frames into a signal are adjoint linear
+maps, so the gradient of each is the other. A single pair of kernels therefore
+serves the inverse STFT, its gradient, the framing inside every loss and that
+framing's gradient. The gradient of the absolute value is the sign of its
+argument, and the gradient of $e^{a}(\cos\phi + i\sin\phi)$ with respect
+to $a$ and $\phi$ follows from the chain rule. A test perturbs parameters of
+every kind, one at a time, and compares the change of the loss with the
+computed gradient; the two agree to within 5\%.
+
+\paragraph{Training data.} The vocoder only ever sees spectrograms decoded
+from tokens, so it is trained on exactly those. The data are 32\,882 clips of
+30\,s (273 hours) of rock and its subgenres from the Free Music Archive
+\cite{defferrard2017fma}, tokenized with the tokenizer of
+\cref{sec:tokenizer}. For every clip we store its samples, resampled and
+level-normalized as for analysis. A training example is a window of $T = 64$
+consecutive frames decoded from the recording's tokens, together with the
+$(T - 1)H + N = 17\,152$ samples (0.71\,s) that those frames cover, since frame
+$f$ is centered on sample $fH$. The vocoder thus learns the phase and also part
+of the detail that the tokens lose. A batch holds 16 windows from random
+recordings. Training uses AdamW \cite{loshchilov2019adamw} with $\beta_1 =
+0.8$, $\beta_2 = 0.9$, weight decay 0.01 and gradients clipped to norm 1;
+the learning rate rises linearly to $5 \cdot 10^{-4}$ over 1\,000 steps and
+then follows a cosine down to $5 \cdot 10^{-5}$ at 200\,000 steps.
 
 \section{From spectrogram to tokens}
 \label{sec:tokenizer}
@@ -1238,15 +1353,77 @@ price is a vocabulary of 16 codebooks instead of 4.
 \subsection{A larger model on the finer tokens}
 \label{sec:large}
 
-With the finer tokens we began training a larger model on the Thor: 8 blocks
-of width 512, 42.9 million parameters, with the lyrics input enabled from the
-start. It is trained on all 742 training songs of the combined corpora, with
-the lyrics corpus weighted 4-fold and two takes recorded by the first author
-weighted 10-fold, in batches of 8 sequences of 1\,408 positions. A step takes
-2.0 seconds and about 11\,GB of the Thor's 128\,GB of memory. Training is
-still in progress; after 8\,000 of 20\,000 steps the held-out loss is 5.11 nats
-per code, averaged over its 16 codebooks, and still falling. Because the vocabulary differs, this figure
-is not comparable with those of \cref{tab:training}.
+With the finer tokens we trained a larger model on the Thor: 8 blocks of width
+512, 42.9 million parameters, with the lyrics input enabled from the start. It
+was trained on all 742 training songs of the combined corpora, with the lyrics
+corpus weighted 4-fold and two takes recorded by the first author weighted
+10-fold, in batches of 8 sequences. A step took 2.0 seconds and about 11\,GB of
+the Thor's 128\,GB of memory. Its best held-out loss, averaged over its 16
+codebooks, was 5.062 nats per code at step 18\,500 of 20\,000. Because the
+vocabulary differs, this figure is not comparable with those of
+\cref{tab:training}.
+
+\subsection{Overfitting}
+\label{sec:overfitting}
+
+A model \emph{overfits} when it learns the particular songs it was trained on
+instead of what they have in common: its loss on the training songs keeps
+falling while its loss on held-out songs does not. We call the difference
+between the two losses the \emph{generalization gap}. \Cref{tab:overfitting}
+shows it for the model of \cref{sec:large}, with the training loss averaged
+over the 1\,000 steps before each point. From step 15\,000 the held-out loss
+no longer improved while the training loss kept falling, and the gap grew to
+0.975 nats per code. Because the loss is a mean negative log-probability, this
+means that the model assigned to a code of a training song, as a geometric
+mean, $e^{0.975} \approx 2.7$ times the probability it assigned to a code of an
+unheard song. In informal listening the model returned nearly the same song for
+different prompts and repeated a line of lyrics from its training data.
+
+\begin{table}[htbp]
+\centering
+\caption{Training and held-out loss of the model of \cref{sec:large}, in nats
+per code. The training loss is averaged over the preceding 1\,000 steps.}
+\label{tab:overfitting}
+\small
+\begin{tabular}{rrrr}
+\toprule
+step & training & held out & gap \\
+\midrule
+2\,500 & 5.080 & 5.333 & 0.253 \\
+5\,000 & 4.714 & 5.178 & 0.464 \\
+10\,000 & 4.443 & 5.091 & 0.648 \\
+15\,000 & 4.137 & 5.066 & 0.929 \\
+20\,000 & 4.091 & 5.066 & 0.975 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The cause is how often each song was seen. Every training sequence is a window
+of a song drawn at random, and song $i$, with sampling weight $w_i$, is drawn
+with probability $w_i / W$, where $W = \sum_j w_j$ sums the weights of all
+training songs. A run of $S$ steps with $B$ sequences per step therefore draws
+song $i$ on average
+\begin{equation}
+  E_i = S B \, \frac{w_i}{W}
+  \label{eq:draws}
+\end{equation}
+times. With $S = 20\,000$, $B = 8$ and the weights above, $W = 979$, so each
+Song Describer song was drawn about 163 times, each lyrics song about 654
+times, and each of the two takes about 1\,634 times. The lyrics songs and the
+takes were also the only songs with lyrics, so the model could associate lyrics
+with only 75 songs, each of which it had seen hundreds of times.
+
+We therefore replaced the run. The new run adds the 29\,314 rock tracks of the
+Free Music Archive \cite{defferrard2017fma} at half the weight of a Song
+Describer song, gives the lyrics songs the same half weight, and leaves out the
+two takes, since no weight would keep two recordings from being memorized.
+Over $S = 30\,000$ steps, \cref{eq:draws} then gives about 16 draws for each
+Song Describer song and about 8 for every other song. The Song Describer songs
+keep the larger weight because their captions are sentences written by
+listeners, whereas the rock tracks carry only genre tags. The cost is that
+lyrics become rare (73 of 30\,054 training songs), so this model can learn
+little about words. Training is in progress, and we report the generalization
+gap alongside the held-out loss.
 
 \subsection{Lyrics}
 
@@ -1285,14 +1462,16 @@ paired test will be useful as a clear criterion for future attempts.
 The tokenizer, although improved, still limits the fidelity of the output,
 and Griffin-Lim estimates phase without ever having heard real audio, which
 leaves a metallic smear that is most audible on voices (\cref{sec:representation}).
-A learned vocoder removes it. We are building one in the same Rust framework
-on the design of Vocos \cite{siuzdak2023vocos}: a network that predicts the
-magnitude and phase of every frame from the mel spectrogram, followed by an
-inverse Fourier transform. Because it will be trained on spectrograms decoded
-from our own tokens, with the original recordings as targets, it should also
-restore part of the detail that the tokens lose. The
+The learned vocoder of \cref{sec:vocoder} is meant to remove it, but it is
+trained with spectral losses only; without the adversarial losses of Vocos
+\cite{siuzdak2023vocos}, such vocoders tend to sound slightly muffled in the
+highest frequencies, and adding discriminators is our next step. The
 data contain comparatively little singing (298 of the 706 songs mention a
 voice) and very little of some styles (two songs are described as grunge).
+Small datasets invite overfitting, and our first larger model overfitted
+(\cref{sec:overfitting}); apart from weight decay, prompt dropout and keeping
+the checkpoint with the lowest held-out loss, the model has no regularization,
+and in particular no dropout inside the network.
 Our models are much smaller than published systems \cite{copet2023musicgen},
 and we have not yet carried out a formal listening test, so we make no claims
 about perceived quality. On the implementation side, all arithmetic uses

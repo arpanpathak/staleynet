@@ -19,6 +19,7 @@
 //! make each launch valid.
 
 pub mod attention;
+pub mod convolution;
 pub mod device;
 pub mod elementwise;
 pub mod embedding;
@@ -26,7 +27,9 @@ pub mod loss;
 pub mod matmul;
 pub mod normalization;
 pub mod optimizer;
+pub mod overlap;
 pub mod signal;
+pub mod spectrum;
 
 /// Threads per warp on every NVIDIA architecture to date.
 /// See <https://docs.nvidia.com/cuda/cuda-c-programming-guide/#simt-architecture>
@@ -44,4 +47,5 @@ pub const EMPTY_TOKEN: u32 = u32::MAX;
 /// Stands in for minus infinity when taking a running maximum.
 pub const NEGATIVE_LARGE: f32 = -3.0e38;
 
+pub use convolution::Convolution;
 pub use matmul::{BLOCKED_THREADS_PER_EDGE, BLOCKED_TILE, MATMUL_TILE, Operand, Product};

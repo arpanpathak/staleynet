@@ -175,12 +175,16 @@ impl Block {
             feed_forward,
         } = activations;
 
-        self.attention_norm.forward(gpu, input, attention_input, attention_inv_rms)?;
-        self.attention.forward(gpu, attention_input, shape, attention, residual_mid)?;
+        self.attention_norm
+            .forward(gpu, input, attention_input, attention_inv_rms)?;
+        self.attention
+            .forward(gpu, attention_input, shape, attention, residual_mid)?;
         gpu.add_scaled(1.0, input, residual_mid)?;
 
-        self.feed_forward_norm.forward(gpu, residual_mid, feed_forward_input, feed_forward_inv_rms)?;
-        self.feed_forward.forward(gpu, feed_forward_input, feed_forward, output)?;
+        self.feed_forward_norm
+            .forward(gpu, residual_mid, feed_forward_input, feed_forward_inv_rms)?;
+        self.feed_forward
+            .forward(gpu, feed_forward_input, feed_forward, output)?;
         gpu.add_scaled(1.0, residual_mid, output)
     }
 
@@ -198,12 +202,16 @@ impl Block {
     ) -> GpuResult {
         let BlockGradients { normed, residual_mid, attention, feed_forward } = scratch;
 
-        self.feed_forward.backward(gpu, &activations.feed_forward_input, &activations.feed_forward, output_grad, feed_forward, normed)?;
-        self.feed_forward_norm.backward(gpu, normed, &activations.residual_mid, &activations.feed_forward_inv_rms, residual_mid)?;
+        self.feed_forward
+            .backward(gpu, &activations.feed_forward_input, &activations.feed_forward, output_grad, feed_forward, normed)?;
+        self.feed_forward_norm
+            .backward(gpu, normed, &activations.residual_mid, &activations.feed_forward_inv_rms, residual_mid)?;
         gpu.add_scaled(1.0, output_grad, residual_mid)?;
 
-        self.attention.backward(gpu, &activations.attention_input, shape, &activations.attention, residual_mid, attention, normed)?;
-        self.attention_norm.backward(gpu, normed, input, &activations.attention_inv_rms, input_grad)?;
+        self.attention
+            .backward(gpu, &activations.attention_input, shape, &activations.attention, residual_mid, attention, normed)?;
+        self.attention_norm
+            .backward(gpu, normed, input, &activations.attention_inv_rms, input_grad)?;
         gpu.add_scaled(1.0, residual_mid, input_grad)
     }
 
@@ -220,11 +228,14 @@ impl Block {
         let CachedBlockTensors { normed, inv_rms, attention, residual_mid, feed_forward } = scratch;
 
         self.attention_norm.forward(gpu, input, normed, inv_rms)?;
-        self.attention.forward_cached(gpu, normed, cache, cached_positions, attention, residual_mid)?;
+        self.attention
+            .forward_cached(gpu, normed, cache, cached_positions, attention, residual_mid)?;
         gpu.add_scaled(1.0, input, residual_mid)?;
 
-        self.feed_forward_norm.forward(gpu, residual_mid, normed, inv_rms)?;
-        self.feed_forward.forward(gpu, normed, feed_forward, output)?;
+        self.feed_forward_norm
+            .forward(gpu, residual_mid, normed, inv_rms)?;
+        self.feed_forward
+            .forward(gpu, normed, feed_forward, output)?;
         gpu.add_scaled(1.0, residual_mid, output)
     }
 }

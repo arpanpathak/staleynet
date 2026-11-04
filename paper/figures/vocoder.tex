@@ -1,0 +1,51 @@
+% Figure "vocoder": the learned vocoder, from a decoded log-mel spectrogram to
+% samples. Drawn like figure "model": one column of stages, the repeated block
+% in a dashed frame, and its residual path on the right, clear of the blocks.
+\begin{tikzpicture}[figure]
+  % The input: a log-mel spectrogram decoded from tokens, a few frames of bands.
+  \foreach \i in {0,...,9}
+    \foreach \b/\shade in {0/55,1/40,2/30,3/22}
+      \fill[accent!\the\numexpr \shade + 3*\i - 6*(\i/4)\relax, rounded corners=0.6pt] (\i*0.5-2.45,\b*0.1) rectangle +(0.44,0.085);
+  \node[caption text, anchor=north] at (0,-0.06) {log-mel decoded from tokens, $F$ frames $\times$ $M = 128$ bands};
+
+  \tikzset{stage/.style={block, minimum width=56mm, minimum height=7.5mm}}
+  \node[stage, fill=blockgray] (standard) at (0,1.35) {standardize each band: $(S - \mu)/\sigma$};
+  \node[stage, fill=blockblue, above=4mm of standard] (lift) {convolution over time, $K = 7$ taps, $M \to D = 512$};
+  \node[stage, fill=blockviolet, above=10mm of lift] (depth) {depthwise convolution, $K = 7$ taps};
+  \node[stage, fill=blockblue, above=4mm of depth] (norm) {RMSNorm};
+  \node[stage, fill=blockgreen, above=4mm of norm] (ffn) {feed-forward $D \to 3D \to D$, GELU, $\times\gamma$};
+  \node[circle, draw=inkline, fill=white, inner sep=0pt, minimum size=4mm, above=5mm of ffn] (add) {\scriptsize$+$};
+  \node[stage, fill=blockblue, above=9mm of add] (normf) {RMSNorm};
+  \node[stage, fill=blockamber, above=4mm of normf] (head) {linear head: log-magnitude $a$, phase $\phi$, 513 frequencies};
+  \node[stage, fill=blockrose, above=4mm of head] (polar) {$X = e^{\min(a,\,4.6)}\,(\cos\phi + i \sin\phi)$};
+  \node[stage, fill=blockgray, above=4mm of polar] (istft) {inverse STFT: two matrix products, then overlap-add};
+
+  % The residual path of the repeated block.
+  \coordinate (fork) at ($(lift.north)!0.5!(depth.south)$);
+  \coordinate (lane) at ($(norm.east)+(7mm,0)$);
+
+  \draw[flow] (0,0.45) -- (standard);
+  \draw[flow] (standard) -- (lift);
+  \draw[flow] (lift) -- (depth);
+  \draw[flow] (depth) -- (norm);
+  \draw[flow] (norm) -- (ffn);
+  \draw[flow] (ffn) -- (add);
+  \draw[flow] (add) -- (normf);
+  \draw[flow] (normf) -- (head);
+  \draw[flow] (head) -- (polar);
+  \draw[flow] (polar) -- (istft);
+
+  \draw[flow, rounded corners=4pt] (fork) -| (lane |- add) -- (add.east);
+  \fill[inkline] (fork) circle (1pt);
+
+  \node[draw=muted!70, dashed, rounded corners=7pt, inner sep=3.5mm, fit=(fork) (depth) (norm) (ffn) (add) (lane)] (stack) {};
+  \node[font=\sffamily\small\bfseries, text=muted, anchor=east] at ($(stack.west)+(-1.5mm,0)$) {$L\times$};
+
+  % The output waveform, 24 000 samples per second.
+  \draw[flow] (istft) -- ++(0,6mm) coordinate (wave);
+  \begin{scope}[shift={($(wave)+(0,4mm)$)}]
+    \draw[accent, line width=0.6pt, domain=-2.6:2.6, samples=300, smooth]
+      plot (\x, {0.24*sin(1150*\x)*exp(-0.12*\x*\x)*(0.6 + 0.4*cos(140*\x))});
+  \end{scope}
+  \node[caption text, anchor=south] at ($(wave)+(0,7.5mm)$) {waveform, $(F - 1)H$ samples at 24\,kHz};
+\end{tikzpicture}

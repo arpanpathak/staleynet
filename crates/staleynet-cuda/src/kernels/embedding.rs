@@ -31,7 +31,10 @@ pub mod kernels {
 
         let mut sum = 0.0f32;
         for slot in 0..slots {
-            let token = tokens.get(position * slots + slot).copied().unwrap_or(EMPTY_TOKEN);
+            let token = tokens
+                .get(position * slots + slot)
+                .copied()
+                .unwrap_or(EMPTY_TOKEN);
             if token != EMPTY_TOKEN {
                 sum += table[token as usize * width + col];
             }

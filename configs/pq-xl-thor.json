@@ -36,15 +36,11 @@
   "extra_sources": [
     {
       "cache": "data/cache-fma-rock",
-      "weight": 0.125
+      "weight": 0.5
     },
     {
       "cache": "data/cache-pq-jamendolyrics",
-      "weight": 3.0
-    },
-    {
-      "cache": "data/cache-pq-recordings",
-      "weight": 7.5
+      "weight": 0.5
     }
   ]
 }

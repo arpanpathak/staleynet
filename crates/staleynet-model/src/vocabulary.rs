@@ -145,7 +145,9 @@ impl Vocabulary {
 
     /// Position-table rows of physical positions `first .. first + count`.
     pub fn position_ids(&self, first: usize, count: usize) -> Vec<u32> {
-        (first..first + count).map(|position| self.position_id(position)).collect()
+        (first..first + count)
+            .map(|position| self.position_id(position))
+            .collect()
     }
 
     /// Embedding row of `code` in `codebook`.
@@ -258,7 +260,13 @@ mod tests {
         let first_slots: Vec<u32> = slots.iter().step_by(2).copied().collect();
 
         assert_eq!(first_slots, vec![BEGIN, b'h' as u32, b'i' as u32, PADDING, PADDING, SEPARATOR]);
-        assert!(slots.iter().skip(1).step_by(2).all(|&slot| slot == EMPTY_TOKEN));
+        assert!(
+            slots
+                .iter()
+                .skip(1)
+                .step_by(2)
+                .all(|&slot| slot == EMPTY_TOKEN)
+        );
     }
 
     #[test]

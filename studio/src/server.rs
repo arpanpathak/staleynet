@@ -4,6 +4,7 @@
 //! |--------|--------------------|--------------------------------------|
 //! | GET    | `/`                | the single-page interface            |
 //! | GET    | `/api/runs`        | runs with checkpoints                |
+//! | GET    | `/api/vocoders`    | trained neural vocoders              |
 //! | GET    | `/api/clips`       | every WAV under `samples/`           |
 //! | POST   | `/api/generate`    | generate a clip (JSON body)          |
 //! | GET    | `/audio/<path>`    | stream one WAV                       |
@@ -86,6 +87,7 @@ impl Studio {
                 Reply { status: status::OK, content_type: "text/html; charset=utf-8", body: INDEX_HTML.as_bytes().to_vec() }
             }
             (Method::Get, "/api/runs") => Reply::json(status::OK, &runs::discover(&self.project)),
+            (Method::Get, "/api/vocoders") => Reply::json(status::OK, &runs::discover_vocoders(&self.project)),
             (Method::Get, "/api/clips") => Reply::json(status::OK, &library::list(&self.project.join("samples"))),
             (Method::Post, "/api/generate") => self.generate(&mut request),
             (Method::Get, audio) if audio.starts_with("/audio/") => self.audio(&self.project.join("samples"), &audio["/audio/".len()..]),
@@ -99,7 +101,15 @@ impl Studio {
         };
 
         let header = Header::from_bytes("Content-Type", reply.content_type).expect("static header is valid");
-        let response = Response::from_data(reply.body).with_status_code(StatusCode(reply.status)).with_header(header);
+        let mut response = Response::from_data(reply.body).with_status_code(StatusCode(reply.status)).with_header(header);
+
+        // The page and the listings change whenever the studio is rebuilt or a run
+        // trains further, so browsers must never show a stored copy of them.
+        if !reply.content_type.starts_with("audio/") {
+            response.add_header(Header::from_bytes("Cache-Control", "no-store").expect("static header is valid"));
+        }
+
+
         if let Err(error) = request.respond(response) {
             eprintln!("could not send response for {url}: {error}");
         }

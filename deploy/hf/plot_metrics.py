@@ -11,6 +11,10 @@ summary for model cards:
 * the latest validation loss of every codebook, grouped by residual level,
   which shows how much harder each finer level is to predict;
 * throughput in positions per second, which shows whether the GPU stayed busy.
+
+A neural vocoder run (`staleynet vocoder train`) logs spectral distances
+instead of nats per code. Its panels show the summed spectral loss, the latest
+validation value of each of its three parts, and milliseconds per step.
 """
 import json
 import math
@@ -31,6 +35,9 @@ CODEBOOK_SIZE = 1024
 # Band groups per residual level in the band-group tokenizer; with fewer
 # codebooks than this, every codebook is its own level.
 BAND_GROUPS = 4
+
+# Names of the vocoder's loss parts, in the order its metrics list them.
+VOCODER_PARTS = ["log-mel\n1024 / 256", "log-magnitude\n512 / 128", "log-magnitude\n2048 / 256"]
 
 COLOURS = {"train": "#c8692f", "validation": "#3b4ba8", "uniform": "#9a9aa6"}
 
@@ -55,6 +62,11 @@ def moving_average(values, window):
     return averaged
 
 
+def is_vocoder(progress):
+    """True for a neural vocoder run, which reports loss parts instead of codebooks."""
+    return bool(progress) and "loss_parts" in progress[0]
+
+
 def plot_losses(axis, progress, validation):
     """Training and validation loss against step."""
     steps = [event["step"] for event in progress]
@@ -63,9 +75,11 @@ def plot_losses(axis, progress, validation):
     axis.plot([event["step"] for event in validation], [event["loss"] for event in validation],
               color=COLOURS["validation"], marker="o", markersize=3, linewidth=1.4, label="validation")
 
-    axis.axhline(math.log(CODEBOOK_SIZE), color=COLOURS["uniform"], linestyle="--", linewidth=1, label="uniform guess")
+    vocoder = is_vocoder(progress)
+    if not vocoder:
+        axis.axhline(math.log(CODEBOOK_SIZE), color=COLOURS["uniform"], linestyle="--", linewidth=1, label="uniform guess")
     axis.set_xlabel("optimizer step")
-    axis.set_ylabel("loss (nats per code)")
+    axis.set_ylabel("spectral loss (sum of mean log differences)" if vocoder else "loss (nats per code)")
     axis.set_title("Loss")
     axis.legend(frameon=False, fontsize=8)
     axis.grid(alpha=0.25)
@@ -88,13 +102,24 @@ def plot_codebooks(axis, latest):
     axis.grid(axis="y", alpha=0.25)
 
 
+def plot_loss_parts(axis, latest):
+    """The latest validation value of each part of the vocoder's loss."""
+    axis.bar(range(len(latest["loss_parts"])), latest["loss_parts"], color=COLOURS["validation"])
+    axis.set_xticks(range(len(latest["loss_parts"])), VOCODER_PARTS[: len(latest["loss_parts"])], fontsize=8)
+
+    axis.set_ylabel("validation loss (weighted)")
+    axis.set_title(f"Per resolution, step {latest['step']}")
+    axis.grid(axis="y", alpha=0.25)
+
+
 def plot_throughput(axis, progress):
-    """Positions per second over the run."""
-    axis.plot([event["step"] for event in progress], [event["positions_per_second"] for event in progress],
-              color=COLOURS["train"], linewidth=1)
+    """Positions per second over the run (milliseconds per step for a vocoder)."""
+    vocoder = is_vocoder(progress)
+    key = "milliseconds_per_step" if vocoder else "positions_per_second"
+    axis.plot([event["step"] for event in progress], [event[key] for event in progress], color=COLOURS["train"], linewidth=1)
 
     axis.set_xlabel("optimizer step")
-    axis.set_ylabel("positions per second")
+    axis.set_ylabel("milliseconds per step" if vocoder else "positions per second")
     axis.set_title("Throughput")
     axis.grid(alpha=0.25)
 
@@ -124,7 +149,9 @@ def main(metrics, prefix):
 
     figure, axes = plt.subplots(1, 3, figsize=(15, 4.2))
     plot_losses(axes[0], progress, validation)
-    if validation:
+    if validation and is_vocoder(progress):
+        plot_loss_parts(axes[1], validation[-1])
+    elif validation:
         plot_codebooks(axes[1], validation[-1])
     plot_throughput(axes[2], progress)
 

@@ -59,8 +59,12 @@ impl TokenTrack {
         let start = first_step as f32 * self.seconds_per_step;
         let end = (first_step + steps) as f32 * self.seconds_per_step;
 
-        let sung: Vec<&str> =
-            self.lyrics.iter().filter(|line| line.timing.end > start && line.timing.start < end).map(|line| line.text.as_str()).collect();
+        let sung: Vec<&str> = self
+            .lyrics
+            .iter()
+            .filter(|line| line.timing.end > start && line.timing.start < end)
+            .map(|line| line.text.as_str())
+            .collect();
         sung.join("\n")
     }
 
@@ -92,7 +96,11 @@ pub struct TrackFilter {
 impl TrackFilter {
     /// True if a track with these captions passes the filter.
     pub fn accepts(&self, captions: &[String]) -> bool {
-        let mentions = |terms: &[String]| captions.iter().any(|caption| terms.iter().any(|term| contains_phrase(caption, term)));
+        let mentions = |terms: &[String]| {
+            captions
+                .iter()
+                .any(|caption| terms.iter().any(|term| contains_phrase(caption, term)))
+        };
 
         let required = self.require_any.is_empty() || mentions(&self.require_any);
         let excluded = mentions(&self.exclude_any);
@@ -117,7 +125,9 @@ fn contains_phrase(text: &str, phrase: &str) -> bool {
         return false;
     }
 
-    text_words.windows(phrase_words.len()).any(|window| window == phrase_words.as_slice())
+    text_words
+        .windows(phrase_words.len())
+        .any(|window| window == phrase_words.as_slice())
 }
 
 /// Tokenised tracks drawn from one or more datasets, each track with a
@@ -137,8 +147,17 @@ impl TokenCorpus {
     /// accepts, each with sampling weight 1.
     pub fn load(layout: &CacheLayout, manifest: &DatasetManifest, split: Split, filter: &TrackFilter, codebooks: usize) -> Result<Self> {
         let mut corpus = Self::default();
-        for entry in manifest.tracks.iter().filter(|entry| entry.track.split == split) {
-            let captions: Vec<String> = entry.track.captions.iter().map(|caption| caption.text.clone()).collect();
+        for entry in manifest
+            .tracks
+            .iter()
+            .filter(|entry| entry.track.split == split)
+        {
+            let captions: Vec<String> = entry
+                .track
+                .captions
+                .iter()
+                .map(|caption| caption.text.clone())
+                .collect();
             if !filter.accepts(&captions) {
                 continue;
             }
@@ -188,7 +207,9 @@ impl TokenCorpus {
     fn pick_index(&self, random: &mut Random) -> usize {
         let total = self.cumulative_weight.last().copied().unwrap_or(0.0);
         let target = random.uniform() as f64 * total;
-        let index = self.cumulative_weight.partition_point(|&cumulative| cumulative <= target);
+        let index = self
+            .cumulative_weight
+            .partition_point(|&cumulative| cumulative <= target);
         index.min(self.tracks.len() - 1)
     }
 
@@ -209,12 +230,18 @@ impl TokenCorpus {
 
     /// Total code steps across tracks.
     pub fn total_steps(&self, codebooks: usize) -> usize {
-        self.tracks.iter().map(|track| track.codes.len() / codebooks).sum()
+        self.tracks
+            .iter()
+            .map(|track| track.codes.len() / codebooks)
+            .sum()
     }
 
     /// Tracks that come with lyrics.
     pub fn tracks_with_lyrics(&self) -> usize {
-        self.tracks.iter().filter(|track| !track.lyrics.is_empty()).count()
+        self.tracks
+            .iter()
+            .filter(|track| !track.lyrics.is_empty())
+            .count()
     }
 }
 
@@ -305,12 +332,15 @@ impl BatchSampler {
         let prompt_positions = self.vocabulary.prompt_positions();
         let audio_positions = rows.time - prompt_positions;
 
-        let delayed_steps = self.pattern.delayed_steps(track.codes.len() / rows.codebooks);
+        let delayed_steps = self
+            .pattern
+            .delayed_steps(track.codes.len() / rows.codebooks);
         let first_step = self.crop_start(delayed_steps, audio_positions, random);
         let lyrics = self.lyrics_for(track, mismatched, first_step, audio_positions);
         let conditioning = self.conditioning(track, &lyrics, random);
 
-        self.vocabulary.write_prompt(conditioning, &mut batch.tokens[rows.slot(0)..rows.slot(prompt_positions)]);
+        self.vocabulary
+            .write_prompt(conditioning, &mut batch.tokens[rows.slot(0)..rows.slot(prompt_positions)]);
         self.write_crop(track, first_step..delayed_steps, rows, prompt_positions, batch);
     }
 
@@ -440,7 +470,9 @@ mod tests {
         corpus.absorb(heavy, 3.0);
 
         let mut random = Random::new(7);
-        let heavy_draws = (0..4000).filter(|_| corpus.pick(&mut random).captions[0] == "heavy").count();
+        let heavy_draws = (0..4000)
+            .filter(|_| corpus.pick(&mut random).captions[0] == "heavy")
+            .count();
         assert!((2800..3200).contains(&heavy_draws), "{heavy_draws} of 4000");
     }
 

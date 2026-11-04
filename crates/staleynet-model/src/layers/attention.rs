@@ -203,8 +203,9 @@ impl CausalSelfAttention {
         gpu.split_heads(&tensors.qkv, &mut tensors.keys, &self.layout(shape, 3 * width, Projection::Key.column_offset(width)))?;
         gpu.split_heads(&tensors.qkv, &mut tensors.values, &self.layout(shape, 3 * width, Projection::Value.column_offset(width)))?;
 
-        let scores =
-            MatmulSpec::new(time, time, head_dim).right_transposed().batched(self.per_head(shape, head_block, head_block, score_block));
+        let scores = MatmulSpec::new(time, time, head_dim)
+            .right_transposed()
+            .batched(self.per_head(shape, head_block, head_block, score_block));
         gpu.matmul(&scores, &tensors.queries, &tensors.keys, &mut tensors.probabilities)?;
         gpu.causal_softmax(&mut tensors.probabilities, time, self.score_scale(), 0)?;
 
@@ -231,29 +232,31 @@ impl CausalSelfAttention {
         let score_block = time * time;
         let scale = self.score_scale();
 
-        self.output.backward(gpu, &activations.context, output_grad, &mut grads.context)?;
+        self.output
+            .backward(gpu, &activations.context, output_grad, &mut grads.context)?;
         gpu.split_heads(&grads.context, &mut grads.context_heads, &self.layout(shape, width, 0))?;
 
-        let probability_grad =
-            MatmulSpec::new(time, time, head_dim).right_transposed().batched(self.per_head(shape, head_block, head_block, score_block));
+        let probability_grad = MatmulSpec::new(time, time, head_dim)
+            .right_transposed()
+            .batched(self.per_head(shape, head_block, head_block, score_block));
         gpu.matmul(&probability_grad, &grads.context_heads, &activations.values, &mut grads.probabilities)?;
 
-        let value_grad =
-            MatmulSpec::new(time, head_dim, time).left_transposed().batched(self.per_head(shape, score_block, head_block, head_block));
+        let value_grad = MatmulSpec::new(time, head_dim, time)
+            .left_transposed()
+            .batched(self.per_head(shape, score_block, head_block, head_block));
         gpu.matmul(&value_grad, &activations.probabilities, &grads.context_heads, &mut grads.values)?;
 
         gpu.softmax_backward(&activations.probabilities, &mut grads.probabilities)?;
 
-        let query_grad =
-            MatmulSpec::new(time, head_dim, time).scaled(scale).batched(self.per_head(shape, score_block, head_block, head_block));
+        let query_grad = MatmulSpec::new(time, head_dim, time)
+            .scaled(scale)
+            .batched(self.per_head(shape, score_block, head_block, head_block));
         gpu.matmul(&query_grad, &grads.probabilities, &activations.keys, &mut grads.queries)?;
 
-        let key_grad = MatmulSpec::new(time, head_dim, time).left_transposed().scaled(scale).batched(self.per_head(
-            shape,
-            score_block,
-            head_block,
-            head_block,
-        ));
+        let key_grad = MatmulSpec::new(time, head_dim, time)
+            .left_transposed()
+            .scaled(scale)
+            .batched(self.per_head(shape, score_block, head_block, head_block));
         gpu.matmul(&key_grad, &grads.probabilities, &activations.queries, &mut grads.keys)?;
 
         gpu.merge_heads(&grads.queries, &mut grads.qkv, &self.layout(shape, 3 * width, Projection::Query.column_offset(width)))?;
@@ -285,8 +288,12 @@ impl CausalSelfAttention {
         self.qkv.forward(gpu, input, &mut tensors.qkv)?;
         gpu.split_heads(&tensors.qkv, &mut tensors.queries, &self.layout(single, 3 * width, Projection::Query.column_offset(width)))?;
 
-        let key_layout = self.layout(single, 3 * width, Projection::Key.column_offset(width)).in_cache(capacity, cached_positions);
-        let value_layout = self.layout(single, 3 * width, Projection::Value.column_offset(width)).in_cache(capacity, cached_positions);
+        let key_layout = self
+            .layout(single, 3 * width, Projection::Key.column_offset(width))
+            .in_cache(capacity, cached_positions);
+        let value_layout = self
+            .layout(single, 3 * width, Projection::Value.column_offset(width))
+            .in_cache(capacity, cached_positions);
 
         gpu.split_heads(&tensors.qkv, &mut cache.keys, &key_layout)?;
         gpu.split_heads(&tensors.qkv, &mut cache.values, &value_layout)?;
@@ -297,7 +304,9 @@ impl CausalSelfAttention {
 
         let heads = BatchStrides { count: self.heads, left: query_block, right: cache_block, output: score_block };
 
-        let scores = MatmulSpec::new(new_positions, capacity, head_dim).right_transposed().batched(heads);
+        let scores = MatmulSpec::new(new_positions, capacity, head_dim)
+            .right_transposed()
+            .batched(heads);
         gpu.matmul(&scores, &tensors.queries, &cache.keys, &mut tensors.probabilities)?;
         gpu.causal_softmax(&mut tensors.probabilities, new_positions, self.score_scale(), cached_positions)?;
 

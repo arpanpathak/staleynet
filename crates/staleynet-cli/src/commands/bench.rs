@@ -146,7 +146,10 @@ fn random_batch(config: &ModelConfig, shape: SequenceShape) -> TrainingBatch {
 /// Runs every measurement and writes the results as JSON.
 pub fn run(arguments: Arguments) -> Result<()> {
     let mut gpu = open_gpu()?;
-    let device = std::fs::read_to_string("/proc/device-tree/model").unwrap_or_default().trim_end_matches('\0').to_string();
+    let device = std::fs::read_to_string("/proc/device-tree/model")
+        .unwrap_or_default()
+        .trim_end_matches('\0')
+        .to_string();
     eprintln!("device: {device}");
 
     let config = ModelConfig { context_length: BENCH_SEQUENCE, ..ModelConfig::default() };
@@ -206,7 +209,9 @@ fn measure_matmuls(gpu: &mut Gpu, config: &ModelConfig, positions: usize) -> Res
 fn measure_log_mel(gpu: &Gpu) -> Result<(f64, f64)> {
     let analyzer = MelAnalyzer::new(MelConfig::default());
     let samples = analyzer.config.sample_rate as usize * FEATURE_SECONDS;
-    let signal: Vec<f32> = (0..samples).map(|index| (index as f32 * 0.013).sin() * 0.3).collect();
+    let signal: Vec<f32> = (0..samples)
+        .map(|index| (index as f32 * 0.013).sin() * 0.3)
+        .collect();
 
     let extractor = GpuMelExtractor::new(gpu, &analyzer)?;
     let gpu_ms = time(gpu, || Ok(extractor.log_mel(gpu, &analyzer, &signal).map(drop)?))? * 1e3;
@@ -227,8 +232,13 @@ fn measure_train_steps(gpu: &mut Gpu, model: &mut Gpt, shape: SequenceShape) -> 
 
     let mut milliseconds = [0.0; 3];
     for (slot, kernel) in milliseconds.iter_mut().zip(KERNELS) {
-        let seconds =
-            with_kernel(gpu, kernel, |gpu| time(gpu, || Ok(model.accumulate_gradients(gpu, &mut workspace, &batch).map(drop)?)))?;
+        let seconds = with_kernel(gpu, kernel, |gpu| {
+            time(gpu, || {
+                Ok(model
+                    .accumulate_gradients(gpu, &mut workspace, &batch)
+                    .map(drop)?)
+            })
+        })?;
         eprintln!("train step B={} T={} ({kernel:?}): {:.0} ms", shape.batch, shape.time, seconds * 1e3);
         *slot = seconds * 1e3;
     }
@@ -240,7 +250,10 @@ fn measure_train_steps(gpu: &mut Gpu, model: &mut Gpt, shape: SequenceShape) -> 
 fn measure_decoding(gpu: &Gpu, model: &Gpt) -> Result<[f64; 2]> {
     let mut milliseconds = [0.0; 2];
 
-    for (slot, attention) in milliseconds.iter_mut().zip([AttentionMode::KvCache, AttentionMode::Recompute]) {
+    for (slot, attention) in milliseconds
+        .iter_mut()
+        .zip([AttentionMode::KvCache, AttentionMode::Recompute])
+    {
         let config = GenerationConfig {
             frames: GENERATED_FRAMES,
             sampling: Sampling::TopK { temperature: 1.0, k: BENCH_TOP_K },

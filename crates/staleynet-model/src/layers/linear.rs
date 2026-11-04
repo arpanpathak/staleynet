@@ -52,7 +52,9 @@ impl Linear {
         let rows = input.shape().rows;
         let (inputs, outputs) = (self.inputs(), self.outputs());
 
-        let weight_grad = MatmulSpec::new(inputs, outputs, rows).left_transposed().accumulate();
+        let weight_grad = MatmulSpec::new(inputs, outputs, rows)
+            .left_transposed()
+            .accumulate();
         gpu.matmul(&weight_grad, input, output_grad, &mut self.weight.gradient)?;
         gpu.accumulate_column_sums(output_grad, &mut self.bias.gradient)?;
 

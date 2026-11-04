@@ -4,7 +4,7 @@
 //! shell, so no prompt text can be interpreted as a command.
 
 use crate::library::STUDIO_SUBDIRECTORY;
-use crate::runs::has_checkpoint;
+use crate::runs::{has_checkpoint, has_vocoder};
 use serde::Deserialize;
 use std::path::Path;
 use std::process::Command;
@@ -55,6 +55,10 @@ pub struct GenerationRequest {
 
     /// Sampling seed.
     pub seed: u64,
+
+    /// Neural vocoder run under `runs/`; empty for Griffin-Lim.
+    #[serde(default)]
+    pub vocoder: String,
 }
 
 /// Why a request was refused or failed.
@@ -81,12 +85,17 @@ impl GenerationRequest {
             return invalid(format!("the lyrics are longer than {MAX_LYRICS_CHARACTERS} characters"));
         }
 
-        let is_plain_name = self.run.chars().all(|character| character.is_ascii_alphanumeric() || "-_".contains(character));
-        if self.run.is_empty() || !is_plain_name {
+        if self.run.is_empty() || !is_plain(&self.run) {
             return invalid("invalid run name".into());
         }
         if !has_checkpoint(&project.join("runs").join(&self.run)) {
             return invalid(format!("run `{}` has no checkpoint", self.run));
+        }
+
+        let wants_vocoder = !self.vocoder.is_empty();
+        let vocoder_exists = is_plain(&self.vocoder) && has_vocoder(&project.join("runs").join(&self.vocoder));
+        if wants_vocoder && !vocoder_exists {
+            return invalid(format!("`{}` is not a trained vocoder", self.vocoder));
         }
 
         if !SECONDS_RANGE.contains(&self.seconds) {
@@ -107,6 +116,11 @@ impl GenerationRequest {
 
         Ok(())
     }
+}
+
+/// True when `name` is a plain directory name: letters, digits, `-` and `_`.
+fn is_plain(name: &str) -> bool {
+    name.chars().all(|character| character.is_ascii_alphanumeric() || "-_".contains(character))
 }
 
 /// A short, file-safe slug of `prompt` for file names.
@@ -132,7 +146,8 @@ pub fn generate(project: &Path, binary: &Path, request: &GenerationRequest) -> R
     let file_name = format!("{timestamp}-{}-{}.wav", request.run, slug(&request.prompt));
     let output = output_directory.join(&file_name);
 
-    let result = Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .current_dir(project)
         .arg("sing")
         .args(["--run", &format!("runs/{}", request.run)])
@@ -144,9 +159,12 @@ pub fn generate(project: &Path, binary: &Path, request: &GenerationRequest) -> R
         .args(["--top-k", &request.top_k.to_string()])
         .args(["--seed", &request.seed.to_string()])
         .arg("--out")
-        .arg(&output)
-        .output()
-        .map_err(|error| GenerationError::Failed(format!("could not start {}: {error}", binary.display())))?;
+        .arg(&output);
+    if !request.vocoder.is_empty() {
+        command.args(["--vocoder", &format!("runs/{}", request.vocoder)]);
+    }
+
+    let result = command.output().map_err(|error| GenerationError::Failed(format!("could not start {}: {error}", binary.display())))?;
 
     if !result.status.success() {
         return Err(GenerationError::Failed(String::from_utf8_lossy(&result.stderr).into_owned()));

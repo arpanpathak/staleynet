@@ -2,3 +2,5 @@ edition = "2024"
 max_width = 140
 use_small_heuristics = "Max"
 newline_style = "Unix"
+# Method chains longer than this put one call per line.
+chain_width = 60

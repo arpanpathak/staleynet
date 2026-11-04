@@ -3,15 +3,19 @@
 //! the kernels rely on hold by construction.
 
 mod attention;
+mod convolution;
 mod elementwise;
 mod embedding;
 mod loss;
 mod matmul;
 mod normalization;
 mod optimizer;
+mod overlap;
 mod signal;
+mod spectrum;
 
 pub use attention::HeadLayout;
+pub use convolution::Convolution;
 pub use embedding::TokenIndex;
 pub use loss::CrossEntropyHead;
 pub use matmul::{BatchStrides, MatmulSpec, Storage};

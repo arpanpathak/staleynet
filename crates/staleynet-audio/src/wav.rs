@@ -20,7 +20,9 @@ const PCM16_FULL_SCALE: f32 = 32767.0;
 pub fn write_mono_pcm16(path: &Path, samples: &[f32], sample_rate: u32) -> Result<()> {
     let spec = hound::WavSpec { channels: 1, sample_rate, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
 
-    let peak = samples.iter().fold(0.0f32, |peak, sample| peak.max(sample.abs()));
+    let peak = samples
+        .iter()
+        .fold(0.0f32, |peak, sample| peak.max(sample.abs()));
     let gain = if peak > OUTPUT_PEAK_LIMIT { OUTPUT_PEAK_LIMIT / peak } else { 1.0 };
 
     let mut writer = hound::WavWriter::create(path, spec)?;
@@ -76,7 +78,11 @@ mod tests {
         let clipped = temp_path("clipped");
         write_mono_pcm16(&clipped, &[2.0, -1.0], 24_000).unwrap();
 
-        let samples: Vec<i16> = WavReader::open(&clipped).unwrap().samples::<i16>().map(Result::unwrap).collect();
+        let samples: Vec<i16> = WavReader::open(&clipped)
+            .unwrap()
+            .samples::<i16>()
+            .map(Result::unwrap)
+            .collect();
 
         assert!(samples[0] > 0);
         assert!(samples[1] < 0);
@@ -91,7 +97,11 @@ mod tests {
         let quiet = temp_path("quiet");
         write_mono_pcm16(&quiet, &[0.5, -0.5], 24_000).unwrap();
 
-        let samples: Vec<i16> = WavReader::open(&quiet).unwrap().samples::<i16>().map(Result::unwrap).collect();
+        let samples: Vec<i16> = WavReader::open(&quiet)
+            .unwrap()
+            .samples::<i16>()
+            .map(Result::unwrap)
+            .collect();
 
         assert!((samples[0] as f32 / PCM16_FULL_SCALE - 0.5).abs() < 1e-3);
         assert!((samples[1] as f32 / PCM16_FULL_SCALE + 0.5).abs() < 1e-3);
@@ -115,8 +125,10 @@ mod tests {
 
     #[test]
     fn reports_an_error_when_the_parent_directory_is_missing() {
-        let path =
-            std::env::temp_dir().join(format!("staleynet-wav-missing-{}", std::process::id())).join("does-not-exist").join("out.wav");
+        let path = std::env::temp_dir()
+            .join(format!("staleynet-wav-missing-{}", std::process::id()))
+            .join("does-not-exist")
+            .join("out.wav");
 
         assert!(write_mono_pcm16(&path, &[0.0], 24_000).is_err());
     }

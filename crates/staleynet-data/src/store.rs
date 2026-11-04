@@ -6,6 +6,7 @@
 //!   tokenizer.json       trained residual codebooks
 //!   mel/<id>.f16         log-mel frames, IEEE half precision, [frames, bands]
 //!   codes/<id>.u16       tokenizer codes, [steps, codebooks]
+//!   waveforms/<id>.f16   resampled, level-normalized samples (for the vocoder)
 //! ```
 //!
 //! Half precision halves the cache with an error (≈ 0.001 relative) far
@@ -56,6 +57,11 @@ impl CacheLayout {
     /// Code file of track `id`.
     pub fn codes(&self, id: &str) -> PathBuf {
         self.root.join("codes").join(format!("{id}.u16"))
+    }
+
+    /// Waveform file of track `id`: the samples its log-mel was computed from.
+    pub fn waveform(&self, id: &str) -> PathBuf {
+        self.root.join("waveforms").join(format!("{id}.f16"))
     }
 
     /// Creates the sub-directories.
@@ -153,7 +159,11 @@ impl BandStatistics {
             .sum_of_squares
             .iter()
             .zip(&mean)
-            .map(|(squares, mean)| (squares / count - mean * mean).max(MIN_BAND_VARIANCE).sqrt() as f32)
+            .map(|(squares, mean)| {
+                (squares / count - mean * mean)
+                    .max(MIN_BAND_VARIANCE)
+                    .sqrt() as f32
+            })
             .collect();
 
         Normalization { mean: mean.into_iter().map(|value| value as f32).collect(), std }
@@ -203,26 +213,38 @@ impl DatasetManifest {
 
 /// Writes `values` as little-endian half floats.
 pub fn write_f16(path: &Path, values: &[f32]) -> Result<()> {
-    let bytes: Vec<u8> = values.iter().flat_map(|&value| f16::from_f32(value).to_le_bytes()).collect();
+    let bytes: Vec<u8> = values
+        .iter()
+        .flat_map(|&value| f16::from_f32(value).to_le_bytes())
+        .collect();
     std::fs::write(path, bytes).with_context(|| format!("write {}", path.display()))
 }
 
 /// Reads a file written by [`write_f16`].
 pub fn read_f16(path: &Path) -> Result<Vec<f32>> {
     let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    Ok(bytes.chunks_exact(F16_BYTES).map(|pair| f16::from_le_bytes([pair[0], pair[1]]).to_f32()).collect())
+    Ok(bytes
+        .chunks_exact(F16_BYTES)
+        .map(|pair| f16::from_le_bytes([pair[0], pair[1]]).to_f32())
+        .collect())
 }
 
 /// Writes codes as little-endian `u16` (codebooks never exceed 65 536 entries).
 pub fn write_codes(path: &Path, codes: &[u32]) -> Result<()> {
-    let bytes: Vec<u8> = codes.iter().flat_map(|&code| u16::try_from(code).expect("code exceeds u16").to_le_bytes()).collect();
+    let bytes: Vec<u8> = codes
+        .iter()
+        .flat_map(|&code| u16::try_from(code).expect("code exceeds u16").to_le_bytes())
+        .collect();
     std::fs::write(path, bytes).with_context(|| format!("write {}", path.display()))
 }
 
 /// Reads a file written by [`write_codes`].
 pub fn read_codes(path: &Path) -> Result<Vec<u32>> {
     let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    Ok(bytes.chunks_exact(U16_BYTES).map(|pair| u16::from_le_bytes([pair[0], pair[1]]) as u32).collect())
+    Ok(bytes
+        .chunks_exact(U16_BYTES)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]) as u32)
+        .collect())
 }
 
 #[cfg(test)]
@@ -325,7 +347,12 @@ mod tests {
         let normalization = statistics.finish();
 
         assert_eq!(normalization.mean, vec![0.0, 0.0]);
-        assert!(normalization.std.iter().all(|std| (*std - 0.01).abs() < 1e-6));
+        assert!(
+            normalization
+                .std
+                .iter()
+                .all(|std| (*std - 0.01).abs() < 1e-6)
+        );
     }
 
     #[test]

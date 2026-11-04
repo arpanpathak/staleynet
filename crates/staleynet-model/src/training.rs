@@ -108,7 +108,9 @@ impl TrainingWorkspace {
         let logits = Shape::new(rows, config.logits_width());
         let empty_slots = vec![EMPTY_TOKEN; rows * config.codebooks];
 
-        let positions: Vec<u32> = Vocabulary::new(config).position_ids(0, shape.time).repeat(shape.batch);
+        let positions: Vec<u32> = Vocabulary::new(config)
+            .position_ids(0, shape.time)
+            .repeat(shape.batch);
 
         let mut residuals = Vec::with_capacity(config.layers + 1);
         let mut blocks = Vec::with_capacity(config.layers);
@@ -163,8 +165,10 @@ impl Gpt {
         }
 
         let last_residual = &workspace.residuals[self.config.layers];
-        self.final_norm.forward(gpu, last_residual, &mut workspace.final_normed, &mut workspace.final_inv_rms)?;
-        self.head.forward(gpu, &workspace.final_normed, &mut workspace.logits)?;
+        self.final_norm
+            .forward(gpu, last_residual, &mut workspace.final_normed, &mut workspace.final_inv_rms)?;
+        self.head
+            .forward(gpu, &workspace.final_normed, &mut workspace.logits)?;
 
         self.codebook_losses(gpu, workspace, batch)
     }
@@ -176,7 +180,13 @@ impl Gpt {
         let mut target_count = 0;
 
         for codebook in 0..codebooks {
-            let valid_targets = batch.targets.iter().skip(codebook).step_by(codebooks).filter(|&&target| target != EMPTY_TOKEN).count();
+            let valid_targets = batch
+                .targets
+                .iter()
+                .skip(codebook)
+                .step_by(codebooks)
+                .filter(|&&target| target != EMPTY_TOKEN)
+                .count();
             let grad_scale = if valid_targets == 0 { 0.0 } else { 1.0 / (valid_targets * codebooks) as f32 };
             let head = CrossEntropyHead {
                 column_offset: codebook * self.config.codebook_size,
@@ -203,7 +213,8 @@ impl Gpt {
         let shape = workspace.shape;
         let last_residual = &workspace.residuals[self.config.layers];
 
-        self.head.backward(gpu, &workspace.final_normed, &workspace.logits_grad, &mut workspace.final_normed_grad)?;
+        self.head
+            .backward(gpu, &workspace.final_normed, &workspace.logits_grad, &mut workspace.final_normed_grad)?;
         self.final_norm.backward(
             gpu,
             &workspace.final_normed_grad,
@@ -251,7 +262,17 @@ mod tests {
 
         assert_eq!(batch.tokens.len(), 24);
         assert_eq!(batch.targets.len(), 24);
-        assert!(batch.tokens.iter().all(|token| *token == staleynet_cuda::EMPTY_TOKEN));
-        assert!(batch.targets.iter().all(|token| *token == staleynet_cuda::EMPTY_TOKEN));
+        assert!(
+            batch
+                .tokens
+                .iter()
+                .all(|token| *token == staleynet_cuda::EMPTY_TOKEN)
+        );
+        assert!(
+            batch
+                .targets
+                .iter()
+                .all(|token| *token == staleynet_cuda::EMPTY_TOKEN)
+        );
     }
 }

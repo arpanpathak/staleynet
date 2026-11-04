@@ -57,9 +57,9 @@ depends only on crates above it in the following table.
 |---|---|
 | `staleynet-audio` | Reading audio files, resampling, spectrogram analysis and the Griffin-Lim reconstruction, as plain CPU code that serves as the reference for the GPU versions. |
 | `staleynet-cuda` | The GPU kernels written in Rust and compiled by cuda-oxide, the tensor type that holds GPU data, and CPU versions of each kernel for testing. |
-| `staleynet-model` | The Transformer, its gradient computation, the optimizer, the incremental decoder used for generation, sampling, and checkpoint files. |
+| `staleynet-model` | The networks. The Transformer with its gradient computation, the optimizer, the incremental decoder used for generation, sampling, and checkpoint files; and the neural vocoder with its inverse STFT and spectral losses, each with hand-derived gradients. |
 | `staleynet-data` | Dataset catalogs, GPU spectrogram extraction, the tokenizer and the assembly of training batches. |
-| `staleynet-train` | The training loop, validation, logging and the checkpoint policy. |
+| `staleynet-train` | The training loops of the language model and of the vocoder: sampling batches, validation, logging and the checkpoint policy. |
 | `staleynet-cli` | The `staleynet` command-line program that ties the crates together. |
 
 A separate program, `studio/`, serves a web page for generating and listening

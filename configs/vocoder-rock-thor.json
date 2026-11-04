@@ -1,0 +1,15 @@
+{
+  "vocoder": { "sample_rate": 24000, "mel_bands": 128, "fft_size": 1024, "hop_size": 256, "width": 512, "layers": 8, "taps": 7, "expansion": 3, "max_log_magnitude": 4.6 },
+  "optimizer": { "peak_learning_rate": 5e-4, "final_learning_rate": 5e-5, "warmup_steps": 1000, "decay_steps": 200000, "beta1": 0.8, "beta2": 0.9, "epsilon": 1e-8, "weight_decay": 0.01, "max_gradient_norm": 1.0 },
+  "sequences": 16,
+  "frames": 64,
+  "steps": 200000,
+  "log_every": 50,
+  "validate_every": 1000,
+  "validation_batches": 8,
+  "checkpoint_every": 1000,
+  "render_every": 5000,
+  "render_tracks": 4,
+  "render_seconds": 10.0,
+  "seed": 0
+}
