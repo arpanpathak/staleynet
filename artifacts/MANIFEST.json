@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "StaleyNET",
-  "generated_at": "2026-11-04T07:05:44.291122Z",
+  "generated_at": "2026-11-04T08:09:54.566824Z",
   "github": {
     "repo": "https://github.com/arpanpathak/staleynet",
     "visibility": "public"
@@ -12,9 +12,9 @@
       "type": "model",
       "url": "https://huggingface.co/arpanpathak/staleynet-checkpoints",
       "visibility": "private",
-      "revision": "2340c6a1547d4435b0e23ee4b097be012e3758b7",
-      "files": 49,
-      "bytes": 512769143,
+      "revision": "6b41938d3c76fb6175fbda9424ae26f8cb4ee6cc",
+      "files": 82,
+      "bytes": 1434443127,
       "note": "includes the .gitattributes added by the Hub"
     },
     "data": {
@@ -22,9 +22,9 @@
       "type": "dataset",
       "url": "https://huggingface.co/datasets/arpanpathak/staleynet-data",
       "visibility": "private",
-      "revision": "2c38130bd722267576182ae32d6a8563232856fc",
-      "files": 2393,
-      "bytes": 2789914818,
+      "revision": "b537afcd43f5fed9bda401644228b4c38ddc9694",
+      "files": 3189,
+      "bytes": 3129578421,
       "note": "includes the .gitattributes added by the Hub"
     }
   },
@@ -58,6 +58,60 @@
         }
       },
       {
+        "name": "lyrics-thor",
+        "parameters": 7165440,
+        "training_tracks": 543,
+        "validation_tracks": 38,
+        "tracks_with_lyrics": 73,
+        "best": {
+          "step": 4750,
+          "has_optimizer_state": false,
+          "bytes": 28661760,
+          "tensors_sha256": "44e1c09ac9ccc8e1c6ea43d197b5eb032e5fe63fe34f5a1568fe9f7a8e59a4ad",
+          "model_json": {
+            "step": 4750,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": {
+          "step": 8000,
+          "has_optimizer_state": true,
+          "bytes": 85985280,
+          "tensors_sha256": "878050062196bfc15a728e64b4818aaa4b39efc29594aebd14cf1cdc8021199d",
+          "model_json": {
+            "step": 8000,
+            "has_optimizer_state": true
+          }
+        }
+      },
+      {
+        "name": "lyrics-thor-long",
+        "parameters": 7165440,
+        "training_tracks": 543,
+        "validation_tracks": 38,
+        "tracks_with_lyrics": 73,
+        "best": {
+          "step": 19750,
+          "has_optimizer_state": false,
+          "bytes": 28661760,
+          "tensors_sha256": "d6f880edddff6fc49df145011d0f21896b4d999990d27453974a49224c6eb87d",
+          "model_json": {
+            "step": 19750,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": {
+          "step": 20000,
+          "has_optimizer_state": true,
+          "bytes": 85985280,
+          "tensors_sha256": "a7bde830e63223e6435745f26aa27c9e019625e7ef9d5629dc05b72749fe402d",
+          "model_json": {
+            "step": 20000,
+            "has_optimizer_state": true
+          }
+        }
+      },
+      {
         "name": "overfit-one-take",
         "parameters": 7099904,
         "training_tracks": 1,
@@ -83,6 +137,34 @@
             "has_optimizer_state": true
           }
         }
+      },
+      {
+        "name": "pq-large",
+        "parameters": 42858496,
+        "training_tracks": 742,
+        "validation_tracks": 45,
+        "tracks_with_lyrics": 75,
+        "best": {
+          "step": 7000,
+          "has_optimizer_state": false,
+          "bytes": 171433984,
+          "tensors_sha256": "e2a597635ba1fa47a6477ee9460ae14ee401818a63786e834ec188c8b393645f",
+          "model_json": {
+            "step": 7000,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": {
+          "step": 7000,
+          "has_optimizer_state": true,
+          "bytes": 514301952,
+          "tensors_sha256": "d341a4f40f27747c5b3f0fd054367f4d9bbbfcbb07919761bef4cc1ea79794f7",
+          "model_json": {
+            "step": 7000,
+            "has_optimizer_state": true
+          }
+        },
+        "note": "snapshot of a run in progress (step 7,000 of 20,000); losses are over 16 codebooks of the band-group tokenizer"
       },
       {
         "name": "smoke",
@@ -215,12 +297,24 @@
       "raw": {
         "files": 7,
         "bytes": 466403
+      },
+      "cache-pq-jamendolyrics": {
+        "files": 82,
+        "bytes": 57702636
+      },
+      "cache-pq-recordings": {
+        "files": 5,
+        "bytes": 6309967
+      },
+      "cache-l16f1": {
+        "files": 709,
+        "bytes": 275509625
       }
     },
     "tokenizer_sha256": "90d999f8a3376cec7fdf3edc40aea73b822a2e78c11175f07819c7e9cd687dfa",
     "cache_manifest_sha256": "d8032f1be08f0609d519f0eb049f0ebc0be737db2859f342d6ebe08cad2ee24b",
-    "cache_g4l4f1_mel": "omitted; source tree symlinked it to ../cache/mel",
-    "raw_audio_included": false
+    "raw_audio_included": false,
+    "omitted_mel": "cache-g4l4f1, cache-l16f1, cache-pq-jamendolyrics and cache-pq-recordings reuse the mel/ of their source cache; recreate the symlinks as the dataset card shows"
   },
   "provenance": [
     {

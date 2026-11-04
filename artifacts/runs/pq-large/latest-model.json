@@ -1,0 +1,411 @@
+{
+  "model": {
+    "width": 512,
+    "heads": 8,
+    "layers": 8,
+    "feed_forward_multiplier": 4,
+    "context_length": 1152,
+    "prompt_bytes": 126,
+    "lyrics_bytes": 256,
+    "codebooks": 16,
+    "codebook_size": 1024
+  },
+  "tensors": [
+    {
+      "name": "token_embedding",
+      "len": 8521216
+    },
+    {
+      "name": "position_embedding",
+      "len": 720896
+    },
+    {
+      "name": "blocks.0.attention_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.0.attention.qkv.weight",
+      "len": 786432
+    },
+    {
+      "name": "blocks.0.attention.qkv.bias",
+      "len": 1536
+    },
+    {
+      "name": "blocks.0.attention.output.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.0.attention.output.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.0.feed_forward_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.0.feed_forward.expand.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.0.feed_forward.expand.bias",
+      "len": 2048
+    },
+    {
+      "name": "blocks.0.feed_forward.project.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.0.feed_forward.project.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.1.attention_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.1.attention.qkv.weight",
+      "len": 786432
+    },
+    {
+      "name": "blocks.1.attention.qkv.bias",
+      "len": 1536
+    },
+    {
+      "name": "blocks.1.attention.output.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.1.attention.output.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.1.feed_forward_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.1.feed_forward.expand.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.1.feed_forward.expand.bias",
+      "len": 2048
+    },
+    {
+      "name": "blocks.1.feed_forward.project.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.1.feed_forward.project.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.2.attention_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.2.attention.qkv.weight",
+      "len": 786432
+    },
+    {
+      "name": "blocks.2.attention.qkv.bias",
+      "len": 1536
+    },
+    {
+      "name": "blocks.2.attention.output.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.2.attention.output.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.2.feed_forward_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.2.feed_forward.expand.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.2.feed_forward.expand.bias",
+      "len": 2048
+    },
+    {
+      "name": "blocks.2.feed_forward.project.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.2.feed_forward.project.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.3.attention_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.3.attention.qkv.weight",
+      "len": 786432
+    },
+    {
+      "name": "blocks.3.attention.qkv.bias",
+      "len": 1536
+    },
+    {
+      "name": "blocks.3.attention.output.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.3.attention.output.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.3.feed_forward_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.3.feed_forward.expand.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.3.feed_forward.expand.bias",
+      "len": 2048
+    },
+    {
+      "name": "blocks.3.feed_forward.project.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.3.feed_forward.project.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.4.attention_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.4.attention.qkv.weight",
+      "len": 786432
+    },
+    {
+      "name": "blocks.4.attention.qkv.bias",
+      "len": 1536
+    },
+    {
+      "name": "blocks.4.attention.output.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.4.attention.output.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.4.feed_forward_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.4.feed_forward.expand.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.4.feed_forward.expand.bias",
+      "len": 2048
+    },
+    {
+      "name": "blocks.4.feed_forward.project.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.4.feed_forward.project.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.5.attention_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.5.attention.qkv.weight",
+      "len": 786432
+    },
+    {
+      "name": "blocks.5.attention.qkv.bias",
+      "len": 1536
+    },
+    {
+      "name": "blocks.5.attention.output.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.5.attention.output.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.5.feed_forward_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.5.feed_forward.expand.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.5.feed_forward.expand.bias",
+      "len": 2048
+    },
+    {
+      "name": "blocks.5.feed_forward.project.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.5.feed_forward.project.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.6.attention_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.6.attention.qkv.weight",
+      "len": 786432
+    },
+    {
+      "name": "blocks.6.attention.qkv.bias",
+      "len": 1536
+    },
+    {
+      "name": "blocks.6.attention.output.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.6.attention.output.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.6.feed_forward_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.6.feed_forward.expand.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.6.feed_forward.expand.bias",
+      "len": 2048
+    },
+    {
+      "name": "blocks.6.feed_forward.project.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.6.feed_forward.project.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.7.attention_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.7.attention.qkv.weight",
+      "len": 786432
+    },
+    {
+      "name": "blocks.7.attention.qkv.bias",
+      "len": 1536
+    },
+    {
+      "name": "blocks.7.attention.output.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.7.attention.output.bias",
+      "len": 512
+    },
+    {
+      "name": "blocks.7.feed_forward_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "blocks.7.feed_forward.expand.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.7.feed_forward.expand.bias",
+      "len": 2048
+    },
+    {
+      "name": "blocks.7.feed_forward.project.weight",
+      "len": 1048576
+    },
+    {
+      "name": "blocks.7.feed_forward.project.bias",
+      "len": 512
+    },
+    {
+      "name": "final_norm.gain",
+      "len": 512
+    },
+    {
+      "name": "head.weight",
+      "len": 8388608
+    },
+    {
+      "name": "head.bias",
+      "len": 16384
+    }
+  ],
+  "step": 7000,
+  "has_optimizer_state": true,
+  "training": {
+    "batch_size": 8,
+    "checkpoint_every": 250,
+    "extra_sources": [
+      {
+        "cache": "data/cache-pq-jamendolyrics",
+        "track_filter": {
+          "exclude_any": [],
+          "require_any": []
+        },
+        "weight": 4.0
+      },
+      {
+        "cache": "data/cache-pq-recordings",
+        "track_filter": {
+          "exclude_any": [],
+          "require_any": []
+        },
+        "weight": 10.0
+      }
+    ],
+    "log_every": 25,
+    "model": {
+      "codebook_size": 1024,
+      "codebooks": 16,
+      "context_length": 1152,
+      "feed_forward_multiplier": 4,
+      "heads": 8,
+      "layers": 8,
+      "lyrics_bytes": 256,
+      "prompt_bytes": 126,
+      "width": 512
+    },
+    "optimizer": {
+      "beta1": 0.8999999761581421,
+      "beta2": 0.949999988079071,
+      "decay_steps": 20000,
+      "epsilon": 9.99999993922529e-9,
+      "final_learning_rate": 0.000029999999242136255,
+      "max_gradient_norm": 1.0,
+      "peak_learning_rate": 0.0003000000142492354,
+      "warmup_steps": 1000,
+      "weight_decay": 0.10000000149011612
+    },
+    "seed": 2026,
+    "sequence_length": 1152,
+    "steps": 20000,
+    "track_filter": {
+      "exclude_any": [],
+      "require_any": []
+    },
+    "validate_every": 500,
+    "validation_batches": 16
+  }
+}

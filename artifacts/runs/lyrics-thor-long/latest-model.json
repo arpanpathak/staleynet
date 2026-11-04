@@ -1,0 +1,379 @@
+{
+  "model": {
+    "width": 256,
+    "heads": 8,
+    "layers": 6,
+    "feed_forward_multiplier": 4,
+    "context_length": 768,
+    "prompt_bytes": 126,
+    "lyrics_bytes": 256,
+    "codebooks": 4,
+    "codebook_size": 1024
+  },
+  "tensors": [
+    {
+      "name": "token_embedding",
+      "len": 1114880
+    },
+    {
+      "name": "position_embedding",
+      "len": 262144
+    },
+    {
+      "name": "blocks.0.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.0.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.0.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.0.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.0.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.0.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.0.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.0.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.0.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.0.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.1.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.1.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.1.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.1.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.1.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.1.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.1.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.1.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.1.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.1.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.2.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.2.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.2.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.2.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.2.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.2.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.2.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.2.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.2.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.2.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.3.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.3.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.3.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.3.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.3.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.3.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.3.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.3.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.3.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.3.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.4.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.4.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.4.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.4.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.4.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.4.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.4.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.4.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.4.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.4.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.5.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.5.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.5.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.5.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.5.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.5.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.5.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.5.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.5.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.5.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "final_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "head.weight",
+      "len": 1048576
+    },
+    {
+      "name": "head.bias",
+      "len": 4096
+    }
+  ],
+  "step": 20000,
+  "has_optimizer_state": true,
+  "training": {
+    "batch_size": 4,
+    "checkpoint_every": 250,
+    "extra_sources": [
+      {
+        "cache": "data/cache-jamendolyrics",
+        "track_filter": {
+          "exclude_any": [],
+          "require_any": []
+        },
+        "weight": 8.0
+      },
+      {
+        "cache": "data/cache",
+        "track_filter": {
+          "exclude_any": [],
+          "require_any": [
+            "rock",
+            "grunge",
+            "alternative",
+            "indie",
+            "punk",
+            "metal",
+            "garage",
+            "psychedelic",
+            "psych",
+            "stoner",
+            "shoegaze",
+            "post-rock",
+            "progressive",
+            "distorted",
+            "distortion",
+            "electric guitar",
+            "power chords",
+            "riff",
+            "riffs"
+          ]
+        },
+        "weight": 3.0
+      }
+    ],
+    "log_every": 25,
+    "model": {
+      "codebook_size": 1024,
+      "codebooks": 4,
+      "context_length": 768,
+      "feed_forward_multiplier": 4,
+      "heads": 8,
+      "layers": 6,
+      "lyrics_bytes": 256,
+      "prompt_bytes": 126,
+      "width": 256
+    },
+    "optimizer": {
+      "beta1": 0.8999999761581421,
+      "beta2": 0.949999988079071,
+      "decay_steps": 20000,
+      "epsilon": 9.99999993922529e-9,
+      "final_learning_rate": 0.000029999999242136255,
+      "max_gradient_norm": 1.0,
+      "peak_learning_rate": 0.0003000000142492354,
+      "warmup_steps": 200,
+      "weight_decay": 0.10000000149011612
+    },
+    "seed": 1234,
+    "sequence_length": 512,
+    "steps": 20000,
+    "track_filter": {
+      "exclude_any": [
+        "instrumental",
+        "no vocals",
+        "without vocals",
+        "no singing",
+        "no voice",
+        "without voice"
+      ],
+      "require_any": [
+        "vocal",
+        "vocals",
+        "voice",
+        "voices",
+        "vocalist",
+        "vocalists",
+        "sing",
+        "sings",
+        "singing",
+        "singer",
+        "singers",
+        "sung",
+        "choir",
+        "choral",
+        "rap",
+        "rapper",
+        "rapping",
+        "lyrics",
+        "chant",
+        "chanting"
+      ]
+    },
+    "validate_every": 250,
+    "validation_batches": 16
+  }
+}

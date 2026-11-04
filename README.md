@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://crates.io/crates/staleynet-audio"><img src="docs/assets/badges/crates.svg" height="34" alt="crates.io 0.1.1"></a>&nbsp;
+  <a href="https://crates.io/crates/staleynet-audio"><img src="docs/assets/badges/crates.svg" height="34" alt="crates.io 0.1.2"></a>&nbsp;
   <a href="LICENSE"><img src="docs/assets/badges/license.svg" height="34" alt="Apache-2.0"></a>&nbsp;
   <a href="docs/assets/paper-preprint.pdf"><img src="docs/assets/badges/paper.svg" height="34" alt="Paper"></a>&nbsp;
   <a href="#book-and-paper"><img src="docs/assets/badges/book.svg" height="34" alt="Book"></a>&nbsp;

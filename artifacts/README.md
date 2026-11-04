@@ -26,9 +26,16 @@ card describing the layout and the upstream dataset terms.
 | `vocal-scratch` | 5,500 | 6,000 | 7,099,904 | 281 |
 | `vocal-finetune` | 250 | — | 7,099,904 | 281 |
 | `lyrics-orin` | 3,750 | 4,000 | 7,165,440 | 543 (73 with lyrics) |
+| `lyrics-thor` | 4,750 | 8,000 | 7,165,440 | 543 (73 with lyrics) |
+| `lyrics-thor-long` | 19,750 | 20,000 | 7,165,440 | 543 (73 with lyrics) |
+| `pq-large` | 7,000 | 7,000 | 42,858,496 | 742 (75 with lyrics) |
 
 `best/` is weight-only; `latest/` also stores the AdamW moments and is the
 checkpoint to resume from. Step values are read from each `model.json`.
+
+`pq-large` is a snapshot of a run that is still training on the AGX Thor
+(step 7,000 of 20,000). It uses the band-group tokenizer (4 groups × 4 levels,
+16 codebooks), so its losses cannot be compared with the 4-codebook runs.
 
 `runs/<run>/` here contains the small metadata: `config.json` where the run
 saved one, `best-model.json`, `latest-model.json`, and `metrics.jsonl`. The
@@ -40,8 +47,14 @@ The dataset repository contains:
 
 - `cache/` — SDD log-mel and RVQ codes (1,415 files, 2.0 GB).
 - `cache-jamendolyrics/` — JamendoLyrics cache (161 files, 408 MB).
-- `cache-g4l4f1/` — alternate cache variant (708 files, 246 MB); its `mel/`
-  entry was a symlink to `cache/mel/` and is omitted.
+- `cache-g4l4f1/` — SDD codes under the band-group tokenizer (708 files,
+  246 MB).
+- `cache-pq-jamendolyrics/`, `cache-pq-recordings/` — JamendoLyrics and the
+  author's own takes under the same tokenizer (82 and 5 files, 62 MB).
+- `cache-l16f1/` — tokenizer-study control with 16 residual levels and no band
+  groups (709 files, 263 MB).
+- These four caches reuse the `mel/` of their source cache, which is omitted
+  here; the dataset card lists the symlinks to recreate.
 - `cache-overfit/`, `cache-recordings/` — small debugging caches.
 - `recordings/`, `overfit/` — the author's own takes; all rights reserved.
 - `samples/` — generated and reconstruction audio (79 files, 34 MB).
