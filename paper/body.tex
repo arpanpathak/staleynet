@@ -76,9 +76,44 @@ The contributions of this paper are as follows.
 We write algorithms in the style of Cormen et al.\
 \cite{cormen2022introduction}, as in our earlier tutorial on tiled matrix
 multiplication \cite{pathak2026tiled}. Each procedure first states its inputs
-and its output in words; its lines are numbered, and the text refers to them.
-The range $[a, b)$ denotes the integers $a, \dots, b-1$, indices start at 0, and
-losses are measured in nats.
+and its output in words, with their units; its lines are numbered, and the text
+refers to them. The range $[a, b)$ denotes the integers $a, \dots, b-1$, and
+indices start at 0. Every symbol is defined where it first appears, and
+\cref{tab:symbols} collects the ones used in more than one section. A few
+letters are reused for a different purpose inside a single subsection, for
+example $K$ for the keys of attention; the text says so where this happens.
+
+Two units recur throughout. Frequencies and sample rates are given in hertz
+(Hz): a tone of 440\,Hz vibrates 440 times per second, and a sample rate of
+24\,kHz means that the waveform is recorded as 24\,000 numbers per second.
+Losses are given in \emph{nats}, the unit of information obtained with the
+natural logarithm: a prediction that gives the correct answer probability $q$
+costs $-\ln q$ nats, so a certain prediction costs 0 and a uniform guess among
+1\,024 codes costs $\ln 1024 \approx 6.93$.
+
+\begin{table}[htbp]
+\centering
+\caption{Symbols used in more than one section.}
+\label{tab:symbols}
+\footnotesize
+\begin{tabular}{@{}lp{0.52\linewidth}l@{}}
+\toprule
+symbol & meaning & value \\
+\midrule
+$f_\text{s}$ & sample rate of the analysed audio (samples per second) & 24\,000\,Hz \\
+$N$ & samples in one spectrogram frame & 1\,024 (42.7\,ms) \\
+$H$ & hop: samples between the starts of two frames & 256 (10.7\,ms) \\
+$S$ & log-mel spectrogram, one row per frame, one column per mel band & $\cdot \times 128$ \\
+step & the frames described by one set of codes & 1 or 2 frames \\
+$C$ & codebooks (codes) per step & 4 or 16 \\
+$K$ & prototypes per codebook & 1\,024 \\
+$G$ & groups of mel bands quantised separately & 1 or 4 \\
+$d$ & width of the vectors inside the model & 256 or 512 \\
+$L$ & bytes reserved for lyrics & 256 \\
+$\theta$ & all trainable parameters of the model & 7.1\,M or 42.9\,M \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Related work}
 \label{sec:related}
@@ -108,47 +143,78 @@ setting; \cref{sec:pipeline} measures what our simpler choices cost.
 \section{From sound to spectrogram and back}
 \label{sec:representation}
 
-A waveform sampled at 24\,kHz contains 24\,000 numbers per second, and much of
-that information describes the phase of each vibration, to which the ear is
-not very sensitive. We therefore describe sound by its log-mel spectrogram:
-the energy in 128 frequency bands spaced according to human pitch
-perception, measured about 94 times per second and compressed
-logarithmically.
+A recording is stored as a \emph{waveform}: a list of \emph{samples}, each
+the displacement of the loudspeaker at one instant, scaled to lie between $-1$
+and $1$. The \emph{sample rate} is the number of samples per second, measured
+in hertz, and a rate of 24\,kHz therefore gives 24\,000 numbers per second. Any
+sound can be described as a sum of vibrations, each with a \emph{frequency}
+(how many times per second it repeats, in Hz), a \emph{magnitude} (how strong it
+is) and a \emph{phase} (where in its cycle it is at a given instant). The ear is
+sensitive to frequency and magnitude but much less to phase. We therefore
+describe sound by its log-mel spectrogram: the energy in 128 frequency bands
+spaced according to human pitch perception, measured $f_\text{s}/H = 24\,000 /
+256 = 93.75$ times per second and compressed logarithmically.
 
 \subsection{Resampling}
 
-The training recordings arrive at several sample rates, most often 44.1\,kHz,
-and we convert them all to 24\,kHz. Lowering the rate requires first removing
-all content above the new Nyquist frequency of 12\,kHz; otherwise that content
-folds back into the audible range, an effect known as aliasing.
+The training recordings arrive at several sample rates, most often 44.1\,kHz
+(the rate of a CD), and we convert them all to 24\,kHz. A waveform sampled at a
+rate $f$ can only represent frequencies below $f/2$, the \emph{Nyquist
+frequency}, because at least two samples per cycle are needed to tell a
+vibration apart from silence. Lowering the rate to 24\,kHz therefore requires
+first removing all content above 12\,kHz; otherwise that content folds back
+into the audible range as false tones, an effect known as \emph{aliasing}.
 
 \begin{definition}[Bandlimited resampling]
-Given samples $x_m$ at rate $f_\text{in}$, the resampled signal at rate
-$f_\text{out}$ is
+Let $x_m$ be sample $m$ of a recording made at $f_\text{in}$ samples per second,
+and let $f_\text{out}$ be the desired rate, also in samples per second. Output
+sample $n$ describes the instant $n / f_\text{out}$ seconds, which lies
 \[
-y_n \;=\; \sum_{m} x_m \, h\!\left(t_n - m\right), \qquad t_n = n\,\frac{f_\text{in}}{f_\text{out}},
+t_n = n\,\frac{f_\text{in}}{f_\text{out}}
 \]
-where $h$ is a low-pass filter. Each output sample is a weighted sum of the
-input samples near the fractional position $t_n$.
+input samples after the start; $t_n$ is usually not a whole number. The
+resampled signal is
+\[
+y_n \;=\; \sum_{m} x_m \, h\!\left(t_n - m\right),
+\]
+where the \emph{filter} $h$ gives the weight of an input sample as a function of
+its distance $t_n - m$ from $t_n$, measured in input samples. Each output sample
+is therefore a weighted sum of the input samples near $t_n$.
 \end{definition}
 
-We use a windowed sinc filter, $h(t) = c\,\operatorname{sinc}(ct)\,w(ct/Z)$, in
-which $c$ is the cutoff relative to the input rate, $Z = 24$ is the number of
-zero crossings kept on each side, and $w$ is a Kaiser window with $\beta = 8.6$
-\cite{smith2002resample}. Evaluating $h$ anew for every output sample would be
+The ideal weights come from the function $\operatorname{sinc}(u) = \sin(\pi
+u)/(\pi u)$, which interpolates a bandlimited signal exactly but extends
+infinitely far in both directions \cite{smith2002resample}. We use the windowed
+sinc filter
+\[
+h(t) = c\,\operatorname{sinc}(ct)\,w(ct/Z),
+\]
+whose three parameters are as follows. The \emph{cutoff} $c$, a number between
+0 and 1, is the highest frequency kept, as a fraction of the input Nyquist
+frequency; when the rate is lowered, $c$ is slightly below
+$f_\text{out}/f_\text{in}$. $Z = 24$ is the number of zero crossings of the sinc
+kept on each side, which sets how many input samples contribute to each output
+sample. $w$ is a Kaiser window, a bell-shaped taper that falls smoothly to zero
+at $\pm 1$ so that cutting the sinc short does not cause ripples; its shape
+parameter $\beta = 8.6$ trades a sharper cutoff against stronger suppression of
+the removed frequencies. Evaluating $h$ anew for every output sample would be
 slow, but fortunately the fractional part of $t_n$ takes only a few values.
 
-\paragraph{A worked example.} For a conversion from 44\,100\,Hz to 24\,000\,Hz
-the two rates share the factor 300, so $t_n = 147n/80$. For $n = 1$ we obtain
-$t_1 = 1 + 67/80$. Every $t_n$ has a fraction of the form $p/80$ with
-$p \in [0, 80)$, so exactly 80 sets of filter weights are needed. These sets
-are called the \emph{phases} of a polyphase filter, and they are computed
-once.
+\paragraph{A worked example.} For a conversion from $f_\text{in} = 44\,100$\,Hz
+to $f_\text{out} = 24\,000$\,Hz, the greatest common divisor of the two rates is
+300, so $t_n = n \cdot 44\,100 / 24\,000 = 147n/80$ input samples. For $n = 1$ we
+obtain $t_1 = 1 + 67/80$: the second output sample lies $67/80$ of the way from
+input sample 1 to input sample 2. Every $t_n$ has a fractional part of the form
+$p/80$ with $p \in [0, 80)$, so exactly 80 sets of filter weights are needed.
+These sets are called the \emph{phases} of a polyphase filter, and they are
+computed once.
 
 \begin{procedure}{\proc{Resample}$(x, f_\text{in}, f_\text{out})$}
-{the samples $x_0, x_1, \dots$ of a recording, its sample rate $f_\text{in}$,
-and the desired rate $f_\text{out}$, both in Hz.}
-{the samples $y_0, y_1, \dots$ of the same sound at rate $f_\text{out}$.}
+{the samples $x_0, x_1, \dots$ of a recording (numbers between $-1$ and $1$),
+the rate $f_\text{in}$ at which they were recorded, and the desired rate
+$f_\text{out}$; both rates are whole numbers of samples per second (Hz).}
+{the samples $y_0, y_1, \dots$ of the same sound at $f_\text{out}$ samples per
+second; one second of input gives $f_\text{out}$ output samples.}
 \li $g = \gcd(f_\text{in}, f_\text{out})$ \\
 \li $L = f_\text{out} / g$ \cmt{number of phases} \\
 \li $M = f_\text{in} / g$ \cmt{input step per output sample, in $L$-ths} \\
@@ -166,52 +232,81 @@ and the desired rate $f_\text{out}$, both in Hz.}
 \li \}
 \end{procedure}
 
-Lines 1--5 determine the geometry of the filter, lines 6--10 compute the $L$
-phases once, and line 14 is the single dot product needed for each output
-sample. The factor 0.97 in line 4 keeps the transition band of the filter
-just below the new Nyquist frequency. A test confirms that the filter does
-its job: a 15\,kHz tone is attenuated by more than 80\,dB when 48\,kHz audio is
-converted to 24\,kHz.
+Lines 1--5 determine the geometry of the filter. $g$ is the greatest common
+divisor of the two rates, $L$ is the number of distinct fractional positions
+(phases), and $M/L = f_\text{in}/f_\text{out}$ is the distance between
+consecutive output samples, measured in input samples. $R$ is the number of
+input samples used on each side of $t_n$; it grows as $c$ shrinks, because a
+lower cutoff needs a wider filter. Lines 6--10 compute the $L$ phases once,
+each a list of $2R + 1$ weights $h_p[j]$, and line 14 is the single dot product
+needed for each output sample. The factor 0.97 in line 4 places the cutoff at
+97\,\% of the new Nyquist frequency, so that the filter has a narrow band in
+which to fall from full strength to zero before aliasing could begin. A test
+confirms that the filter does its job: when 48\,kHz audio is converted to
+24\,kHz, a 15\,kHz tone, which the new rate cannot represent, is attenuated by
+more than 80\,dB, a factor of $10^{8}$ in power.
 
 \subsection{The spectrogram as a matrix product}
 
-The signal is divided into frames of $N = 1024$ samples, taken every $H = 256$
-samples, and each frame is multiplied by a Hann window. The strength of each
-frequency in each frame is usually computed with the fast Fourier transform.
+The signal is divided into overlapping \emph{frames} of $N = 1024$ samples
+(42.7\,ms at 24\,kHz), a new frame starting every $H = 256$ samples (10.7\,ms).
+Each frame is multiplied by a Hann window, $w[n] = \sin^2(\pi n / N)$, which
+fades the frame in and out so that its abrupt edges do not appear as spurious
+frequencies. The strength of each frequency in each frame is usually computed
+with the fast Fourier transform (FFT).
 We computed it instead with a matrix product, so that the spectrogram runs on
 the same GPU kernel as the Transformer and benefits from the same tests
 (\cref{sec:gpu}).
 
 \begin{definition}[Log-mel spectrogram]
-Let row $f$ of the matrix $F$ hold frame $f$ of the signal, and let $W$ have
-entries $W_{nk} = w[n]\,e^{-2\pi i kn/N}$ for $k \in [0, N/2]$, where $w$ is the Hann
-window. The log-mel spectrogram is
+Let $F$ be the matrix whose row $f$ holds the $N$ samples of frame $f$, and let
+$W$ be the $N \times (N/2 + 1)$ matrix with entries $W_{nk} = w[n]\,e^{-2\pi i
+kn/N}$, where $n \in [0, N)$ indexes the samples of a frame, $k \in [0, N/2]$
+indexes the frequencies, $w$ is the Hann window and $i = \sqrt{-1}$. The
+log-mel spectrogram is
 \[
 S \;=\; \ln \max\!\big(|FW|^2 B,\; 10^{-5}\big),
 \]
-where the square is taken entry by entry and the columns of $B$ are 128
-triangular mel filters \cite{slaney1998auditory}.
+where the absolute value and the square are taken entry by entry, and $B$ is
+the $(N/2 + 1) \times 128$ matrix whose columns are 128 triangular mel filters
+\cite{slaney1998auditory}. $S$ has one row per frame and one column per mel
+band, and its entries are natural logarithms of energy.
 \end{definition}
 
-Column $k$ of $W$ holds a windowed sine and cosine at $k \cdot 23.4$\,Hz, so row
-$f$ of $FW$ measures how much of each frequency frame $f$ contains. The real
-and imaginary parts of $W$ are two real matrices, and $B$ adds a third
-product. This formulation needs about $N/\log_2 N \approx 100$ times the
-arithmetic of an FFT. Even so, on the Orin NX it analyses 60\,s of audio in
+Column $k$ of $W$ holds a windowed cosine (real part) and sine (imaginary part)
+at frequency $k f_\text{s}/N = k \cdot 23.4$\,Hz, so entry $(f, k)$ of $FW$
+measures how much of that frequency frame $f$ contains, and its square $|FW|^2$
+is the energy at that frequency. The mel filters then pool these 513
+frequencies into 128 bands. The \emph{mel} scale follows pitch perception: it is
+linear below 1\,kHz and logarithmic above, so the centres of neighbouring bands
+are about 26\,Hz apart at low frequencies and about 330\,Hz apart near 12\,kHz,
+much as the ear
+distinguishes low notes more finely than high ones. The logarithm reflects the
+roughly logarithmic perception of loudness, and the floor $10^{-5}$ keeps
+silence finite. The real and imaginary parts of $W$ are two real matrices, and
+$B$ adds a third product. This formulation needs about $N/\log_2 N \approx 100$ times the
+arithmetic of an FFT, because a matrix product computes each frequency
+separately, whereas the FFT shares work between frequencies. Even so, on the Orin NX it analyses 60\,s of audio in
 47\,ms, against 73\,ms for a multithreaded CPU FFT (\cref{tab:bench-other}),
 and it agrees with the FFT to within $10^{-2}$ log units.
 
 \subsection{Estimating the phase}
 
 A generated spectrogram tells us how strong each frequency is, but not its
-phase. The Griffin-Lim algorithm \cite{griffin1984signal} estimates a phase by
-alternating between two requirements: the magnitudes should match the target,
-and the spectrogram should be that of an actual waveform.
+phase, and a waveform cannot be built without one. Not every pattern of
+magnitudes and phases belongs to a real waveform: neighbouring frames overlap
+by three quarters, so they must agree about the samples they share. The
+Griffin-Lim algorithm \cite{griffin1984signal} estimates a phase by alternating
+between two requirements: the magnitudes should match the target, and the
+spectrogram should be that of an actual waveform (it should be
+\emph{consistent}).
 
 \begin{procedure}{\proc{Griffin-Lim}$(\,|S|, T\,)$}
-{the target magnitudes $|S|$, one row per frame and one column per frequency,
-and the number of rounds $T$.}
-{a waveform $x$ whose spectrogram approximates $|S|$.}
+{the target magnitudes $|S|$, a matrix of non-negative numbers with one row per
+frame and one column for each of the $N/2 + 1 = 513$ frequencies, and the number
+of rounds $T$.}
+{a waveform $x$ at $f_\text{s}$ samples per second whose spectrogram
+approximates $|S|$.}
 \li $X = |S| \cdot e^{i\phi}$ with random phases $\phi$ \\
 \li $x = \operatorname{ISTFT}(X)$ \\
 \li $P_\text{prev} = \operatorname{STFT}(x)$ \groupend
@@ -225,35 +320,51 @@ and the number of rounds $T$.}
 \li \kw{return} $x$
 \end{procedure}
 
-Here STFT and ISTFT denote the short-time Fourier transform and its inverse.
-Line 5 replaces the current estimate by the spectrogram of a real waveform,
-and line 7 restores the target magnitudes. Line 6 is the acceleration
+Here STFT (short-time Fourier transform) turns a waveform into its complex
+spectrogram, $FW$ in the notation above, and ISTFT turns a complex spectrogram
+back into a waveform by overlapping and adding its frames. Each entry of a
+complex spectrogram is a magnitude times $e^{i\phi}$, where $\phi$ is the phase
+in radians. In line 1, $X$ combines the target magnitudes with random phases.
+Line 5 replaces the current estimate by the spectrogram $P$ of a real waveform,
+and line 7 keeps the phase of each entry of $A$ while restoring its target
+magnitude. Line 6 is the acceleration
 proposed by Perraudin et al.\ \cite{perraudin2013fast}, which extrapolates
 along the last change with momentum $\alpha = 0.99$; in the first round it has
-no effect, because $P = P_\text{prev}$. We use $T = 64$ rounds, after mapping
-the 128 mel bands back to 513 frequencies with a regularised least-squares
-inverse of $B$.
+no effect, because $P = P_\text{prev}$. We use $T = 64$ rounds. Because $S$
+holds logarithms of mel energies, the target magnitudes are obtained by
+undoing each step of the definition: $e^{S}$ gives the band energies, a
+regularised least-squares inverse of $B$ spreads them back over the 513
+frequencies, and a square root turns energy into magnitude.
 
 \section{From spectrogram to tokens}
 \label{sec:tokenizer}
 
 A language model chooses each next symbol from a finite vocabulary, whereas a
-spectrogram consists of real numbers. The tokenizer bridges this gap. Each
-band of the spectrogram is first standardised with its mean and standard
-deviation over the training set, so that quiet and loud bands carry similar
-weight. A \emph{step} is then formed from consecutive frames; in our first
-tokenizer a step joins 2 frames, giving 256 numbers that cover 21.3\,ms.
+spectrogram consists of real numbers. The tokenizer bridges this gap by
+replacing each short stretch of spectrogram with a few integers, its
+\emph{codes}. Each band of the spectrogram is first standardised: its mean over
+the training set is subtracted and the result is divided by its standard
+deviation, so that quiet and loud bands carry similar weight and every value
+is a plain number without unit. A \emph{step} is then formed from consecutive
+frames; in our first tokenizer a step joins 2 frames, giving a vector of
+$D = 2 \cdot 128 = 256$ numbers that covers $2H/f_\text{s} = 21.3$\,ms of
+sound.
 
 \subsection{Residual quantisation}
 
 One can think of residual quantisation as describing a colour first by its
 family, then by its shade within the family, and then by finer and finer
 corrections. Each level names the closest of $K$ prototypes to whatever the
-previous levels have left unexplained.
+previous levels have left unexplained. A \emph{prototype} is a typical step,
+a vector of $D$ numbers, and a \emph{codebook} is a list of $K$ prototypes; the
+code chosen at a level is the position of the chosen prototype in its list,
+an integer in $[0, K)$.
 
 \begin{definition}[Residual vector quantisation]
-Let $E_0, \dots, E_{C-1}$ be codebooks, each a list of $K$ prototype vectors.
-A step $x$ is encoded as the indices $c_0, \dots, c_{C-1}$ defined by
+Let $E_0, \dots, E_{C-1}$ be $C$ codebooks (one per level $\ell$), each a list of
+$K$ prototype vectors of length $D$, and write $E_\ell[k]$ for prototype $k$ of
+codebook $\ell$. A step $x \in \mathbb{R}^D$ is encoded as the codes
+$c_0, \dots, c_{C-1}$ defined by
 \begin{gather*}
 r_0 = x, \qquad c_\ell = \argmin_{k \in [0, K)} \lVert r_\ell - E_\ell[k] \rVert^2, \\
 r_{\ell+1} = r_\ell - E_\ell[c_\ell],
@@ -286,9 +397,11 @@ $\sqrt{0.08} \approx 0.28$ after two.
 \subsection{Training the codebooks}
 
 \begin{procedure}{\proc{Train-Codebooks}$(X, C, K, I)$}
-{a matrix $X$ whose rows are training steps, the number of levels $C$, the
-number of prototypes per level $K$, and the number of rounds $I$.}
-{the codebooks $E_0, \dots, E_{C-1}$.}
+{a matrix $X$ with one row per training step and $D$ standardised values per
+row, the number of levels $C$, the number of prototypes per level $K$, and the
+number of refinement rounds $I$.}
+{the codebooks $E_0, \dots, E_{C-1}$, each a $K \times D$ matrix whose rows are
+prototypes.}
 \li $R = X$ \cmt{what remains to be described} \groupend
 \li \kw{for} $\ell \in [0, C)$ \{ \\
 \li \> $E_\ell = K$ rows of $R$, chosen at random \groupend
@@ -303,7 +416,9 @@ number of prototypes per level $K$, and the number of rounds $I$.}
 \end{procedure}
 
 \proc{Nearest}$(r, E)$ returns the index of the prototype in $E$ closest to
-$r$. Lines 5--6 are the two moves of Lloyd's algorithm \cite{lloyd1982least}:
+$r$ in Euclidean distance. $R$ holds the residuals of all training steps, one
+row per step, and $a_i \in [0, K)$ records which prototype row $i$ is currently
+assigned to. Lines 5--6 are the two moves of Lloyd's algorithm \cite{lloyd1982least}:
 each row is assigned to its nearest prototype, and each prototype then moves
 to the mean of its rows. Lines 7--8 restart a prototype to which no row was
 assigned, so that none of the $K$ entries goes unused, and line 10 passes the
@@ -312,8 +427,12 @@ from the training set.
 
 \subsection{The nearest prototype as a matrix product}
 
+Finding the nearest prototype for every step is the most expensive part of
+both training and encoding. The following identity turns it into a matrix
+product, which the GPU computes efficiently.
+
 \begin{lemma}
-For a vector $x$ and prototypes $e_0, \dots, e_{K-1}$,
+For a vector $x$ and prototypes $e_0, \dots, e_{K-1}$, all of length $D$,
 $\argmin_k \lVert x - e_k \rVert^2 = \argmin_k \big(\lVert e_k \rVert^2 - 2\,x \cdot e_k\big)$.
 \end{lemma}
 \begin{proof}
@@ -332,9 +451,10 @@ after which a small kernel finds the smallest score in each row.
 
 The analysis of \cref{sec:pipeline} led us to a refinement. Instead of
 quantising a whole step at once, we divide its 128 bands into $G$ equal
-groups and give each group its own residual codebooks. With one frame per
-step and $G = 4$, each group is a vector of 32 numbers, which 1\,024 prototypes
-can describe more finely than a whole step. In our experiments the grouping
+groups of neighbouring bands, from the lowest frequencies to the highest, and
+give each group its own residual codebooks. With one frame per step and
+$G = 4$, each group is a vector of $128/4 = 32$ numbers, which $K = 1\,024$
+prototypes can describe more finely than a whole step of 128. In our experiments the grouping
 helped somewhat less than we expected, and the additional codes helped more
 (\cref{sec:appendix-tokenizer}). The codes of a
 step are ordered level by level: first the coarse codes of all $G$ groups, then
@@ -363,13 +483,18 @@ code.}
 
 \subsection{One sequence for text and audio}
 
-The vocabulary contains the 256 possible byte values \cite{xue2022byt5}, three
-markers (\code{BEGIN}, \code{SEPARATOR} and \code{PADDING}) and $C \cdot K$ audio
-symbols, one for each prototype of each codebook. The text occupies a fixed 128
-positions, namely \code{BEGIN}, 126 caption bytes and \code{SEPARATOR}, so that
-the audio always begins at the same position. An audio position carries all
-$C$ codes of a step, and its input vector is the sum of their embeddings and
-the embedding of the position.
+The model reads a sequence of \emph{positions}, and at each position it
+receives one or more symbols from a fixed vocabulary. The vocabulary contains
+the 256 possible byte values of UTF-8 text \cite{xue2022byt5}, three markers
+(\code{BEGIN}, \code{SEPARATOR} and \code{PADDING}) and $C \cdot K$ audio
+symbols, one for each prototype of each codebook. The caption is given as raw
+bytes, so no separate text encoder is needed. The text occupies a fixed 128
+positions, namely \code{BEGIN}, up to 126 caption bytes (padded when shorter)
+and \code{SEPARATOR}, so that the audio always begins at the same position. An
+audio position carries all $C$ codes of one step. Every symbol and every
+position has an \emph{embedding}, a learned vector of $d$ numbers, and the
+input vector of an audio position is the sum of the embeddings of its $C$ codes
+and of the position.
 
 \subsection{The delay pattern}
 
@@ -378,18 +503,20 @@ however, corrects a coarser one and is easier to predict once the coarser one
 is known.
 
 \begin{definition}[Delay pattern \cite{copet2023musicgen}]
-Position $t$ of the delayed sequence holds, in slot $\ell$, the code
-$a_{t-\ell}^{\ell}$ of codebook $\ell$ for frame $t - \ell$, and an empty marker
-when $t - \ell$ is not a frame. A piece of $F$ frames becomes $F + C - 1$
-positions.
+Write $a_{u}^{\ell}$ for the code of codebook $\ell$ at step $u$. Position $t$ of
+the delayed sequence holds, in slot $\ell \in [0, C)$, the code
+$a_{t-\ell}^{\ell}$, so that codebook $\ell$ runs $\ell$ positions behind codebook
+0, and an empty marker when $t - \ell$ is not a step of the piece. A piece of
+$F$ steps becomes $F + C - 1$ positions.
 \end{definition}
 
 \begin{figure}[htbp]
 \centering
 \input{figures/delay}
-\caption{The delay pattern for three codebooks and four frames. At position 2
-the model predicts $a_2$, $b_1$ and $c_0$, and the coarser codes that they refine
-are already part of its input.}
+\caption{The delay pattern for three codebooks and four steps. The letters
+$a$, $b$ and $c$ stand for codebooks 0, 1 and 2, and the subscript is the step.
+At position 2 the model predicts $a_2$, $b_1$ and $c_0$, and the coarser codes
+that they refine are already part of its input.}
 \label{fig:delay}
 \end{figure}
 
@@ -408,38 +535,52 @@ each position on its own. Both parts normalise their input
 h &= x + \operatorname{Attention}(\operatorname{Norm}(x)), \\
 y &= h + \operatorname{FeedForward}(\operatorname{Norm}(h)),
 \end{align*}
-where $x$ is the sequence entering the block and $y$ the sequence leaving it.
-The feed-forward network uses the GELU activation \cite{hendrycks2016gelu}. Our
-first model has 6 blocks of width 256 with 8 attention heads (7.1 million
-parameters); the larger model of \cref{sec:large} has 8 blocks of width 512
-(42.9 million parameters).
+where $x$ is the sequence entering the block, one vector of $d$ numbers per
+position, and $y$ the sequence leaving it, of the same size. Norm rescales each
+vector to unit root-mean-square size and multiplies it by learned weights, and attention is split into several
+\emph{heads}, each of which attends with its own $d/\text{heads}$ numbers. The
+feed-forward network expands each vector to $4d$ numbers, applies the GELU
+activation \cite{hendrycks2016gelu}, and projects it back to $d$. Our first
+model has 6 blocks of width $d = 256$ with 8 attention heads (7.1 million
+parameters); the larger model of \cref{sec:large} has 8 blocks of width
+$d = 512$ (42.9 million parameters).
 
-At position $p$ the model outputs, for each codebook $\ell$, a probability
+At position $p$ the model outputs, for each codebook $\ell$, a score for each of
+the $K$ possible codes, and a softmax turns the scores into a probability
 distribution over the code $y_{p,\ell}$ that appears at position $p + 1$. The
 loss is the cross-entropy, averaged first over the set $V_\ell$ of positions
 that have a target in codebook $\ell$ and then over the codebooks:
 \[
 \mathcal{L} = \frac{1}{C} \sum_{\ell=0}^{C-1} \frac{1}{|V_\ell|} \sum_{p \in V_\ell} -\ln P_\theta\big(y_{p,\ell} \mid z_0, \dots, z_p\big),
 \]
-where $z_p$ is the input at position $p$ and $\theta$ denotes the parameters. A
-model that assigns equal probability to all 1\,024 codes has a loss of
-$\ln 1024 \approx 6.93$.
+where $z_p$ is the input at position $p$, $\theta$ denotes the parameters, and
+$P_\theta(y \mid \cdot)$ is the probability that the model assigns to the correct
+code $y$. The loss is measured in nats per code. A model that assigns equal
+probability to all 1\,024 codes has a loss of $\ln 1024 \approx 6.93$, and lower
+values mean that the model has learned something about the music.
 
 \subsection{Gradients by hand}
 
 As far as we know, no automatic differentiation is available for Rust on the
 GPU, so each layer implements its own gradient. Attention is the least
 obvious case. For one head, let the rows of $Q$, $K$ and $V$ be the queries,
-keys and values of the positions, and let $d$ be the width of the head. Then
+keys and values of the positions: each position \emph{asks} with its query,
+the similarity of a query and a key decides how much attention a position
+pays to another, and the values are what is passed along. In this subsection
+$K$ and $V$ denote keys and values rather than codebook sizes, and $d$ denotes
+the width of one head. With $T$ positions, $Q$, $K$ and $V$ are $T \times d$
+matrices, and
 \[
 S = QK^\top/\sqrt d + M, \qquad P = \softmax(S), \qquad O = PV,
 \]
-where the mask $M$ is $-\infty$ above the diagonal, so that no position attends
-to a later one, and the softmax normalises each row.
+where $S$, $P$ and the mask $M$ are $T \times T$, $O$ is $T \times d$, $M$ is
+$-\infty$ above the diagonal so that no position attends to a later one, and the
+softmax turns each row of scores into weights that are positive and sum to 1.
 
 \begin{proposition}
 Let $\partial O$ be the gradient of the loss with respect to $O$, and similarly
-for the other matrices. Then $\partial V = P^\top \partial O$,
+for the other matrices, and let $\delta_{jk}$ be 1 when $j = k$ and 0 otherwise.
+Then $\partial V = P^\top \partial O$,
 $\partial P = \partial O\, V^\top$, $\partial S_{ik} = P_{ik}(\partial P_{ik} - \rho_i)$
 with $\rho_i = \sum_j \partial P_{ij} P_{ij}$, $\partial Q = \partial S\, K/\sqrt d$ and
 $\partial K = \partial S^\top Q/\sqrt d$.
@@ -470,8 +611,10 @@ where.
 
 The lyrics occupy $L = 256$ byte positions between the caption and the
 separator. Each position $p$ takes its position embedding from row $\pi(p)$ of
-a table, and the choice of $\pi$ determines whether a model trained without
-lyrics can later be extended (\cref{fig:lyrics}).
+a table of learned vectors, and the choice of the map $\pi$ determines whether
+a model trained without lyrics can later be extended (\cref{fig:lyrics}).
+Simply inserting the lyrics would shift every later position, so the audio
+would read embeddings that the trained model had learned for other places.
 
 \begin{figure}[htbp]
 \centering
@@ -483,8 +626,10 @@ appended to the table.}
 \end{figure}
 
 \begin{definition}[Position map]
-Suppose the caption occupies positions $[1, 1{+}P)$, the lyrics occupy
-$[1{+}P, 1{+}P{+}L)$, and the model without lyrics has $T$ rows. Then
+Suppose that position 0 holds \code{BEGIN}, the caption occupies positions
+$[1, 1{+}P)$, where $P$ is the number of caption bytes, the lyrics occupy
+$[1{+}P, 1{+}P{+}L)$, and the position table of the model without lyrics has
+$T$ rows, one for each position it can read. Then
 \[
 \pi(p) =
 \begin{cases}
@@ -518,7 +663,8 @@ meaning, and training simply continues.
 A training example covers a window of a song, and it should carry the lines
 sung in that window. JamendoLyrics \cite{durand2023lyrics} gives the start and
 end time of every line of 78 songs in English, French, German and Spanish, and
-a window receives each line that overlaps it. Takes recorded with our studio
+a window, the stretch of a song shown to the model in one training example,
+receives each line whose time span overlaps it. Takes recorded with our studio
 come with their text but without timings, so we assume that their lines are
 spread evenly over the take; this is a fair approximation for short takes of
 continuous singing. Because the lyrics corpus is small (4.7 hours, against 23
@@ -535,9 +681,10 @@ words, with no words, and with words from another song.
 
 \begin{procedure}{\proc{Lyrics-Test}$(\theta, \mathcal{D}, B)$}
 {a trained model with parameters $\theta$, a set $\mathcal{D}$ of held-out songs
-with lyrics, and a number of batches $B$.}
-{the mean paired difference $\bar\Delta$, its standard error $s$, and whether
-the difference is clearly positive.}
+with timed lyrics, and a number of batches $B$, each a few windows drawn at
+random.}
+{the mean paired difference $\bar\Delta$ and its standard error $s$, both in
+nats per code, and whether the difference is clearly positive.}
 \li \kw{for} $b \in [0, B)$ \{ \\
 \li \> draw a batch of windows from the songs in $\mathcal{D}$ \groupend
 \li \> $\mathcal{L}^\text{right}_b = $ loss of $\theta$ with each window's own lyrics \\
@@ -550,8 +697,12 @@ the difference is clearly positive.}
 \li \kw{return} $\bar\Delta$, $s$, and whether $\bar\Delta > 2s$
 \end{procedure}
 
-Lines 3--5 score the same windows, so the differences in line 7 compare like
-with like, and most of the variation between windows cancels. A model that
+$\mathcal{L}_b$ denotes the loss of batch $b$, $\operatorname{Var}(\Delta)$ is
+the sample variance of the $B$ differences, and the standard error $s$
+estimates how much $\bar\Delta$ would vary if the test were repeated on other
+batches. Requiring $\bar\Delta > 2s$ corresponds roughly to 95\,\% confidence
+that the difference is positive. Lines 3--5 score the same windows, so the
+differences in line 7 compare like with like, and most of the variation between windows cancels. A model that
 ignores the words gives $\bar\Delta \approx 0$. A model that reads them should
 predict the audio better with the right words than with the wrong ones, giving
 $\bar\Delta > 0$, measured in nats per code. The wrong lines in line 5 always
@@ -570,13 +721,18 @@ are appended to the sequence.
 
 Position $p$ attends to the keys and values of positions $0, \dots, p$. These do
 not change once they have been computed, because no position attends forward,
-so a cache can keep them \cite{pope2023inference}.
+so a cache can keep them \cite{pope2023inference}, and each new position then
+costs one pass through the blocks instead of a pass over the whole sequence.
+In the procedure below, $j$ indexes the blocks, $q$, $k$ and $v$ are the query,
+key and value vectors of position $p$, and $\pi$ is the position map of
+\cref{sec:lyrics}.
 
 \begin{procedure}{\proc{Decode-Step}$(z, p, \mathit{cache})$}
-{the codes $z$ to place at position $p$, the position $p$ itself, and the keys
-and values of positions $0, \dots, p - 1$ for every block.}
-{the scores of every codebook for position $p + 1$; the cache is extended by
-position $p$.}
+{the symbols $z$ to place at position $p$ (a byte, or the $C$ codes of a step),
+the position index $p$, and the cache: for every block, the key and value
+vectors of positions $0, \dots, p - 1$.}
+{for each codebook, $K$ scores for the code at position $p + 1$; the cache is
+extended by position $p$.}
 \li $h = \operatorname{embed}(z) + \operatorname{position}(\pi(p))$ \groupend
 \li \kw{for} each block $j$ \{ \\
 \li \> $q, k, v = $ query, key and value projections of $\operatorname{Norm}(h)$ \\
@@ -610,15 +766,20 @@ map $\pi$. Because the cache has a fixed capacity, a step allocates no memory.
 
 \subsection{Sampling and guidance}
 
-For each codebook we keep the $k = 250$ most probable codes and draw among
-them \cite{fan2018hierarchical}. Because the text was removed from 10\,\% of the
-training examples, the same model can predict both with the text, giving
-scores $z^\text{text}$, and without it, giving $z^\text{none}$. Classifier-free
-guidance \cite{ho2022cfg} amplifies their difference:
+For each codebook we keep the $k = 250$ most probable of the $K = 1\,024$ codes
+and draw among them in proportion to their probabilities
+\cite{fan2018hierarchical}; excluding the unlikely codes avoids rare
+mistakes that the model could not recover from. Because the text was removed
+from 10\,\% of the training examples, the same model can predict both with the
+text, giving scores $z^\text{text}$, and without it, giving $z^\text{none}$; here
+$z$ denotes a vector of $K$ scores, which a softmax turns into probabilities.
+Classifier-free guidance \cite{ho2022cfg} amplifies their difference:
 \[
 z = z^\text{none} + s \,\big(z^\text{text} - z^\text{none}\big),
 \]
-where $s$ is the guidance scale. For instance, if two codes score $(2, 1)$ with
+where $s$ is the guidance scale, a plain number ($s = 1$ uses the text as
+trained, and larger values follow it more strictly); this $s$ is unrelated to
+the standard error of \cref{sec:lyrics-test}. For instance, if two codes score $(2, 1)$ with
 the text and $(1, 1)$ without it, the first has probability 0.73; with $s = 3$
 the scores become $(4, 1)$, and its probability rises to 0.95. We use $s = 3$,
 which doubles the computation per step. Lyrics longer than $L$ bytes are cut
@@ -636,7 +797,11 @@ register blocking, and the way we made one gradient repeatable.
 
 \subsection{Register blocking}
 
-In the tiled kernel, a block of $16 \times 16$ threads copies tiles of $A$ and
+A GPU runs many \emph{threads} at once, grouped into \emph{blocks} that
+cooperate. Each thread has up to 255 fast \emph{registers}, the threads of
+a block share a small on-chip \emph{shared memory}, and all threads can reach
+the large but slow \emph{global memory}. In the tiled kernel for $C = AB$, a
+block of $16 \times 16$ threads copies square pieces (\emph{tiles}) of $A$ and
 $B$ into shared memory, which reduces traffic to global memory sixteenfold
 \cite{pathak2026tiled,kirk2022programming}. Every multiply-add still reads two
 values from shared memory, however, and shared memory is slower than a
@@ -655,8 +820,9 @@ tile.}
 \end{figure}
 
 \begin{procedure}{\proc{Blocked-Thread}$(t_x, t_y)$}
-{the coordinates $(t_x, t_y)$ of a thread within a block of $16 \times 16$
-threads; the block computes a $64 \times 64$ tile of $C = AB$, with $r = 4$.}
+{the column $t_x$ and row $t_y$ of a thread within a block of $16 \times 16$
+threads, both in $[0, 16)$; the block computes a $64 \times 64$ tile of
+$C = AB$, and each thread computes $r \times r = 4 \times 4$ of its entries.}
 {the 16 entries of the tile owned by the thread, written to $C$.}
 \li $\mathit{sum}[i][j] = 0$ for $i, j \in [0, r)$ \groupend
 \li \kw{for} each phase $t$ \{ \\
@@ -673,32 +839,41 @@ threads; the block computes a $64 \times 64$ tile of $C = AB$, with $r = 4$.}
 \li store $\mathit{sum}[i][j]$ at row $t_y + 16i$, column $t_x + 16j$ of the tile
 \end{procedure}
 
-\proc{Barrier}() waits until every thread of the block has reached it. Lines 7
-and 8 read $2r = 8$ values from shared memory, and line 9 performs $r^2 = 16$
+\proc{Barrier}() waits until every thread of the block has reached it. A
+\emph{phase} handles 16 consecutive values of the inner dimension, so the
+loop of line 2 runs once for every 16 columns of $A$. \textit{tileA} and
+\textit{tileB} live in shared memory, while $\mathit{sum}$, $\alpha$ and $\beta$
+live in the thread's registers; in this subsection $\alpha$ and $\beta$ are
+these register copies, unrelated to the momentum and the Kaiser parameter
+above. Lines 7 and 8 read $2r = 8$ values from shared memory, and line 9 performs $r^2 = 16$
 multiply-adds, so each multiply-add costs $2/r = 0.5$ reads instead of 2.
 Global traffic falls as well: each phase copies $2 \cdot 64 \cdot 16$ values for
 $64 \cdot 64 \cdot 16$ multiply-adds, so the product of an $M \times K$ and a
-$K \times N$ matrix fetches
+$K \times N$ matrix (here $M$, $N$ and $K$ are matrix dimensions) fetches
 \[
 \frac{M}{64} \cdot \frac{N}{64} \cdot \frac{K}{16} \cdot 2 \cdot 64 \cdot 16 = \frac{2MNK}{64}
 \]
-values, a quarter of the $2MNK/16$ needed with $16 \times 16$ tiles. The two
+values of 4 bytes each, a quarter of the $2MNK/16$ needed with $16 \times 16$
+tiles. The two
 barriers play the same roles as in the tiled kernel, whose correctness is
 proved in \cite{pathak2026tiled}. On the Orin NX the blocked kernel is 1.8 to
 2.3 times faster than the tiled one (\cref{tab:bench-gemm}).
 
 \subsection{A repeatable embedding gradient}
 
-The gradient of the embedding table adds the gradient $g_p$ of each position $p$
-into the row of its token $z_p$. Many positions share a token. With atomic
+The embedding table has one row of $d$ numbers per vocabulary symbol, and its
+gradient adds the gradient vector $g_p$ (also $d$ numbers) of each position $p$
+into the row of the token $z_p$ that the position holds. Many positions share a token. With atomic
 additions, threads would add into a shared row in an order that varies from
 run to run, and because floating-point addition is not associative, the result
 would vary as well. We fix the order with a counting sort.
 
 \begin{procedure}{\proc{Embedding-Gradient}$(z, g, V)$}
-{the token $z_p$ and the gradient vector $g_p$ of every position $p$, and the
-number of rows $V$ of the embedding table.}
-{the gradient $G$ of the embedding table, one row per token.}
+{for every position $p$, its token $z_p \in [0, V)$ and its gradient vector
+$g_p$ of $d$ numbers; and the number of rows $V$ of the embedding table (the
+vocabulary size).}
+{the gradient $G$ of the embedding table, a $V \times d$ matrix with one row
+per token; $c \in [0, d)$ indexes its columns.}
 \li $\mathit{count}[v] = |\{p : z_p = v\}|$ for $v \in [0, V)$ \cmt{on the CPU} \\
 \li $\mathit{start}[v] = \sum_{u < v} \mathit{count}[u]$ \\
 \li $\mathit{list} = $ positions sorted by token, then by position \groupend
@@ -721,8 +896,11 @@ corpus is the Song Describer Dataset \cite{manco2023songdescriber}, 706
 two-minute Creative Commons excerpts with 1\,106 captions written by
 listeners. Songs are divided between training and evaluation by artist, so
 that no voice appears on both sides, which leaves 667 songs for training and 39
-for evaluation. We report spectral errors as mean absolute differences of
-natural-log mel energies; one unit corresponds to about 8.7\,dB.
+for evaluation. We report spectral errors as the mean absolute difference
+between two log-mel spectrograms, averaged over frames and bands, in
+\emph{log units per band}. Because the spectrogram holds natural logarithms of
+energy, an error of one log unit means that a band's energy is off by a factor
+of $e \approx 2.7$, or $10 \log_{10} e \approx 4.3$\,dB.
 
 \paragraph{Correctness and speed.} All 38 tests pass on the Orin NX, and the
 kernel tests also pass on the Thor. They compare every kernel with a CPU
@@ -733,7 +911,9 @@ step of the first model 1.8 times faster than tiling and 9.3 times faster than
 the direct kernel (\cref{tab:bench-train}).
 
 \paragraph{First training runs.} \Cref{tab:training} summarises the runs with
-the first tokenizer. A run of 1\,500 steps reached a held-out loss of 4.93, and
+the first tokenizer. A training \emph{step} here is one update of the
+parameters, computed from a batch of 8 sequences; the held-out loss is measured
+on songs by artists that the model never heard during training. A run of 1\,500 steps reached a held-out loss of 4.93, and
 a run of 15\,000 steps on the Thor reached 4.02. When we restricted the data to
 the 281 songs whose captions mention a voice, a model fine-tuned from the
 longer run reached its best held-out loss of 4.23 after only 250 steps, after
@@ -801,17 +981,17 @@ mean & 0.194 & 0.704 & 0.710 & 0.359 & 0.414 \\
 
 With the first tokenizer, the tokens alone caused 3.6 times the error of the
 vocoder, and the end-to-end error of a perfect model, 0.71, was almost entirely
-due to the tokenizer. An error of about 0.7 log units, or roughly 6\,dB per band,
-is enough to blur the harmonic and formant detail on which an intelligible
+due to the tokenizer. An error of about 0.7 log units, roughly 3\,dB in every
+band, is enough to blur the harmonic and formant detail on which an intelligible
 voice depends. This measure does not capture the phase artefacts of
 Griffin-Lim, which remain audible, so the tokenizer is the main spectral
 limitation rather than the only audible one.
 
 To examine the model on its own, we trained it on a single 12-second excerpt of
-562 frames. Its training loss fell to 0.054 after 100 steps and to 0.002 after
+562 steps. Its training loss fell to 0.054 after 100 steps and to 0.002 after
 200. We then generated 12 seconds from the excerpt's caption and compared the
 generated codes with the excerpt's own (\cref{tab:memorisation}). Greedy
-decoding reproduced all 562 frames, and top-$k$ sampling departed from the
+decoding reproduced all 562 steps, and top-$k$ sampling departed from the
 excerpt only at isolated codes, without drifting away.
 
 \begin{table}[htbp]
@@ -822,7 +1002,7 @@ excerpt only at isolated codes, without drifting away.
 \begin{tabular}{lcc}
 \toprule
 decoding & agreement per codebook & identical prefix \\
- & (\%) & (frames) \\
+ & (\%) & (steps) \\
 \midrule
 greedy & 100.0, 100.0, 100.0, 100.0 & 562 of 562 \\
 top-$k$, seed 1 & 99.6, 100.0, 100.0, 99.6 & 26 \\
@@ -856,9 +1036,9 @@ of width 512, 42.9 million parameters, with the lyrics input enabled from the
 start. It is trained on all 742 training songs of the combined corpora, with
 the lyrics corpus weighted 4-fold and two takes recorded by the first author
 weighted 10-fold, in batches of 8 sequences of 1\,408 positions. A step takes
-2.0 seconds and about 11\,GB of memory. Training is still in progress; after
-4\,500 of 20\,000 steps the held-out loss is 5.19 nats per code, averaged over
-16 codebooks, and still falling. Because the vocabulary differs, this figure
+2.0 seconds and about 11\,GB of the Thor's 128\,GB of memory. Training is
+still in progress; after 8\,000 of 20\,000 steps the held-out loss is 5.11 nats
+per code, averaged over its 16 codebooks, and still falling. Because the vocabulary differs, this figure
 is not comparable with those of \cref{tab:training}.
 
 \subsection{Lyrics}
