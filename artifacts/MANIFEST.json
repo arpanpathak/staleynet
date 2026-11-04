@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "StaleyNET",
-  "generated_at": "2026-11-04T05:05:19.247692Z",
+  "generated_at": "2026-11-04T07:05:44.291122Z",
   "github": {
     "repo": "https://github.com/arpanpathak/staleynet",
     "visibility": "public"
@@ -12,9 +12,9 @@
       "type": "model",
       "url": "https://huggingface.co/arpanpathak/staleynet-checkpoints",
       "visibility": "private",
-      "revision": "b5948a746a859275dc698894bc15f4c2fddad47f",
+      "revision": "2340c6a1547d4435b0e23ee4b097be012e3758b7",
       "files": 49,
-      "bytes": 512768174,
+      "bytes": 512769143,
       "note": "includes the .gitattributes added by the Hub"
     },
     "data": {
@@ -22,10 +22,10 @@
       "type": "dataset",
       "url": "https://huggingface.co/datasets/arpanpathak/staleynet-data",
       "visibility": "private",
-      "revision": "5a17062952a931ef2cc0ed3fa95ebf746b227587",
+      "revision": "2c38130bd722267576182ae32d6a8563232856fc",
       "files": 2393,
-      "bytes": 2789914129,
-      "note": "includes the .gitattributes added by the Hub; 7 upload commits"
+      "bytes": 2789914818,
+      "note": "includes the .gitattributes added by the Hub"
     }
   },
   "checkpoints": {
