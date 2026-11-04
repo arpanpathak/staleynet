@@ -308,9 +308,9 @@ StaleyNET:
 - Book chapter on tokenization: <https://github.com/arpanpathak/staleynet/blob/main/book/src/tokenizer.md>
 - Book chapter on GPU implementation: <https://github.com/arpanpathak/staleynet/blob/main/book/src/gpu.md>
 - API documentation: <https://docs.rs/staleynet-audio>
-- Checkpoints and derived data are kept in Hugging Face repositories
-  (`arpanpathak/staleynet-checkpoints` and `arpanpathak/staleynet-data`),
-  which are private and available on request.
+- Trained checkpoints: <https://huggingface.co/arpanpathak/staleynet-checkpoints>
+- Derived training data (spectrograms, token codes, tokenizers, samples):
+  <https://huggingface.co/datasets/arpanpathak/staleynet-data>
 
 Background reading:
 

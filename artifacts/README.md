@@ -1,7 +1,7 @@
 # Artifacts
 
 This directory is the GitHub-side index of StaleyNET's trained artifacts. The
-large binaries live in private Hugging Face repositories; this directory keeps
+large binaries live in public Hugging Face repositories; this directory keeps
 the run metadata, logs, checksums, tokenizer, and sample reports that are small
 enough to version with the code.
 
@@ -10,8 +10,8 @@ enough to version with the code.
 | Artifact | Location | Visibility |
 |---|---|---|
 | Code, paper, book, configs | <https://github.com/arpanpathak/staleynet> | public |
-| Checkpoints, optimizer states, metrics, training logs | <https://huggingface.co/arpanpathak/staleynet-checkpoints> | private |
-| Derived caches, tokenizer, samples, own recordings | <https://huggingface.co/datasets/arpanpathak/staleynet-data> | private |
+| Checkpoints, optimizer states, metrics, training logs | <https://huggingface.co/arpanpathak/staleynet-checkpoints> | public |
+| Derived caches, tokenizer, samples, own recordings | <https://huggingface.co/datasets/arpanpathak/staleynet-data> | public |
 
 The Hugging Face repositories carry `SHA256SUMS`, `LICENSE`, `NOTICE`, and a
 card describing the layout and the upstream dataset terms.
