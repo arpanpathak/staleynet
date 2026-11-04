@@ -4,6 +4,7 @@
 //! |--------|--------------------|--------------------------------------|
 //! | GET    | `/`                | the single-page interface            |
 //! | GET    | `/api/runs`        | runs with checkpoints                |
+//! | GET    | `/api/vocoders`    | trained neural vocoders              |
 //! | GET    | `/api/clips`       | every WAV under `samples/`           |
 //! | POST   | `/api/generate`    | generate a clip (JSON body)          |
 //! | GET    | `/audio/<path>`    | stream one WAV                       |
@@ -86,6 +87,7 @@ impl Studio {
                 Reply { status: status::OK, content_type: "text/html; charset=utf-8", body: INDEX_HTML.as_bytes().to_vec() }
             }
             (Method::Get, "/api/runs") => Reply::json(status::OK, &runs::discover(&self.project)),
+            (Method::Get, "/api/vocoders") => Reply::json(status::OK, &runs::discover_vocoders(&self.project)),
             (Method::Get, "/api/clips") => Reply::json(status::OK, &library::list(&self.project.join("samples"))),
             (Method::Post, "/api/generate") => self.generate(&mut request),
             (Method::Get, audio) if audio.starts_with("/audio/") => self.audio(&self.project.join("samples"), &audio["/audio/".len()..]),

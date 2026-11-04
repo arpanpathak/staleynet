@@ -108,6 +108,9 @@
       <label for="run">Model run</label>
       <select id="run"></select>
 
+      <label for="vocoder">Vocoder</label>
+      <select id="vocoder"><option value="">Griffin-Lim (no training)</option></select>
+
       <div class="row">
         <div>
           <label for="seconds">Length</label>
@@ -260,6 +263,19 @@ async function loadRuns() {
   if (runs.length === 0) setStatus("No trained runs found under runs/.", true);
 }
 
+async function loadVocoders() {
+  const vocoders = await (await fetch("/api/vocoders")).json();
+  const select = $("vocoder");
+  for (const vocoder of vocoders) {
+    const option = document.createElement("option");
+    option.value = vocoder.name;
+    const loss = vocoder.best_validation_loss == null ? "no validation yet" : `val ${vocoder.best_validation_loss.toFixed(2)}`;
+    option.textContent = `${vocoder.name} · neural · ${loss} · step ${vocoder.latest_step ?? 0}`;
+    select.append(option);
+  }
+  if (vocoders.length > 0) select.value = vocoders[0].name;
+}
+
 function setStatus(text, isError = false) {
   $("status").textContent = text;
   $("status").classList.toggle("error", isError);
@@ -281,6 +297,7 @@ async function onGenerate(event) {
     temperature: Number($("temperature").value),
     top_k: Number($("top_k").value),
     seed: Number($("seed").value),
+    vocoder: $("vocoder").value,
   };
 
   try {
@@ -333,7 +350,8 @@ function describe(clip) {
   if (!report) return { title: file, meta: clip.group === "tokenizer" ? "Griffin-Lim rendering of the stated log-mel" : "" };
 
   const run = String(report.checkpoint || "").split("/").slice(-2, -1)[0] || "";
-  const parts = [run, `${report.audio_seconds.toFixed(1)} s`, `RTF ${report.real_time_factor.toFixed(2)}`];
+  const vocoder = report.vocoder ? "neural vocoder" : "Griffin-Lim";
+  const parts = [run, vocoder, `${report.audio_seconds.toFixed(1)} s`, `RTF ${report.real_time_factor.toFixed(2)}`];
   return { title: report.prompt, meta: parts.filter(Boolean).join(" · "), lyrics: report.model_reads_lyrics ? report.lyrics : "" };
 }
 
@@ -724,7 +742,7 @@ $("prompt").addEventListener("input", updatePromptCount);
 updatePromptCount();
 $("dice").onclick = () => { $("seed").value = Math.floor(Math.random() * 100000); };
 $("form").addEventListener("submit", onGenerate);
-loadRuns().then(loadLibrary).catch((error) => setStatus(String(error), true));
+loadRuns().then(loadVocoders).then(loadLibrary).catch((error) => setStatus(String(error), true));
 setupRecorder();
 setupTabs();
 </script>
