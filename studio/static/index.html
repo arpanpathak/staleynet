@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StaleyNET Studio</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #e3e1da;
+    --accent: #2f6fb0; --accent-ink: #ffffff; --warn: #b4472d; --chip: #eef2f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #131417; --panel: #1c1d21; --ink: #ececef; --muted: #9a9aa3; --line: #2c2e33;
+            --accent: #5b9be0; --accent-ink: #0d1117; --warn: #e07a5f; --chip: #252a33; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  header { padding: 20px 28px 8px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  main { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 20px; padding: 12px 28px 40px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px 32px; } header { padding: 16px; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  form .panel { position: sticky; top: 16px; }
+  label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin: 14px 0 6px;
+          text-transform: uppercase; letter-spacing: 0.04em; }
+  textarea, select, input[type=number] { width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+          border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; }
+  textarea { min-height: 92px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .slider { display: flex; align-items: center; gap: 10px; }
+  .slider input { flex: 1; accent-color: var(--accent); }
+  .slider output { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { border: 0; background: var(--chip); color: var(--ink); border-radius: 999px; padding: 4px 10px;
+          font: inherit; font-size: 12.5px; cursor: pointer; }
+  .seed { display: flex; gap: 8px; }
+  .seed button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 0 12px; cursor: pointer; }
+  .generate { margin-top: 18px; width: 100%; border: 0; border-radius: 10px; padding: 12px; font: inherit; font-weight: 600;
+              background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  .generate:disabled { opacity: 0.6; cursor: progress; }
+  .status { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 1.5em; white-space: pre-wrap; }
+  .status.error { color: var(--warn); }
+  .group { margin: 4px 0 22px; }
+  .group h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
+  .clip { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .clip.fresh { border-color: var(--accent); }
+  .clip .title { font-weight: 600; margin-bottom: 2px; }
+  .clip .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+  .clip audio { width: 100%; height: 36px; }
+  .spectrogram { position: relative; margin-top: 8px; border-radius: 6px; overflow: hidden; background: #000; height: 120px; cursor: pointer; }
+  .spectrogram canvas { width: 100%; height: 100%; display: block; }
+  .spectrogram .cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; opacity: 0.85; left: 0; pointer-events: none; }
+  .spectrogram .axis { position: absolute; left: 6px; font-size: 10.5px; color: #ddd; text-shadow: 0 0 3px #000; }
+  .empty { color: var(--muted); font-size: 14px; }
+  .tabs { display: flex; gap: 4px; margin-left: auto; background: var(--chip); padding: 3px; border-radius: 10px; }
+  .tabs button { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 8px; cursor: pointer; }
+  .tabs button[aria-selected=true] { background: var(--panel); color: var(--ink); }
+  [hidden] { display: none !important; }
+  .choices { display: flex; flex-wrap: wrap; gap: 6px; }
+  .choices label { margin: 0; text-transform: none; letter-spacing: 0; font-size: 13.5px; font-weight: 500; color: var(--ink);
+                   border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  .choices input { display: none; }
+  .choices input:checked + span { color: var(--accent); }
+  .choices label:has(input:checked) { border-color: var(--accent); }
+  .recorder { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+  .record { width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--line); background: #d7263d; cursor: pointer; flex: none; }
+  .record.on { border-radius: 14px; background: #d7263d; box-shadow: 0 0 0 6px rgba(215,38,61,0.25); }
+  .record:disabled { opacity: 0.4; cursor: not-allowed; }
+  .clock { font-size: 26px; font-variant-numeric: tabular-nums; min-width: 80px; }
+  .meter { flex: 1; height: 10px; background: var(--chip); border-radius: 5px; overflow: hidden; }
+  .meter div { height: 100%; width: 0; background: linear-gradient(90deg, #3a9d5d 0 70%, #e0b43a 70% 90%, #d7263d 90%); background-size: 100% 100%; }
+  .take { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .take audio { width: 100%; height: 36px; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .actions button, .clip .delete { flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 9px; font: inherit; cursor: pointer; }
+  .actions .primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .clip .delete { flex: none; padding: 3px 10px; font-size: 12.5px; float: right; }
+  .clip details { margin-top: 8px; font-size: 13.5px; }
+  .clip pre { white-space: pre-wrap; font: inherit; margin: 6px 0 0; color: var(--muted); }
+  .hint { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+  .total { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .counter { float: right; font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .counter.over { color: var(--warn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>StaleyNET Studio</h1>
+  <p>Prompt → audio tokens → log-mel → Griffin-Lim. Trained from scratch; listen critically.</p>
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-view="generate-view" aria-selected="true">Generate</button>
+    <button type="button" role="tab" data-view="record-view" aria-selected="false">Record</button>
+  </nav>
+</header>
+
+<main id="generate-view">
+  <form id="form">
+    <div class="panel">
+      <label for="prompt">Prompt <span class="counter" id="prompt-count"></span></label>
+      <textarea id="prompt" required maxlength="400">upbeat pop song with female vocals and electric guitar</textarea>
+      <div class="chips" id="presets"></div>
+
+      <label for="gen-lyrics">Lyrics <span class="counter" id="gen-lyrics-note"></span></label>
+      <textarea id="gen-lyrics" maxlength="8000" style="min-height:70px" placeholder="Optional. One sung line per line. Only runs marked “reads lyrics” use them."></textarea>
+
+      <label for="run">Model run</label>
+      <select id="run"></select>
+
+      <div class="row">
+        <div>
+          <label for="seconds">Length</label>
+          <div class="slider"><input id="seconds" type="range" min="4" max="30" step="1" value="12"><output data-for="seconds" data-unit=" s"></output></div>
+        </div>
+        <div>
+          <label for="guidance">Guidance</label>
+          <div class="slider"><input id="guidance" type="range" min="1" max="6" step="0.5" value="3"><output data-for="guidance"></output></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="temperature">Temperature</label>
+          <div class="slider"><input id="temperature" type="range" min="0" max="1.5" step="0.05" value="1"><output data-for="temperature"></output></div>
+        </div>
+        <div>
+          <label for="top_k">Top-k</label>
+          <input id="top_k" type="number" min="1" max="1024" value="250">
+        </div>
+      </div>
+
+      <label for="seed">Seed</label>
+      <div class="seed"><input id="seed" type="number" min="0" value="1"><button type="button" id="dice" title="Random seed">⟳</button></div>
+
+      <button class="generate" id="generate" type="submit">Generate</button>
+      <div class="status" id="status"></div>
+    </div>
+  </form>
+
+  <section id="library"><p class="empty">Loading clips…</p></section>
+</main>
+
+<main id="record-view" hidden>
+  <div>
+    <div class="panel">
+      <label>What plays</label>
+      <div class="choices" id="accompaniment">
+        <label><input type="radio" name="accompaniment" value="voice_only" checked><span>Voice only</span></label>
+        <label><input type="radio" name="accompaniment" value="voice_and_guitar"><span>Voice + guitar</span></label>
+        <label><input type="radio" name="accompaniment" value="instrument_only"><span>Guitar only</span></label>
+      </div>
+
+      <label for="caption">Description</label>
+      <textarea id="caption" maxlength="400" style="min-height:64px"></textarea>
+
+      <label for="lyrics">Lyrics sung <span class="counter" id="lyrics-count"></span></label>
+      <textarea id="lyrics" maxlength="8000" placeholder="Type the exact words of this take, one line per sung line. Leave empty for humming."></textarea>
+
+      <label for="device">Microphone</label>
+      <select id="device"><option value="">Default input</option></select>
+
+      <div class="recorder">
+        <button type="button" class="record" id="record" title="Record"></button>
+        <div class="clock" id="clock">0:00</div>
+        <div class="meter"><div id="level"></div></div>
+      </div>
+      <div class="status" id="record-status"></div>
+
+      <div class="take" id="take" hidden>
+        <audio controls id="take-audio"></audio>
+        <div class="spectrogram" id="take-view"><canvas></canvas><div class="cursor"></div>
+          <span class="axis" style="top:4px">8 kHz</span><span class="axis" style="bottom:4px">0</span></div>
+        <div class="actions">
+          <button type="button" id="discard">Discard</button>
+          <button type="button" class="primary" id="save">Save take</button>
+        </div>
+      </div>
+
+      <p class="hint">Short takes of 10 to 20 seconds, one or two lines each, teach the words best: the model hears about
+        13 seconds at a time, and the lines of a take are assumed to be spread evenly across it, so sing steadily without
+        long pauses. Keep the mic about a hand's width away, record in a quiet room, and type exactly what you sing.
+        Every take is stored in <code>data/recordings/</code> as a ready training set.</p>
+    </div>
+  </div>
+
+  <section id="takes"><p class="empty">Loading takes…</p></section>
+</main>
+
+<script>
+"use strict";
+
+/** Example prompts in the style of the training captions. */
+const PRESETS = [
+  "upbeat pop song with female vocals and electric guitar",
+  "slow acoustic folk ballad with a male singer and fingerpicked guitar",
+  "energetic electronic dance music with a heavy kick drum",
+  "calm solo piano piece, melancholic and slow",
+  "rock song with distorted guitars, drums and a male voice",
+  "jazz with saxophone, upright bass and brushed drums",
+];
+
+/** Prompt bytes the current models read; anything after is ignored. */
+const PROMPT_BYTES = 126;
+
+/** Display names of the sample folders. */
+const GROUP_TITLES = { studio: "Your generations", "": "Earlier samples", tokenizer: "Tokenizer reference (original vs tokenized)" };
+
+/** Spectrogram analysis: FFT size, hop, and highest frequency drawn (Hz). */
+const FFT_SIZE = 1024, HOP = 256, MAX_FREQUENCY = 8000;
+
+/** Log-magnitude range mapped onto the colour scale, in dB below the clip's peak. */
+const DYNAMIC_RANGE_DB = 80;
+
+const $ = (id) => document.getElementById(id);
+let freshPath = null;
+
+// ---------------------------------------------------------------- form ----
+
+function bindSliders() {
+  for (const output of document.querySelectorAll("output[data-for]")) {
+    const input = $(output.dataset.for);
+    const show = () => { output.textContent = input.value + (output.dataset.unit || ""); };
+    input.addEventListener("input", show);
+    show();
+  }
+}
+
+function updatePromptCount() {
+  const bytes = new TextEncoder().encode($("prompt").value).length;
+  const counter = $("prompt-count");
+  counter.textContent = bytes > PROMPT_BYTES ? `${bytes} bytes, model reads the first ${PROMPT_BYTES}` : `${bytes} / ${PROMPT_BYTES} bytes`;
+  counter.classList.toggle("over", bytes > PROMPT_BYTES);
+}
+
+function renderPresets() {
+  for (const text of PRESETS) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = text.split(" ").slice(0, 4).join(" ") + "…";
+    chip.title = text;
+    chip.onclick = () => { $("prompt").value = text; updatePromptCount(); };
+    $("presets").append(chip);
+  }
+}
+
+async function loadRuns() {
+  const runs = await (await fetch("/api/runs")).json();
+  const select = $("run");
+  select.innerHTML = "";
+  for (const run of runs) {
+    const option = document.createElement("option");
+    option.value = run.name;
+    const loss = run.best_validation_loss == null ? "no validation yet" : `val ${run.best_validation_loss.toFixed(2)} @ step ${run.best_step}`;
+    const lyrics = run.lyrics_bytes > 0 ? " · reads lyrics" : "";
+    option.textContent = `${run.name} · ${loss}${lyrics}`;
+    select.append(option);
+  }
+  if (runs.length === 0) setStatus("No trained runs found under runs/.", true);
+}
+
+function setStatus(text, isError = false) {
+  $("status").textContent = text;
+  $("status").classList.toggle("error", isError);
+}
+
+async function onGenerate(event) {
+  event.preventDefault();
+  const button = $("generate");
+  const started = performance.now();
+  button.disabled = true;
+  const timer = setInterval(() => setStatus(`Generating… ${((performance.now() - started) / 1000).toFixed(0)} s`), 250);
+
+  const body = {
+    prompt: $("prompt").value,
+    lyrics: $("gen-lyrics").value,
+    run: $("run").value,
+    seconds: Number($("seconds").value),
+    guidance: Number($("guidance").value),
+    temperature: Number($("temperature").value),
+    top_k: Number($("top_k").value),
+    seed: Number($("seed").value),
+  };
+
+  try {
+    const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || response.statusText);
+
+    freshPath = result.path;
+    setStatus(`Done in ${((performance.now() - started) / 1000).toFixed(1)} s.`);
+    await loadLibrary();
+  } catch (error) {
+    setStatus(String(error.message || error), true);
+  } finally {
+    clearInterval(timer);
+    button.disabled = false;
+  }
+}
+
+// ------------------------------------------------------------- library ----
+
+async function loadLibrary() {
+  const clips = await (await fetch("/api/clips")).json();
+  const library = $("library");
+  library.innerHTML = "";
+  if (clips.length === 0) {
+    library.innerHTML = '<p class="empty">No clips yet. Write a prompt and press Generate.</p>';
+    return;
+  }
+
+  const groups = new Map();
+  for (const clip of clips) {
+    if (!groups.has(clip.group)) groups.set(clip.group, []);
+    groups.get(clip.group).push(clip);
+  }
+
+  const order = ["studio", "", "tokenizer", ...[...groups.keys()].filter((key) => !(key in GROUP_TITLES))];
+  for (const key of order.filter((key) => groups.has(key))) {
+    const section = document.createElement("div");
+    section.className = "group";
+    section.innerHTML = `<h2></h2>`;
+    section.querySelector("h2").textContent = GROUP_TITLES[key] ?? key;
+    for (const clip of groups.get(key)) section.append(renderClip(clip));
+    library.append(section);
+  }
+}
+
+function describe(clip) {
+  const report = clip.report;
+  const file = clip.path.split("/").pop();
+  if (!report) return { title: file, meta: clip.group === "tokenizer" ? "Griffin-Lim rendering of the stated log-mel" : "" };
+
+  const run = String(report.checkpoint || "").split("/").slice(-2, -1)[0] || "";
+  const parts = [run, `${report.audio_seconds.toFixed(1)} s`, `RTF ${report.real_time_factor.toFixed(2)}`];
+  return { title: report.prompt, meta: parts.filter(Boolean).join(" · "), lyrics: report.model_reads_lyrics ? report.lyrics : "" };
+}
+
+function renderClip(clip) {
+  const { title, meta, lyrics } = describe(clip);
+  const card = document.createElement("article");
+  card.className = "clip" + (clip.path === freshPath ? " fresh" : "");
+
+  const url = "/audio/" + clip.path.split("/").map(encodeURIComponent).join("/");
+  card.innerHTML = `<div class="title"></div><div class="meta"></div><audio controls preload="none"></audio>
+    <div class="spectrogram"><canvas></canvas><div class="cursor"></div>
+    <span class="axis" style="top:4px">8 kHz</span><span class="axis" style="bottom:4px">0</span></div>`;
+  card.querySelector(".title").textContent = title;
+  card.querySelector(".meta").textContent = meta;
+  if (lyrics) {
+    const details = document.createElement("details");
+    details.innerHTML = "<summary>Lyrics</summary><pre></pre>";
+    details.querySelector("pre").textContent = lyrics;
+    card.append(details);
+  }
+  const audio = card.querySelector("audio");
+  audio.src = url;
+
+  const view = card.querySelector(".spectrogram");
+  attachSpectrogram(view, audio, url);
+  if (clip.path === freshPath) requestAnimationFrame(() => card.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  return card;
+}
+
+// --------------------------------------------------------- spectrogram ----
+
+/** In-place iterative radix-2 FFT (Cooley–Tukey) on separate real/imag arrays. */
+function fft(real, imag) {
+  const size = real.length;
+  for (let index = 1, reversed = 0; index < size; index++) {
+    let bit = size >> 1;
+    for (; reversed & bit; bit >>= 1) reversed ^= bit;
+    reversed ^= bit;
+    if (index < reversed) {
+      [real[index], real[reversed]] = [real[reversed], real[index]];
+      [imag[index], imag[reversed]] = [imag[reversed], imag[index]];
+    }
+  }
+  for (let length = 2; length <= size; length <<= 1) {
+    const angle = -2 * Math.PI / length;
+    for (let start = 0; start < size; start += length) {
+      for (let offset = 0; offset < length / 2; offset++) {
+        const cos = Math.cos(angle * offset), sin = Math.sin(angle * offset);
+        const a = start + offset, b = a + length / 2;
+        const tr = real[b] * cos - imag[b] * sin, ti = real[b] * sin + imag[b] * cos;
+        real[b] = real[a] - tr; imag[b] = imag[a] - ti;
+        real[a] += tr; imag[a] += ti;
+      }
+    }
+  }
+}
+
+/** A perceptually ordered dark-to-bright colour ramp (approximates "magma"). */
+function colour(level) {
+  const stops = [[0, 0, 4], [59, 15, 112], [140, 41, 129], [222, 73, 104], [254, 159, 109], [252, 253, 191]];
+  const position = Math.min(Math.max(level, 0), 1) * (stops.length - 1);
+  const low = Math.floor(position), high = Math.min(low + 1, stops.length - 1), fraction = position - low;
+  return stops[low].map((channel, index) => channel + (stops[high][index] - channel) * fraction);
+}
+
+async function drawSpectrogram(canvas, url) {
+  const context = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 1, 24000);
+  const buffer = await context.decodeAudioData(await (await fetch(url)).arrayBuffer());
+  const samples = buffer.getChannelData(0);
+  const frames = Math.max(1, Math.floor((samples.length - FFT_SIZE) / HOP));
+  const bins = Math.floor(FFT_SIZE / 2 * Math.min(1, MAX_FREQUENCY / (buffer.sampleRate / 2)));
+  const window = Float32Array.from({ length: FFT_SIZE }, (_, n) => 0.5 - 0.5 * Math.cos(2 * Math.PI * n / FFT_SIZE));
+
+  const decibels = new Float32Array(frames * bins);
+  let peak = -Infinity;
+  const real = new Float32Array(FFT_SIZE), imag = new Float32Array(FFT_SIZE);
+  for (let frame = 0; frame < frames; frame++) {
+    for (let n = 0; n < FFT_SIZE; n++) { real[n] = samples[frame * HOP + n] * window[n]; imag[n] = 0; }
+    fft(real, imag);
+    for (let bin = 0; bin < bins; bin++) {
+      const value = 10 * Math.log10(real[bin] * real[bin] + imag[bin] * imag[bin] + 1e-12);
+      decibels[frame * bins + bin] = value;
+      peak = Math.max(peak, value);
+    }
+  }
+
+  canvas.width = frames; canvas.height = bins;
+  const pixels = canvas.getContext("2d").createImageData(frames, bins);
+  for (let frame = 0; frame < frames; frame++) {
+    for (let bin = 0; bin < bins; bin++) {
+      const [r, g, b] = colour(1 + (decibels[frame * bins + bin] - peak) / DYNAMIC_RANGE_DB);
+      const pixel = ((bins - 1 - bin) * frames + frame) * 4;
+      pixels.data.set([r, g, b, 255], pixel);
+    }
+  }
+  canvas.getContext("2d").putImageData(pixels, 0, 0);
+}
+
+function attachSpectrogram(view, audio, url) {
+  const canvas = view.querySelector("canvas"), cursor = view.querySelector(".cursor");
+
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    drawSpectrogram(canvas, url).catch((error) => console.warn("spectrogram", url, error));
+  });
+  if (url) observer.observe(view);
+
+  const follow = () => {
+    if (audio.duration) cursor.style.left = `${(audio.currentTime / audio.duration) * 100}%`;
+    if (!audio.paused) requestAnimationFrame(follow);
+  };
+  audio.addEventListener("play", () => {
+    for (const other of document.querySelectorAll("audio")) if (other !== audio) other.pause();
+    follow();
+  });
+  audio.addEventListener("seeked", follow);
+  view.addEventListener("click", (event) => {
+    const fraction = event.offsetX / view.clientWidth;
+    const seek = () => { audio.currentTime = fraction * audio.duration; audio.play(); };
+    if (audio.duration) seek(); else { audio.load(); audio.addEventListener("loadedmetadata", seek, { once: true }); }
+  });
+}
+
+// ------------------------------------------------------------ recorder ----
+
+/** Default descriptions per accompaniment, in the style of the training captions. */
+const CAPTIONS = {
+  voice_only: "solo voice singing a cappella, no instruments",
+  voice_and_guitar: "voice singing with acoustic guitar",
+  instrument_only: "solo acoustic guitar, no vocals",
+};
+
+/** Display names of the accompaniment values the server stores. */
+const ACCOMPANIMENT_TITLES = { voice_only: "Voice only", voice_and_guitar: "Voice + guitar", instrument_only: "Guitar only" };
+
+/** Longest take the server accepts, in seconds. */
+const MAX_TAKE_SECONDS = 300;
+
+/** Peak level above which the take is reported as clipped (full scale is 1). */
+const CLIP_LEVEL = 0.99;
+
+/**
+ * Copies every block of microphone samples to the main thread. Runs on the
+ * audio thread, so recording never drops samples while the page is busy.
+ */
+const TAP_PROCESSOR = `
+  class Tap extends AudioWorkletProcessor {
+    process(inputs) {
+      const channel = inputs[0][0];
+      if (channel) this.port.postMessage(channel.slice(0));
+      return true;
+    }
+  }
+  registerProcessor("tap", Tap);`;
+
+const recorder = { context: null, stream: null, chunks: [], peak: 0, started: 0, timer: null, wav: null, url: null, captionEdited: false };
+
+function selectedAccompaniment() {
+  return document.querySelector("input[name=accompaniment]:checked").value;
+}
+
+function setRecordStatus(text, isError = false) {
+  $("record-status").textContent = text;
+  $("record-status").classList.toggle("error", isError);
+}
+
+function updateLyricsCount() {
+  const bytes = new TextEncoder().encode($("lyrics").value).length;
+  const counter = $("lyrics-count");
+  counter.textContent = bytes === 0 ? "" : `${bytes} bytes`;
+}
+
+async function listMicrophones() {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const select = $("device"), chosen = select.value;
+  select.innerHTML = '<option value="">Default input</option>';
+  for (const device of devices.filter((device) => device.kind === "audioinput" && device.deviceId)) {
+    const option = document.createElement("option");
+    option.value = device.deviceId;
+    option.textContent = device.label || "Microphone";
+    select.append(option);
+  }
+  select.value = chosen;
+}
+
+async function startRecording() {
+  // Processing meant for calls (echo cancellation, noise suppression, automatic
+  // gain) distorts singing and guitar, so all of it is switched off.
+  const constraints = { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } };
+  if ($("device").value) constraints.audio.deviceId = { exact: $("device").value };
+
+  recorder.stream = await navigator.mediaDevices.getUserMedia(constraints);
+  recorder.context = new AudioContext();
+  const module = URL.createObjectURL(new Blob([TAP_PROCESSOR], { type: "text/javascript" }));
+  await recorder.context.audioWorklet.addModule(module);
+
+  const source = recorder.context.createMediaStreamSource(recorder.stream);
+  const tap = new AudioWorkletNode(recorder.context, "tap");
+  const silent = recorder.context.createGain();
+  silent.gain.value = 0;
+  source.connect(tap).connect(silent).connect(recorder.context.destination);
+
+  recorder.chunks = [];
+  recorder.peak = 0;
+  let blockPeak = 0;
+  tap.port.onmessage = ({ data }) => {
+    recorder.chunks.push(data);
+    for (const sample of data) blockPeak = Math.max(blockPeak, Math.abs(sample));
+  };
+
+  recorder.started = performance.now();
+  recorder.timer = setInterval(() => {
+    const seconds = (performance.now() - recorder.started) / 1000;
+    $("clock").textContent = `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+    $("level").style.width = `${Math.min(1, blockPeak) * 100}%`;
+    recorder.peak = Math.max(recorder.peak, blockPeak);
+    blockPeak = 0;
+    if (seconds >= MAX_TAKE_SECONDS) stopRecording();
+  }, 100);
+
+  $("record").classList.add("on");
+  $("take").hidden = true;
+  setRecordStatus("Recording… press the button again to stop.");
+  listMicrophones().catch(() => {});
+}
+
+async function stopRecording() {
+  clearInterval(recorder.timer);
+  const sampleRate = recorder.context.sampleRate;
+  recorder.stream.getTracks().forEach((track) => track.stop());
+  await recorder.context.close();
+  recorder.context = null;
+  $("record").classList.remove("on");
+  $("level").style.width = "0";
+
+  const length = recorder.chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const samples = new Float32Array(length);
+  let offset = 0;
+  for (const chunk of recorder.chunks) { samples.set(chunk, offset); offset += chunk.length; }
+
+  recorder.wav = encodeWav(samples, sampleRate);
+  if (recorder.url) URL.revokeObjectURL(recorder.url);
+  recorder.url = URL.createObjectURL(recorder.wav);
+  $("take-audio").src = recorder.url;
+  $("take").hidden = false;
+  drawSpectrogram($("take-view").querySelector("canvas"), recorder.url).catch(() => {});
+
+  const clipped = recorder.peak >= CLIP_LEVEL ? " The level hit full scale: move back from the mic or turn the input down, then retake." : "";
+  setRecordStatus(`${(length / sampleRate).toFixed(1)} s at ${sampleRate / 1000} kHz. Listen back, then save or discard.${clipped}`, clipped !== "");
+}
+
+/** Mono 16-bit PCM WAV (RIFF), see https://ccrma.stanford.edu/courses/422-winter-2014/projects/WaveFormat/ */
+function encodeWav(samples, sampleRate) {
+  const header = 44, bytes = new ArrayBuffer(header + samples.length * 2), view = new DataView(bytes);
+  const text = (offset, value) => [...value].forEach((character, index) => view.setUint8(offset + index, character.charCodeAt(0)));
+
+  text(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true); text(8, "WAVE");
+  text(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  text(36, "data"); view.setUint32(40, samples.length * 2, true);
+  samples.forEach((sample, index) => view.setInt16(header + index * 2, Math.max(-1, Math.min(1, sample)) * 0x7fff, true));
+  return new Blob([bytes], { type: "audio/wav" });
+}
+
+/** The blob as base64 text, without the `data:` prefix. */
+function toBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function saveTake() {
+  const button = $("save");
+  button.disabled = true;
+  setRecordStatus("Saving…");
+  try {
+    const body = { caption: $("caption").value, lyrics: $("lyrics").value, accompaniment: selectedAccompaniment(), wav_base64: await toBase64(recorder.wav) };
+    const response = await fetch("/api/recordings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || response.statusText);
+
+    $("take").hidden = true;
+    $("clock").textContent = "0:00";
+    setRecordStatus(`Saved as ${result.id}.`);
+    await loadTakes();
+  } catch (error) {
+    setRecordStatus(String(error.message || error), true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function onRecordButton() {
+  if (recorder.context) return stopRecording();
+  try {
+    await startRecording();
+  } catch (error) {
+    setRecordStatus(`Microphone unavailable: ${error.message || error}`, true);
+  }
+}
+
+async function loadTakes() {
+  const takes = await (await fetch("/api/recordings")).json();
+  const list = $("takes");
+  list.innerHTML = "";
+  if (takes.length === 0) {
+    list.innerHTML = '<p class="empty">No takes yet. Choose what plays, type the lyrics, and press the red button.</p>';
+    return;
+  }
+
+  const minutes = takes.reduce((sum, take) => sum + take.seconds, 0) / 60;
+  const total = document.createElement("p");
+  total.className = "total";
+  total.textContent = `${takes.length} takes, ${minutes.toFixed(1)} minutes recorded.`;
+  list.append(total);
+
+  for (const take of takes) {
+    const card = document.createElement("article");
+    card.className = "clip";
+    card.innerHTML = `<button type="button" class="delete">Delete</button><div class="title"></div><div class="meta"></div>
+      <audio controls preload="none"></audio>
+      <div class="spectrogram"><canvas></canvas><div class="cursor"></div>
+      <span class="axis" style="top:4px">8 kHz</span><span class="axis" style="bottom:4px">0</span></div>`;
+    card.querySelector(".title").textContent = take.caption;
+    const when = new Date(take.created * 1000).toLocaleString();
+    card.querySelector(".meta").textContent = `${ACCOMPANIMENT_TITLES[take.accompaniment]} · ${take.seconds.toFixed(1)} s · ${when}`;
+    if (take.lyrics) {
+      const details = document.createElement("details");
+      details.innerHTML = "<summary>Lyrics</summary><pre></pre>";
+      details.querySelector("pre").textContent = take.lyrics;
+      card.append(details);
+    }
+
+    const url = `/recordings/${encodeURIComponent(take.id)}.wav`;
+    const audio = card.querySelector("audio");
+    audio.src = url;
+    attachSpectrogram(card.querySelector(".spectrogram"), audio, url);
+    card.querySelector(".delete").onclick = async () => {
+      if (!confirm(`Delete this take?\n\n${take.caption}`)) return;
+      await fetch(`/api/recordings/${encodeURIComponent(take.id)}`, { method: "DELETE" });
+      await loadTakes();
+    };
+    list.append(card);
+  }
+}
+
+function setupRecorder() {
+  if (!window.isSecureContext || !navigator.mediaDevices) {
+    $("record").disabled = true;
+    setRecordStatus("Browsers only allow the microphone on https:// pages or on localhost. Open the studio through its https:// address.", true);
+  }
+
+  const fillCaption = () => { if (!recorder.captionEdited) $("caption").value = CAPTIONS[selectedAccompaniment()]; };
+  $("accompaniment").addEventListener("change", fillCaption);
+  $("caption").addEventListener("input", () => { recorder.captionEdited = $("caption").value.trim() !== ""; });
+  $("lyrics").addEventListener("input", updateLyricsCount);
+  $("record").onclick = onRecordButton;
+  $("save").onclick = saveTake;
+  $("discard").onclick = () => { $("take").hidden = true; $("clock").textContent = "0:00"; setRecordStatus("Discarded."); };
+  attachSpectrogram($("take-view"), $("take-audio"), null);
+  fillCaption();
+}
+
+function setupTabs() {
+  const tabs = document.querySelectorAll(".tabs button");
+  const show = (view) => {
+    for (const tab of tabs) {
+      const selected = tab.dataset.view === view;
+      tab.setAttribute("aria-selected", String(selected));
+      $(tab.dataset.view).hidden = !selected;
+    }
+    if (view === "record-view") loadTakes().catch((error) => setRecordStatus(String(error), true));
+    history.replaceState(null, "", view === "record-view" ? "#record" : "#");
+  };
+  for (const tab of tabs) tab.onclick = () => show(tab.dataset.view);
+  if (location.hash === "#record") show("record-view");
+}
+
+// ---------------------------------------------------------------- start ----
+
+bindSliders();
+renderPresets();
+$("prompt").addEventListener("input", updatePromptCount);
+updatePromptCount();
+$("dice").onclick = () => { $("seed").value = Math.floor(Math.random() * 100000); };
+$("form").addEventListener("submit", onGenerate);
+loadRuns().then(loadLibrary).catch((error) => setStatus(String(error), true));
+setupRecorder();
+setupTabs();
+</script>
+</body>
+</html>
