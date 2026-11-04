@@ -85,6 +85,67 @@ the captions. Words are matched whole, so that "singer" does not match
   as grunge, one as psychedelic and none as soft rock, so the model cannot
   learn them as separate styles from this data.
 
+## Overfitting, and how often each song is seen
+
+A model *overfits* when it learns the particular songs it trains on instead of
+what they have in common. The loss on the training songs keeps falling, while
+the loss on held-out songs, which the model never sees, stops falling. The
+difference between the two, the *generalization gap*, measures how much of
+what the model has learned applies only to its training songs. A model that has
+overfitted generates by recalling: it plays back stretches of a training song,
+and it can return the same song whatever the prompt asks for.
+
+How much a model can memorize depends on how often it sees each song. Training
+draws every sequence from a song chosen at random, and a song \\(i\\) with
+sampling weight \\(w_i\\) is chosen with probability \\(w_i / W\\), where
+\\(W = \sum_j w_j\\) is the total weight of all training songs. A run of
+\\(S\\) steps with \\(B\\) sequences per step therefore draws song \\(i\\)
+
+\\[
+E_i = S \cdot B \cdot \frac{w_i}{W}
+\\]
+
+times on average. Each draw is a randomly placed window of the song, so many
+draws of one song show the model most of its content many times over.
+
+Weighting a small dataset more heavily makes it count for more in training, and
+it also multiplies how often each of its songs is seen. The table gives
+\\(E_i\\) for the three configurations used for the 42.9-million-parameter
+model of [Experiments](experiments.md#a-larger-model-on-the-finer-tokens-agx-thor).
+The training songs are those of the Song Describer Dataset (667), the
+JamendoLyrics songs (73), the author's two recorded takes, and, in the later
+runs, the 29 314 rock tracks of the Free Music Archive (Defferrard et al., 2017).
+
+| Run | Steps × sequences | Song Describer | JamendoLyrics | author's takes | FMA rock |
+|---|---|---|---|---|---|
+| `pq-large` | 20 000 × 8 | 163 | 654 | 1 634 | not used |
+| `pq-large-rock` (stopped) | 20 000 × 8 | 35 | 105 | 263 | 4.4 |
+| `pq-rock-balanced` | 30 000 × 8 | 15.6 | 7.8 | not used | 7.8 |
+
+In `pq-large`, JamendoLyrics was weighted 4-fold and the two takes 10-fold, so
+each lyric-bearing song was drawn about 650 times and each take more than
+1 600 times. These are also the only songs with lyrics, so whenever the model
+was given lyrics during training, the answer was one of 75 songs it had heard
+hundreds of times. In informal listening, the model returned the same song for
+different prompts and repeated a line of lyrics from its training data.
+
+`pq-rock-balanced` keeps every song within about 16 draws. It does so by adding
+the 29 314 rock tracks at half the weight of a Song Describer song, giving
+JamendoLyrics the same half weight, and leaving out the two takes, since no
+weighting of two recordings would keep them from being memorized. The Song
+Describer songs keep twice the weight of the others because their captions are
+full sentences written by listeners, while the rock tracks carry only genre
+tags such as "rock, punk, garage". The price is that lyrics become rare: 73 of
+30 054 songs carry them, so this model will learn little about words. Singing
+recognizable words requires many more songs paired with their lyrics.
+
+Two further measures limit the damage of overfitting. A random 10 % of the
+sequences are trained without their caption and lyrics, which teaches the
+model the unconditional distribution that guidance compares against (see
+[Generation](generation.md)). And a run keeps, in `best/`, the checkpoint with
+the lowest held-out loss, so a model that begins to overfit late in a run is
+not the one that is used.
+
 ## The optimizer
 
 The parameters are updated with AdamW (Loshchilov and Hutter, 2019), which

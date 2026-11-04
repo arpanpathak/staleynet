@@ -1353,15 +1353,77 @@ price is a vocabulary of 16 codebooks instead of 4.
 \subsection{A larger model on the finer tokens}
 \label{sec:large}
 
-With the finer tokens we began training a larger model on the Thor: 8 blocks
-of width 512, 42.9 million parameters, with the lyrics input enabled from the
-start. It is trained on all 742 training songs of the combined corpora, with
-the lyrics corpus weighted 4-fold and two takes recorded by the first author
-weighted 10-fold, in batches of 8 sequences of 1\,408 positions. A step takes
-2.0 seconds and about 11\,GB of the Thor's 128\,GB of memory. Training is
-still in progress; after 8\,000 of 20\,000 steps the held-out loss is 5.11 nats
-per code, averaged over its 16 codebooks, and still falling. Because the vocabulary differs, this figure
-is not comparable with those of \cref{tab:training}.
+With the finer tokens we trained a larger model on the Thor: 8 blocks of width
+512, 42.9 million parameters, with the lyrics input enabled from the start. It
+was trained on all 742 training songs of the combined corpora, with the lyrics
+corpus weighted 4-fold and two takes recorded by the first author weighted
+10-fold, in batches of 8 sequences. A step took 2.0 seconds and about 11\,GB of
+the Thor's 128\,GB of memory. Its best held-out loss, averaged over its 16
+codebooks, was 5.062 nats per code at step 18\,500 of 20\,000. Because the
+vocabulary differs, this figure is not comparable with those of
+\cref{tab:training}.
+
+\subsection{Overfitting}
+\label{sec:overfitting}
+
+A model \emph{overfits} when it learns the particular songs it was trained on
+instead of what they have in common: its loss on the training songs keeps
+falling while its loss on held-out songs does not. We call the difference
+between the two losses the \emph{generalization gap}. \Cref{tab:overfitting}
+shows it for the model of \cref{sec:large}, with the training loss averaged
+over the 1\,000 steps before each point. From step 15\,000 the held-out loss
+no longer improved while the training loss kept falling, and the gap grew to
+0.975 nats per code. Because the loss is a mean negative log-probability, this
+means that the model assigned to a code of a training song, as a geometric
+mean, $e^{0.975} \approx 2.7$ times the probability it assigned to a code of an
+unheard song. In informal listening the model returned nearly the same song for
+different prompts and repeated a line of lyrics from its training data.
+
+\begin{table}[htbp]
+\centering
+\caption{Training and held-out loss of the model of \cref{sec:large}, in nats
+per code. The training loss is averaged over the preceding 1\,000 steps.}
+\label{tab:overfitting}
+\small
+\begin{tabular}{rrrr}
+\toprule
+step & training & held out & gap \\
+\midrule
+2\,500 & 5.080 & 5.333 & 0.253 \\
+5\,000 & 4.714 & 5.178 & 0.464 \\
+10\,000 & 4.443 & 5.091 & 0.648 \\
+15\,000 & 4.137 & 5.066 & 0.929 \\
+20\,000 & 4.091 & 5.066 & 0.975 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The cause is how often each song was seen. Every training sequence is a window
+of a song drawn at random, and song $i$, with sampling weight $w_i$, is drawn
+with probability $w_i / W$, where $W = \sum_j w_j$ sums the weights of all
+training songs. A run of $S$ steps with $B$ sequences per step therefore draws
+song $i$ on average
+\begin{equation}
+  E_i = S B \, \frac{w_i}{W}
+  \label{eq:draws}
+\end{equation}
+times. With $S = 20\,000$, $B = 8$ and the weights above, $W = 979$, so each
+Song Describer song was drawn about 163 times, each lyrics song about 654
+times, and each of the two takes about 1\,634 times. The lyrics songs and the
+takes were also the only songs with lyrics, so the model could associate lyrics
+with only 75 songs, each of which it had seen hundreds of times.
+
+We therefore replaced the run. The new run adds the 29\,314 rock tracks of the
+Free Music Archive \cite{defferrard2017fma} at half the weight of a Song
+Describer song, gives the lyrics songs the same half weight, and leaves out the
+two takes, since no weight would keep two recordings from being memorized.
+Over $S = 30\,000$ steps, \cref{eq:draws} then gives about 16 draws for each
+Song Describer song and about 8 for every other song. The Song Describer songs
+keep the larger weight because their captions are sentences written by
+listeners, whereas the rock tracks carry only genre tags. The cost is that
+lyrics become rare (73 of 30\,054 training songs), so this model can learn
+little about words. Training is in progress, and we report the generalization
+gap alongside the held-out loss.
 
 \subsection{Lyrics}
 
@@ -1406,6 +1468,10 @@ trained with spectral losses only; without the adversarial losses of Vocos
 highest frequencies, and adding discriminators is our next step. The
 data contain comparatively little singing (298 of the 706 songs mention a
 voice) and very little of some styles (two songs are described as grunge).
+Small datasets invite overfitting, and our first larger model overfitted
+(\cref{sec:overfitting}); apart from weight decay, prompt dropout and keeping
+the checkpoint with the lowest held-out loss, the model has no regularization,
+and in particular no dropout inside the network.
 Our models are much smaller than published systems \cite{copet2023musicgen},
 and we have not yet carried out a formal listening test, so we make no claims
 about perceived quality. On the implementation side, all arithmetic uses

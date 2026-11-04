@@ -134,12 +134,23 @@ finite differences.
 
 ### Training now
 
-The 42.9-million-parameter model `pq-large` is training on the AGX Thor. Its
-curves are published to Hugging Face every two hours and appear here
-automatically:
+The first 42.9-million-parameter model, `pq-large`, overfitted. Its training
+loss kept falling while its held-out loss stopped at 5.06 nats per code, and it
+returned nearly the same song for different prompts. The cause was sampling:
+the small lyrics corpus and two recorded takes were weighted so heavily that
+each lyrics song was drawn about 650 times and each take more than 1,600 times.
+The [book](https://arpanpathak.github.io/staleynet/training.html#overfitting-and-how-often-each-song-is-seen)
+explains how to compute these counts.
+
+`pq-rock-balanced` replaces it on the AGX Thor: the same model trained on
+30,054 songs (Song Describer, JamendoLyrics and 29,314 FMA rock tracks), with
+weights chosen so that no song is drawn more than about 16 times in 30,000
+steps. Its curves are published to Hugging Face every two hours and appear here
+automatically; the number to watch is the gap between the training and the
+held-out loss.
 
 <p align="center">
-  <img src="https://huggingface.co/arpanpathak/staleynet-checkpoints/resolve/main/plots/pq-large.png" width="100%" alt="pq-large training curves: training and validation loss against step, validation loss per codebook grouped by residual level, and throughput">
+  <img src="https://huggingface.co/arpanpathak/staleynet-checkpoints/resolve/main/plots/pq-rock-balanced.png" width="100%" alt="pq-rock-balanced training curves: training and validation loss against step, validation loss per codebook grouped by residual level, and throughput">
 </p>
 
 The neural vocoder `vocoder-rock` trains beside it on the 273 hours of FMA
@@ -150,7 +161,7 @@ of held-out clips are published the same way:
   <img src="https://huggingface.co/arpanpathak/staleynet-checkpoints/resolve/main/plots/vocoder-rock.png" width="100%" alt="vocoder-rock training curves: spectral loss against step, validation loss per resolution, and milliseconds per step">
 </p>
 
-Next, `pq-xl` (111.5 million parameters) trains on about 300 hours of music:
+Next, `pq-xl` (111.5 million parameters) trains on the same balanced mix, about 300 hours of music:
 the 23 hours of the Song Describer Dataset with human-written captions, the
 JamendoLyrics songs with timed lyrics, and 32,923 rock-family clips from the
 Free Music Archive (punk, garage, grunge-adjacent loud and noise rock,

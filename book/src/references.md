@@ -34,6 +34,7 @@
 * D. Stoller, S. Durand, S. Ewert. *End-to-End Lyrics Alignment for Polyphonic Music Using an Audio-to-Character Recognition Model.* ICASSP 2019. <https://arxiv.org/abs/1902.06797>
 * S. Durand, D. Stoller, S. Ewert. *Similarity-based Audio-Lyrics Alignment of Multiple Languages.* ICASSP 2023. <https://arxiv.org/abs/2306.07744>
 * I. Manco et al. *The Song Describer Dataset: a Corpus of Audio Captions for Music-and-Language Evaluation.* NeurIPS 2023 Workshop. <https://arxiv.org/abs/2311.10057>
+* M. Defferrard, K. Benzi, P. Vandergheynst, X. Bresson. *FMA: A Dataset for Music Analysis.* ISMIR 2017. <https://arxiv.org/abs/1612.01840>
 
 **Signal processing**
 

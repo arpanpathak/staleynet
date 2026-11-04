@@ -37,8 +37,20 @@ the main dataset, 298 mention a voice in their captions, and several styles
 of interest are nearly absent: two songs are described as grunge, one as
 psychedelic, and none as soft rock.
 
+Small datasets invite overfitting, and the first 42.9-million-parameter model
+overfitted: its training loss kept falling while its held-out loss stopped at
+5.06 nats per code, and it returned nearly the same song for different prompts
+([Experiments](experiments.md#the-model-overfitted)). The cause was heavy
+weighting of the smallest datasets, under which some songs were drawn more
+than a thousand times. The balanced run that replaced it draws no song more
+than about 16 times, but it pays for this by making lyric-bearing songs rare.
+The model also has no dropout inside the network; the only regularization is
+weight decay, prompt dropout, and keeping the checkpoint with the lowest
+held-out loss.
+
 The scale of the system is small by the standards of published music
-generators. It is trained on 23 hours of audio with 7 million parameters,
+generators. Its largest model has 42.9 million parameters and is trained on
+about 300 hours of audio, most of it rock tracks described only by genre tags,
 whereas MusicGen trains between 300 million and 3.3 billion parameters on
 20 000 hours. The output is mono at 24 kHz.
 
