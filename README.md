@@ -58,14 +58,14 @@ codes per step, described below.
 ### Audio tokens
 
 <p align="center">
-  <img src="docs/assets/diagrams/rvq.svg" width="34%" alt="Residual quantisation of the point (3, 1) in two levels: level 0 chooses the prototype (4, 0), and level 1 adds the correction (-0.8, 0.8)">
+  <img src="docs/assets/diagrams/rvq.svg" width="34%" alt="Residual quantization of the point (3, 1) in two levels: level 0 chooses the prototype (4, 0), and level 1 adds the correction (-0.8, 0.8)">
   &nbsp;&nbsp;&nbsp;
   <img src="docs/assets/diagrams/delay.svg" width="44%" alt="The delay pattern for three codebooks and four steps: codebook c runs c positions behind codebook 0, so the codes form a staircase">
 </p>
 
-**Residual quantisation (left).** Each level of the tokenizer chooses the
+**Residual quantization (left).** Each level of the tokenizer chooses the
 closest of 1,024 learned prototypes to whatever the previous levels left
-unexplained, like describing a colour by its family, then its shade, then
+unexplained, like describing a color by its family, then its shade, then
 finer corrections. The current tokenizer divides the 128 bands into 4 groups
 and gives each group 4 levels, so a step of 10.7 ms is described by 16 codes.
 
@@ -80,7 +80,7 @@ already in its input. This costs only *C* − 1 extra positions per piece.
 </p>
 
 A decoder-only Transformer reads the caption as raw bytes, then the lyrics,
-then the audio codes, in one sequence. Each block normalises its input,
+then the audio codes, in one sequence. Each block normalizes its input,
 lets every position attend to earlier ones, and transforms each position with
 a feed-forward network, adding each result back to its input. The gradients of
 every layer are derived by hand and checked numerically. The diagram shows the
@@ -97,7 +97,7 @@ use 8 blocks of width 512 (42.9 million) and 12 blocks of width 768
 * **The tokenizer was the main limit on sound quality.** Passing held-out songs
   through the tokenizer and Griffin-Lim alone, with no model, already lost most
   of the spectral detail, while a model trained on one excerpt reproduced it
-  token for token. Quantising groups of frequency bands separately with more
+  token for token. Quantizing groups of frequency bands separately with more
   codes per step halved the tokenizer's error, from 0.776 to 0.401 log units
   per band (about 3.4 dB to 1.7 dB).
 * **The language model learns.** Held-out loss falls well below a uniform
@@ -162,7 +162,7 @@ staleynet sing     --run runs/lyrics --prompt "grunge rock, raw male voice" --ly
 
 Training writes `latest/` (weights, AdamW moments and the step) every
 `checkpoint_every` steps; `--resume` continues from it without losing the
-optimiser state, and `--steps N` extends a finished run. `evaluate` runs the
+optimizer state, and `--steps N` extends a finished run. `evaluate` runs the
 paired lyrics test.
 
 ## Training on a second Jetson
@@ -172,7 +172,7 @@ paired lyrics test.
 train while the first one samples or records. With an ssh host named `thor`:
 
 ```bash
-deploy/thor/sync.sh                   # copy code and tokenised data, then build there
+deploy/thor/sync.sh                   # copy code and tokenized data, then build there
 ssh thor 'cd Projects/staleynet && target/release/staleynet train --cache data/cache-g4l4f1 --run runs/pq-large --config configs/pq-large-thor.json'
 deploy/thor/pull-run.sh pq-large      # fetch the best checkpoint and its tokenizer
 deploy/hf/publish.sh                  # publish metrics, plots and checkpoints every two hours
@@ -220,7 +220,7 @@ page are drawn from the same TikZ sources.
 | [`staleynet-audio`](crates/staleynet-audio) | decoding, polyphase resampling, log-mel spectrogram, Griffin-Lim; [on crates.io](https://crates.io/crates/staleynet-audio) |
 | `staleynet-cuda` | GPU kernels in Rust (one module per topic), tensors, shape-checked operations, CPU references |
 | `staleynet-model` | the Transformer with hand-derived gradients, AdamW, cached decoding, sampling, checkpoints |
-| `staleynet-data` | dataset catalogues, GPU log-mel, the residual k-means tokenizer, batch sampling |
+| `staleynet-data` | dataset catalogs, GPU log-mel, the residual k-means tokenizer, batch sampling |
 | `staleynet-train` | the training loop, validation, metrics and checkpoint policy |
 | `staleynet-cli` | the `staleynet` command |
 
@@ -233,7 +233,7 @@ scripts for the second Jetson, the FMA corpus and Hugging Face, and
 ```bash
 cargo test --release -p staleynet-audio            # 40 unit and 5 documentation tests
 cargo oxide test -- --release -p staleynet-cuda    # kernels against CPU references at awkward sizes
-cargo oxide test -- --release -p staleynet-model   # finite differences, cached decoding, memorisation
+cargo oxide test -- --release -p staleynet-model   # finite differences, cached decoding, memorization
 cargo oxide test -- --release -p staleynet-data    # GPU log-mel against the FFT, tokenizer, batch layout
 ```
 
@@ -284,11 +284,11 @@ python3 book/tools/cover.py  book/src/figures/cover.svg
 The Rust logo is the [official artwork](https://github.com/rust-lang/rust-artwork)
 of the Rust Foundation, licensed
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and modified here
-(rust colours and texture). Its use follows the
+(rust colors and texture). Its use follows the
 [Rust trademark policy](https://rustfoundation.org/policy/rust-trademark-policy/)
 and does not imply endorsement by the Rust project.
 
-## Licences
+## Licenses
 
 The code is [Apache-2.0](LICENSE). The paper, the book, the emblem and the cover
 are CC BY 4.0. Checkpoints and derived caches are CC BY-SA
@@ -296,11 +296,11 @@ are CC BY 4.0. Checkpoints and derived caches are CC BY-SA
 
 * the [Song Describer Dataset](https://zenodo.org/records/10072001): Jamendo
   recordings with human-written captions (captions CC BY-SA 4.0; each
-  recording under the licence in its metadata);
+  recording under the license in its metadata);
 * [JamendoLyrics MultiLang](https://github.com/f90/jamendolyrics): songs and
-  lyrics under the licence listed for each song;
+  lyrics under the license listed for each song;
 * the [Free Music Archive](https://github.com/mdeff/fma): each clip under the
-  Creative Commons licence its artist chose.
+  Creative Commons license its artist chose.
 
 Many of these recordings are licensed NonCommercial, so the checkpoints are
 research artifacts. The author's own recordings are not licensed for reuse.

@@ -12,14 +12,15 @@ Large music systems use a pretrained neural codec for this purpose (for
 example SoundStream, EnCodec or DAC). This project builds every component from
 scratch, so it uses a simpler tokenizer that can be trained in minutes:
 k-means clustering applied in several rounds, known as residual vector
-quantisation.
+quantization.
 
 ## What is being tokenized
 
-The spectrogram frames from the previous chapter are first standardised, band
+The spectrogram frames from the previous chapter are first standardized, band
 by band, using the average and spread of each band over the training set, so
 that loud and quiet bands contribute equally to the distances computed below.
-Two consecutive frames are then joined into one unit, called a **step**. A
+In the first tokenizer, two consecutive frames are joined into one unit,
+called a **step**. A
 step covers 21.3 ms of audio and is a list of 256 numbers (2 frames × 128
 bands). A two-minute recording becomes about 5 600 steps.
 
@@ -36,12 +37,12 @@ times, by which point the prototypes barely change.
 
 One list of 1 024 prototypes captures only the broad shape of a step. The
 error that remains, the difference between the step and its prototype, still
-contains useful detail. Residual quantisation therefore repeats the
+contains useful detail. Residual quantization therefore repeats the
 procedure on these differences: a second list of 1 024 prototypes is trained
 on the errors left by the first, a third on the errors left by the second, and
 a fourth on those left by the third.
 
-![Residual vector quantisation](figures/rvq.svg)
+![Residual vector quantization](figures/rvq.svg)
 
 Written out, with \\(x\\) the step to be encoded, \\(r_\ell\\) the part of it that
 remains to be described before round \\(\ell\\), and \\(e_\ell[k]\\) prototype
@@ -65,7 +66,7 @@ only (−0.2, 0.2). The point is now described by 2 small integers, and its
 reconstruction (3.2, 0.8) lies 0.28 from the original, against 1.41 after the
 first round alone.
 
-![Residual quantisation of x = (3, 1) in two rounds](figures/paper-rvq.svg) Decoding reverses the process by adding up the four chosen
+![Residual quantization of x = (3, 1) in two rounds](figures/paper-rvq.svg) Decoding reverses the process by adding up the four chosen
 prototypes:
 
 \\[
@@ -98,6 +99,35 @@ smallest total. The averaging that moves the prototypes is done on the CPU. A
 prototype to which no step is assigned is restarted from a randomly chosen
 training step, so that none of the 1 024 entries is wasted.
 
+## Quantizing groups of bands
+
+The measurements of [Experiments](experiments.md#5-the-audio-pipeline-in-isolation)
+showed that four rounds over a whole step lose too much detail: a step of 256
+numbers is a great deal to describe with four choices from 1 024 prototypes.
+The current tokenizer makes two changes.
+
+First, a step is a single frame, 128 numbers covering 10.7 ms, so that each
+code describes a shorter moment. Second, the 128 bands are divided into
+\\(G = 4\\) groups of 32 neighboring bands, from the lowest frequencies to the
+highest, and each group receives its own residual codebooks. A group of 32
+numbers is far easier to describe with 1 024 prototypes than a whole step of
+256: the same number of prototypes now covers a much smaller space, so each
+one lies closer to the vectors it stands for.
+
+Each group is quantized in 4 rounds, so a step is described by
+\\(4 \times 4 = 16\\) codes. They are ordered round by round: first the coarse
+code of every group, then their first corrections, and so on. This keeps the
+coarse-to-fine order on which [the delay pattern](model.md#the-delay-pattern)
+relies, since every code is predicted after the coarser codes it refines.
+
+The change halved the error: on the 39 held-out songs it fell from 0.776 to
+0.401 log units per band, from about 3.4 dB to 1.7 dB. A control with 16
+rounds and no groups reached 0.427, so most of the gain comes from describing
+each step with more codes, and a smaller part from the grouping
+([Experiments](experiments.md#a-finer-tokenizer) lists the whole study). The
+price is a larger vocabulary, 16 codebooks instead of 4, and 16 output heads
+in the model.
+
 ## One vocabulary for several datasets
 
 The model can only learn from datasets that share its vocabulary. When a new
@@ -105,8 +135,9 @@ dataset is added after the tokenizer has been trained, such as the lyrics
 corpus or newly recorded singing, it is encoded with the existing prototypes
 (`staleynet tokenize --reuse`) rather than with newly trained ones. The
 prototypes transfer well: on held-out songs of the lyrics corpus, which the
-tokenizer never saw, the remaining error after four rounds is 0.821 log units,
-compared with 0.776 on held-out songs of the original corpus.
+tokenizer never saw, the remaining error of the first tokenizer after four
+rounds is 0.821 log units, compared with 0.776 on held-out songs of the
+original corpus; with the current tokenizer it is 0.423.
 
 ## How much detail is lost
 

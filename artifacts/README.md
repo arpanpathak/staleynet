@@ -58,7 +58,7 @@ The dataset repository contains:
 - `cache-overfit/`, `cache-recordings/` — small debugging caches.
 - `recordings/`, `overfit/` — the author's own takes; all rights reserved.
 - `samples/` — generated and reconstruction audio (79 files, 34 MB).
-- `raw/` — SDD and JamendoLyrics metadata/licence tables only; no raw audio.
+- `raw/` — SDD and JamendoLyrics metadata/license tables only; no raw audio.
 
 The raw third-party audio is **not** redistributed. `raw/README.md` in the
 dataset repository records the download and rebuild commands, and the code
@@ -112,10 +112,10 @@ The copies here are for auditing without downloading the binaries.
 - Code and scripts: Apache-2.0 (`LICENSE`).
 - Paper and book: CC BY 4.0 (`LICENSE-CC-BY-4.0.txt`).
 - Checkpoints, caches, and generated audio: CC BY-SA 4.0 to the extent the
-  upstream dataset licences allow (`LICENSE-CC-BY-SA-4.0.txt`).
+  upstream dataset licenses allow (`LICENSE-CC-BY-SA-4.0.txt`).
 - The author's own recordings (`recordings/`, `overfit/`, `cache-recordings/`)
   are not licensed for reuse; all rights reserved.
 
 SDD and JamendoLyrics include CC BY-NC-ND and CC BY-NC-SA recordings. Treat the
 checkpoints as research artifacts and do not use them commercially where the
-upstream licence forbids it. See `NOTICE` and the HF cards for details.
+upstream license forbids it. See `NOTICE` and the HF cards for details.

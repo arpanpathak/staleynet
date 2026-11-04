@@ -1,29 +1,40 @@
 % Figure "model", shared by the paper and (as SVG) the book.
-\begin{tikzpicture}[figure, node distance=3.2mm]
+% A pre-normalized Transformer block repeated N times. Every block in the stack
+% has the same width, and both residual paths run on the right, well clear of
+% the blocks, each leaving the main line at a marked branch point and entering
+% its sum from the side.
+\begin{tikzpicture}[figure]
+  % The input sequence: begin marker, caption bytes, lyrics bytes, separator,
+  % then audio positions, each holding C stacked codes.
   \foreach \i/\c in {0/blockgray,1/blockamber,2/blockamber,3/blockamber,4/blockrose,5/blockrose,6/blockrose,7/blockgray}
-    \fill[\c, rounded corners=1.5pt] (\i*0.42,0) rectangle +(0.36,0.36);
+    \fill[\c, rounded corners=1.5pt] (\i*0.42-2.1,0) rectangle +(0.36,0.36);
   \foreach \i in {8,9,10,11}
     \foreach \l in {0,1,2,3}
-      \fill[accent!\the\numexpr 25+15*\l\relax, rounded corners=1pt] (\i*0.42,\l*0.095) rectangle +(0.36,0.075);
-  \node[caption text, anchor=north] at (0.2,-0.05) {B};
-  \node[caption text, anchor=north] at (1.05,-0.05) {caption};
-  \node[caption text, anchor=north] at (2.31,-0.05) {lyrics};
-  \node[caption text, anchor=north] at (3.12,-0.05) {S};
-  \node[caption text, anchor=north] at (4.2,-0.05) {audio, 4 levels};
-  \node[block, fill=blockgray, minimum width=50mm, anchor=south] (embed) at (2.4,0.9)
-    {token embeddings $+$ position embeddings};
-  \node[block, fill=blockblue, minimum width=38mm, above=9mm of embed] (norm1) {RMSNorm};
-  \node[block, fill=blockviolet, minimum width=38mm, above=of norm1] (attn) {causal attention, 8 heads};
-  \node[circle, draw=inkline, fill=white, inner sep=0pt, minimum size=3.6mm, above=3mm of attn] (add1) {\scriptsize$+$};
-  \node[block, fill=blockblue, minimum width=38mm, above=4mm of add1] (norm2) {RMSNorm};
-  \node[block, fill=blockgreen, minimum width=38mm, above=of norm2] (ffn) {feed-forward $256 \to 1024 \to 256$};
-  \node[circle, draw=inkline, fill=white, inner sep=0pt, minimum size=3.6mm, above=3mm of ffn] (add2) {\scriptsize$+$};
-  \draw[dashed, draw=muted!70, rounded corners=7pt] ($(norm1.south west)+(-11mm,-5.5mm)$) rectangle ($(add2.north -| ffn.east)+(5mm,2.5mm)$);
-  \node[font=\sffamily\small\bfseries, text=muted, anchor=east] at ($(norm1.south west)!0.5!(add2.north -| norm1.west)+(-12.5mm,0)$) {$6\times$};
-  \node[block, fill=blockblue, minimum width=38mm, above=7mm of add2] (normf) {RMSNorm};
-  \node[block, fill=blockamber, minimum width=50mm, above=of normf] (heads) {4 output heads of 1\,024 scores};
-  \coordinate (fork1) at ($(norm1.south)+(0,-2.5mm)$);
-  \coordinate (fork2) at ($(norm2.south)+(0,-2mm)$);
+      \fill[accent!\the\numexpr 25+15*\l\relax, rounded corners=1pt] (\i*0.42-2.1,\l*0.095) rectangle +(0.36,0.075);
+  \node[caption text, anchor=north] at (-1.92,-0.06) {B};
+  \node[caption text, anchor=north] at (-1.05,-0.06) {caption};
+  \node[caption text, anchor=north] at (0.21,-0.06) {lyrics};
+  \node[caption text, anchor=north] at (1.02,-0.06) {S};
+  \node[caption text, anchor=north] at (2.1,-0.06) {audio, $C$ codes};
+
+  % The main column.
+  \tikzset{stage/.style={block, minimum width=52mm, minimum height=7.5mm}}
+  \node[stage, fill=blockgray, minimum width=58mm] (embed) at (0,1.35) {code embeddings $+$ position embeddings};
+  \node[stage, fill=blockblue, above=10mm of embed] (norm1) {RMSNorm};
+  \node[stage, fill=blockviolet, above=4mm of norm1] (attn) {causal self-attention, $h$ heads};
+  \node[circle, draw=inkline, fill=white, inner sep=0pt, minimum size=4mm, above=5mm of attn] (add1) {\scriptsize$+$};
+  \node[stage, fill=blockblue, above=10mm of add1] (norm2) {RMSNorm};
+  \node[stage, fill=blockgreen, above=4mm of norm2] (ffn) {feed-forward $d \to 4d \to d$, GELU};
+  \node[circle, draw=inkline, fill=white, inner sep=0pt, minimum size=4mm, above=5mm of ffn] (add2) {\scriptsize$+$};
+  \node[stage, fill=blockblue, above=9mm of add2] (normf) {RMSNorm};
+  \node[stage, fill=blockamber, minimum width=58mm, above=4mm of normf] (heads) {$C$ output heads, $K = 1\,024$ scores each};
+
+  % Branch points of the residual paths, midway in the gaps below each norm.
+  \coordinate (fork1) at ($(embed.north)!0.5!(norm1.south)$);
+  \coordinate (fork2) at ($(add1.north)!0.5!(norm2.south)$);
+  \coordinate (lane) at ($(attn.east)+(7mm,0)$);
+
+  \draw[flow] (0,0.45) -- (embed);
   \draw[flow] (embed) -- (norm1);
   \draw[flow] (norm1) -- (attn);
   \draw[flow] (attn) -- (add1);
@@ -32,9 +43,13 @@
   \draw[flow] (ffn) -- (add2);
   \draw[flow] (add2) -- (normf);
   \draw[flow] (normf) -- (heads);
-  \draw[flow] (2.4,0.48) -- (embed);
-  \draw[flow, rounded corners=4pt] (fork1) -- ++(-24mm,0) |- (add1);
-  \draw[flow, rounded corners=4pt] (fork2) -- ++(-24mm,0) |- (add2);
-  \fill[inkline] (fork1) circle (0.7pt);
-  \fill[inkline] (fork2) circle (0.7pt);
+
+  \draw[flow, rounded corners=4pt] (fork1) -| (lane |- add1) -- (add1.east);
+  \draw[flow, rounded corners=4pt] (fork2) -| (lane |- add2) -- (add2.east);
+  \fill[inkline] (fork1) circle (1pt);
+  \fill[inkline] (fork2) circle (1pt);
+
+  % The repeated block, and how many times it repeats.
+  \node[draw=muted!70, dashed, rounded corners=7pt, inner sep=3.5mm, fit=(fork1) (norm1) (attn) (add1) (norm2) (ffn) (add2) (lane)] (stack) {};
+  \node[font=\sffamily\small\bfseries, text=muted, anchor=east] at ($(stack.west)+(-1.5mm,0)$) {$N\times$};
 \end{tikzpicture}

@@ -2,7 +2,7 @@
 
 This chapter lists what is needed to rebuild the system and the commands that
 produce each result reported in this book. Because sampling and
-initialisation are seeded and the GPU code adds numbers in a fixed order, a
+initialization are seeded and the GPU code adds numbers in a fixed order, a
 command repeated on the same device produces the same numbers.
 
 ## Requirements
@@ -19,14 +19,14 @@ disk and the prepared features about 3 GB.
 cargo oxide build -- --release                    # builds target/release/staleynet
 cargo test --release -p staleynet-audio           # signal processing on the CPU
 cargo oxide test -- --release -p staleynet-cuda   # every GPU kernel against its CPU reference
-cargo oxide test -- --release -p staleynet-model  # gradients, cached decoding, memorisation, checkpoints, warm start
+cargo oxide test -- --release -p staleynet-model  # gradients, cached decoding, memorization, checkpoints, warm start
 cargo oxide test -- --release -p staleynet-data   # GPU spectrogram, tokenizer, batches, lyrics alignment
 ```
 
 ## Obtaining the data
 
 The Song Describer Dataset is published on Zenodo. Its audio carries
-per-track Creative Commons licences, listed in `audio_licenses.txt`, and its
+per-track Creative Commons licenses, listed in `audio_licenses.txt`, and its
 captions are licensed CC BY-SA 4.0.
 
 ```bash
@@ -38,7 +38,7 @@ unzip -q audio.zip -d audio && cd -
 ```
 
 JamendoLyrics MultiLang is distributed as a Git repository whose songs and
-lyrics carry the Creative Commons licence stated for each song in
+lyrics carry the Creative Commons license stated for each song in
 `JamendoLyrics.csv`.
 
 ```bash
@@ -76,11 +76,11 @@ staleynet sing --run runs/lyrics-orin --prompt "slow grunge song with a raw male
 ```
 
 A run interrupted at any point continues with `--resume`. The resumed run
-restores the optimiser state and draws the same batches it would have drawn
+restores the optimizer state and draws the same batches it would have drawn
 without the interruption.
 
-The single-excerpt memorisation experiment of
-[Experiments, Section 5](experiments.md#memorisation-of-a-single-excerpt) uses
+The single-excerpt memorization experiment of
+[Experiments, Section 5](experiments.md#memorization-of-a-single-excerpt) uses
 `configs/overfit-one-take.json` on a folder containing one excerpt rendered by
 `staleynet reconstruct`, and compares the generated tokens with the excerpt's
 own tokens through `staleynet sing --save-codes`.
@@ -92,7 +92,7 @@ own tokens through `staleynet sing --save-codes`.
 | Tokenizer error per track | `data/cache/tokenizer_report.json` |
 | Tokenizer listening examples | `samples/tokenizer/` |
 | Reconstruction analysis and its audio | `samples/reconstruction/` |
-| Memorisation experiment audio and tokens | `samples/overfit/` |
+| Memorization experiment audio and tokens | `samples/overfit/` |
 | Training and validation curves | `runs/<run>/metrics.jsonl` |
 | Checkpoints | `runs/<run>/latest/`, `runs/<run>/best/` |
 | Lyrics evaluation | `runs/<run>/lyrics-evaluation-<split>.json` |

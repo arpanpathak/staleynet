@@ -33,7 +33,7 @@ confirms the filter's purpose: a 15 kHz tone, which lies above the new 12 kHz
 limit, is suppressed by more than 80 dB when 48 kHz audio is converted to
 24 kHz.
 
-Finally, the loudness of each recording is normalised to the same average
+Finally, the loudness of each recording is normalized to the same average
 level (an RMS of −20 dBFS). Commercial and amateur recordings differ widely
 in volume, and without this step the model would have to learn those
 differences as part of the music.
@@ -102,7 +102,7 @@ random phase, the algorithm converts the current estimate to a waveform and
 back, keeps the target strengths together with the newly obtained phase, and
 repeats. Each round makes the phase more consistent with the strengths, and
 64 rounds are used. Before the search begins, the 128 mel bands are expanded
-back to the 513 linear frequencies with a regularised least-squares inverse
+back to the 513 linear frequencies with a regularized least-squares inverse
 of the pooling step.
 
 Griffin-Lim needs no training, but its estimated phase leaves a characteristic

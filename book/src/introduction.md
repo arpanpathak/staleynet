@@ -8,9 +8,9 @@ Alice in Chains.*
 ## Abstract
 
 StaleyNET is a text-conditioned generative model of music audio, built and
-trained entirely from random initialisation on two embedded NVIDIA Jetson
+trained entirely from random initialization on two embedded NVIDIA Jetson
 devices. Every stage is implemented in Rust: feature extraction, a residual
-vector quantiser, a decoder-only Transformer with a hand-derived backward
+vector quantizer, a decoder-only Transformer with a hand-derived backward
 pass, the training loop and the sampler. All numerical kernels are compiled
 to GPU code with cuda-oxide, an experimental Rust-to-PTX compiler. No
 pretrained network, codec, vocoder or text encoder is used.
@@ -66,7 +66,7 @@ identify which part limits the result.
 
 * A complete text-to-audio pipeline in Rust whose GPU kernels are written in
   Rust and compiled with cuda-oxide, including a strided, batched GEMM in
-  three implementations and fused kernels for normalisation, attention and
+  three implementations and fused kernels for normalization, attention and
   cross-entropy.
 * A testing approach in which each GPU kernel is checked against a CPU
   reference and the gradients of the whole network against numerical
@@ -97,7 +97,7 @@ Where a statement rests on listening rather than on measurement, the text says
 so. The known weaknesses of the system are collected in
 [Limitations](limitations.md).
 
-## Organisation
+## Organization
 
 [Related Work](related-work.md) places the project among existing systems.
 The method chapters then follow the data through the pipeline: the [system overview](architecture.md),

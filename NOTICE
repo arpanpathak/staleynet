@@ -19,15 +19,15 @@ Third-party material and provenance
 
   Song Describer Dataset (SDD)
     Captions are licensed CC BY-SA 4.0. The recordings carry the per-track
-    Creative Commons licences listed in
-    data/raw/song-describer/audio_licenses.txt. Those licences include
+    Creative Commons licenses listed in
+    data/raw/song-describer/audio_licenses.txt. Those licenses include
     CC BY-NC-ND and CC BY-NC-SA, so the trained checkpoints are research
     artifacts: do not use them commercially where the upstream recording
-    licences forbid it. https://zenodo.org/records/10072001
+    licenses forbid it. https://zenodo.org/records/10072001
 
   JamendoLyrics MultiLang
     The repository code and metadata are MIT licensed. The songs and lyrics
-    carry the per-song Creative Commons licences listed in
+    carry the per-song Creative Commons licenses listed in
     JamendoLyrics.csv. https://github.com/f90/jamendolyrics
 
   Rust logo artwork

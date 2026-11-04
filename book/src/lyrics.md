@@ -35,7 +35,7 @@ acquire a lyrics input without losing what it has learned. If the lyrics had
 been inserted using the existing rows, every audio position would have moved
 to a different row, and the model's knowledge of where it is in a piece would
 no longer apply. With the arrangement above, extending a model amounts to
-appending 256 new, randomly initialised rows to its position table. All other
+appending 256 new, randomly initialized rows to its position table. All other
 parameters keep their trained values, and training only has to teach the
 model what the new positions mean.
 

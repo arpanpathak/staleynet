@@ -1,22 +1,25 @@
 \begin{abstract}
-This paper describes StaleyNET, a small system that generates music from a
-short text description. We built it from first principles, mainly as a way of
-understanding what each part of such a system contributes. All components,
-including the GPU kernels, are written in Rust, and the models are trained
-from random initialisation on two NVIDIA Jetson devices with about 23 hours of
-Creative Commons music. Sound is represented by quantised log-mel
-spectrograms, and a decoder-only Transformer learns to predict these tokens
-from a caption and, optionally, from lyrics. Because every stage is our own,
-we could examine the stages one at a time. These measurements suggest that the
-quality of the generated audio is limited mainly by the tokenizer rather than
-by the language model: a model trained on a single excerpt reproduces it
-exactly, while the tokenizer on its own loses much of the spectral detail.
-Guided by this observation, we revised the tokenizer and roughly halved its
-reconstruction error. We also describe a simple paired test for whether a
-model makes use of the lyrics it is given; our first lyrics-conditioned models
-do not yet pass it. Each algorithm is presented with a small worked example,
-in the hope that the paper is useful to readers who would like to build a
-similar system.
+StaleyNET generates music, including singing, from a short text description
+and, optionally, lyrics. We treat generation as probabilistic modeling. A
+recording is converted into a sequence of discrete audio tokens; the
+probability of that sequence given the text is factorized by the chain rule
+into a product of next-token predictions; and a decoder-only Transformer learns
+these conditional distributions by maximum likelihood. Its autoregressive
+structure is used twice: in training, a causal mask lets every factor of a
+sequence be evaluated in one pass, and in generation, the same factors are
+sampled one step at a time. Every stage is our own and written in Rust,
+including the spectrogram, the tokenizer, the hand-derived gradients and the
+GPU kernels, and the models are trained from random initialization on two
+NVIDIA Jetson devices with about 23 hours of Creative Commons music. Because the
+factorization separates the audio representation from the model of it, the
+error of the whole system can be decomposed stage by stage. This decomposition
+locates the main limitation in the tokenizer rather than in the language
+model: a model trained on a single excerpt reproduces its tokens exactly,
+while the tokens alone lose much of the spectral detail. A tokenizer that
+quantizes groups of frequency bands with more codes per step halves the
+reconstruction error. We also describe a paired test of whether a model uses
+its lyrics, which our first lyrics-conditioned models do not yet pass. Every
+algorithm is presented with a worked example.
 \end{abstract}
 
 \section{Introduction}
@@ -27,7 +30,7 @@ recent years \cite{agostinelli2023musiclm,copet2023musicgen}. Most current
 systems combine several large components that are trained separately: a
 neural codec that turns audio into tokens, a text encoder that turns the
 prompt into vectors, and a Transformer that relates the two. This division of
-labour works very well, although it can make it difficult to tell which
+labor works very well, although it can make it difficult to tell which
 component is responsible for a particular quality, or a particular flaw, in
 what one hears.
 
@@ -57,7 +60,7 @@ cause. When we passed held-out recordings through the tokenizer and the
 vocoder alone, without any model, most of the spectral detail was already
 lost. When we trained the model on a single excerpt, it reproduced that
 excerpt token for token. Together these results suggested that the tokenizer
-was the main limitation, and a revised tokenizer that quantises groups of
+was the main limitation, and a revised tokenizer that quantizes groups of
 frequency bands separately reduced the reconstruction error by about half.
 
 The contributions of this paper are as follows.
@@ -100,14 +103,14 @@ costs $-\ln q$ nats, so a certain prediction costs 0 and a uniform guess among
 \toprule
 symbol & meaning & value \\
 \midrule
-$f_\text{s}$ & sample rate of the analysed audio (samples per second) & 24\,000\,Hz \\
+$f_\text{s}$ & sample rate of the analyzed audio (samples per second) & 24\,000\,Hz \\
 $N$ & samples in one spectrogram frame & 1\,024 (42.7\,ms) \\
 $H$ & hop: samples between the starts of two frames & 256 (10.7\,ms) \\
 $S$ & log-mel spectrogram, one row per frame, one column per mel band & $\cdot \times 128$ \\
 step & the frames described by one set of codes & 1 or 2 frames \\
 $C$ & codebooks (codes) per step & 4 or 16 \\
 $K$ & prototypes per codebook & 1\,024 \\
-$G$ & groups of mel bands quantised separately & 1 or 4 \\
+$G$ & groups of mel bands quantized separately & 1 or 4 \\
 $d$ & width of the vectors inside the model & 256 or 512 \\
 $L$ & bytes reserved for lyrics & 256 \\
 $\theta$ & all trainable parameters of the model & 7.1\,M or 42.9\,M \\
@@ -125,7 +128,7 @@ simplified it to a single Transformer over the codebooks of a neural codec,
 interleaved by a delay pattern. We follow MusicGen in using the delay
 pattern, top-$k$ sampling \cite{fan2018hierarchical} and classifier-free
 guidance \cite{ho2022cfg}, and we replace its pretrained components with
-$k$-means quantisation of log-mel frames and with raw text bytes, as studied
+$k$-means quantization of log-mel frames and with raw text bytes, as studied
 for text by ByT5 \cite{xue2022byt5}.
 
 Jukebox \cite{dhariwal2020jukebox} generated singing from lyrics and learned
@@ -273,12 +276,22 @@ the $(N/2 + 1) \times 128$ matrix whose columns are 128 triangular mel filters
 band, and its entries are natural logarithms of energy.
 \end{definition}
 
+\begin{widefigure}
+\includegraphics[width=\linewidth]{figures/book-stft-gemm}
+\caption{The spectrogram computed as two matrix products. The frames of the
+signal, one per row, are multiplied by the windowed Fourier matrix $W$, which
+gives the energy $|X|^2$ at each of 513 frequencies; a second product with the
+mel filters pools these into 128 bands, and the logarithm compresses them. The
+same matrix-product kernel serves the spectrogram and the Transformer.}
+\label{fig:stft-gemm}
+\end{widefigure}
+
 Column $k$ of $W$ holds a windowed cosine (real part) and sine (imaginary part)
 at frequency $k f_\text{s}/N = k \cdot 23.4$\,Hz, so entry $(f, k)$ of $FW$
 measures how much of that frequency frame $f$ contains, and its square $|FW|^2$
 is the energy at that frequency. The mel filters then pool these 513
 frequencies into 128 bands. The \emph{mel} scale follows pitch perception: it is
-linear below 1\,kHz and logarithmic above, so the centres of neighbouring bands
+linear below 1\,kHz and logarithmic above, so the centers of neighboring bands
 are about 26\,Hz apart at low frequencies and about 330\,Hz apart near 12\,kHz,
 much as the ear
 distinguishes low notes more finely than high ones. The logarithm reflects the
@@ -294,7 +307,7 @@ and it agrees with the FFT to within $10^{-2}$ log units.
 
 A generated spectrogram tells us how strong each frequency is, but not its
 phase, and a waveform cannot be built without one. Not every pattern of
-magnitudes and phases belongs to a real waveform: neighbouring frames overlap
+magnitudes and phases belongs to a real waveform: neighboring frames overlap
 by three quarters, so they must agree about the samples they share. The
 Griffin-Lim algorithm \cite{griffin1984signal} estimates a phase by alternating
 between two requirements: the magnitudes should match the target, and the
@@ -333,7 +346,7 @@ along the last change with momentum $\alpha = 0.99$; in the first round it has
 no effect, because $P = P_\text{prev}$. We use $T = 64$ rounds. Because $S$
 holds logarithms of mel energies, the target magnitudes are obtained by
 undoing each step of the definition: $e^{S}$ gives the band energies, a
-regularised least-squares inverse of $B$ spreads them back over the 513
+regularized least-squares inverse of $B$ spreads them back over the 513
 frequencies, and a square root turns energy into magnitude.
 
 \section{From spectrogram to tokens}
@@ -342,7 +355,7 @@ frequencies, and a square root turns energy into magnitude.
 A language model chooses each next symbol from a finite vocabulary, whereas a
 spectrogram consists of real numbers. The tokenizer bridges this gap by
 replacing each short stretch of spectrogram with a few integers, its
-\emph{codes}. Each band of the spectrogram is first standardised: its mean over
+\emph{codes}. Each band of the spectrogram is first standardized: its mean over
 the training set is subtracted and the result is divided by its standard
 deviation, so that quiet and loud bands carry similar weight and every value
 is a plain number without unit. A \emph{step} is then formed from consecutive
@@ -350,9 +363,9 @@ frames; in our first tokenizer a step joins 2 frames, giving a vector of
 $D = 2 \cdot 128 = 256$ numbers that covers $2H/f_\text{s} = 21.3$\,ms of
 sound.
 
-\subsection{Residual quantisation}
+\subsection{Residual quantization}
 
-One can think of residual quantisation as describing a colour first by its
+One can think of residual quantization as describing a color first by its
 family, then by its shade within the family, and then by finer and finer
 corrections. Each level names the closest of $K$ prototypes to whatever the
 previous levels have left unexplained. A \emph{prototype} is a typical step,
@@ -360,7 +373,7 @@ a vector of $D$ numbers, and a \emph{codebook} is a list of $K$ prototypes; the
 code chosen at a level is the position of the chosen prototype in its list,
 an integer in $[0, K)$.
 
-\begin{definition}[Residual vector quantisation]
+\begin{definition}[Residual vector quantization]
 Let $E_0, \dots, E_{C-1}$ be $C$ codebooks (one per level $\ell$), each a list of
 $K$ prototype vectors of length $D$, and write $E_\ell[k]$ for prototype $k$ of
 codebook $\ell$. A step $x \in \mathbb{R}^D$ is encoded as the codes
@@ -374,10 +387,19 @@ and it is decoded as $\hat x = \sum_\ell E_\ell[c_\ell]$. The vector $r_\ell$ is
 described.
 \end{definition}
 
+\begin{widefigure}
+\includegraphics[width=\linewidth]{figures/book-rvq}
+\caption{Residual quantization as a picture. Level 0 replaces a step $x$ by the
+nearest of its prototypes (left); level 1 applies the same rule to what level
+0 missed (middle); each further level removes part of the error that remains
+(right, schematic). The step is then described by one code per level.}
+\label{fig:rvq-levels}
+\end{widefigure}
+
 \begin{figure}[htbp]
 \centering
 \input{figures/rvq}
-\caption{Residual quantisation of $x = (3,1)$ in two levels. Level 0 (blue)
+\caption{Residual quantization of $x = (3,1)$ in two levels. Level 0 (blue)
 chooses the prototype $(4,0)$, and level 1 (green) adds the correction
 $(-0.8, 0.8)$.}
 \label{fig:rvq}
@@ -397,7 +419,7 @@ $\sqrt{0.08} \approx 0.28$ after two.
 \subsection{Training the codebooks}
 
 \begin{procedure}{\proc{Train-Codebooks}$(X, C, K, I)$}
-{a matrix $X$ with one row per training step and $D$ standardised values per
+{a matrix $X$ with one row per training step and $D$ standardized values per
 row, the number of levels $C$, the number of prototypes per level $K$, and the
 number of refinement rounds $I$.}
 {the codebooks $E_0, \dots, E_{C-1}$, each a $K \times D$ matrix whose rows are
@@ -446,12 +468,12 @@ $0, -8, 8, 0$, and the smallest again selects $(4, 0)$. On the GPU the dot
 products of 8\,192 steps with 1\,024 prototypes form a single matrix product,
 after which a small kernel finds the smallest score in each row.
 
-\subsection{Quantising groups of bands}
+\subsection{Quantizing groups of bands}
 \label{sec:band-groups}
 
 The analysis of \cref{sec:pipeline} led us to a refinement. Instead of
-quantising a whole step at once, we divide its 128 bands into $G$ equal
-groups of neighbouring bands, from the lowest frequencies to the highest, and
+quantizing a whole step at once, we divide its 128 bands into $G$ equal
+groups of neighboring bands, from the lowest frequencies to the highest, and
 give each group its own residual codebooks. With one frame per step and
 $G = 4$, each group is a vector of $128/4 = 32$ numbers, which $K = 1\,024$
 prototypes can describe more finely than a whole step of 128. In our experiments the grouping
@@ -475,11 +497,55 @@ text model predicts the next word.
 \centering
 \input{figures/model}
 \caption{The model. Text bytes and audio tokens share one sequence, and each
-audio position carries all the codes of one step. A stack of pre-normalised
+audio position carries all the codes of one step. A stack of pre-normalized
 blocks, each adding its result to its input, ends in one output head per
 code.}
 \label{fig:model}
 \end{figure}
+
+\subsection{The probability model}
+\label{sec:probability}
+
+The whole system rests on one modeling decision, which also explains the
+shape of the rest of this section. Let $\mathcal{T}$ be the conditioning text,
+the caption and, when present, the lyrics, given as a string of bytes. Let a
+piece of music be the sequence of its tokenizer steps $a_1, \dots, a_F$, where
+step $t$ consists of the $C$ codes $a_t^0, \dots, a_t^{C-1}$, ordered from coarse
+to fine. We model the probability of a piece given its text. By the chain rule
+of probability, any such distribution can be written, without approximation,
+as a product of predictions of one code at a time:
+\[
+p(a_1, \dots, a_F \mid \mathcal{T}) \;=\; \prod_{t=1}^{F} \prod_{\ell=0}^{C-1}
+p\big(a_t^{\ell} \,\big|\, \mathcal{T},\, a_{<t},\, a_t^{<\ell}\big),
+\]
+where $a_{<t}$ stands for all the codes of steps $1, \dots, t-1$ and
+$a_t^{<\ell}$ for the codes $a_t^0, \dots, a_t^{\ell-1}$ of step $t$ that are
+coarser than $a_t^\ell$. In words, the probability of a piece is the probability of its first code
+given the text, times the probability of the second given the text and the
+first, and so on. Each factor asks only what comes next, given everything
+before it. This is exactly the question that an autoregressive Transformer
+answers, and it turns a distribution over whole pieces, which no network could
+represent directly, into a sequence of classifications among $K = 1\,024$ codes.
+
+The factorization determines both halves of the system. \emph{Training}
+chooses the parameters $\theta$ that make the recorded pieces as probable as
+possible. Taking the logarithm turns the product into a sum, so maximizing the
+likelihood is the same as minimizing the sum of $-\ln p_\theta$ over every
+code of every piece, which is the cross-entropy loss of \cref{sec:objective}.
+Because each factor depends only on earlier codes, all the factors of a
+training sequence can be evaluated in a single forward pass, with a causal
+mask that hides later positions from earlier ones. \emph{Generation} follows
+the same product forward: it draws the first code from its predicted
+distribution, appends it to the sequence, draws the next, and so on, so that
+the finished piece is a sample of $p_\theta(\cdot \mid \mathcal{T})$; top-$k$
+sampling and guidance (\cref{sec:generation}) adjust the distribution at each
+step.
+
+Each factor conditions code $\ell$ of a step on the coarser codes of the same
+step, because a correction is easier to predict once the value it corrects is
+known. A model that predicted all $C$ codes of a step at one position would
+have to drop that conditioning. The delay pattern below restores it at a
+small cost.
 
 \subsection{One sequence for text and audio}
 
@@ -498,9 +564,9 @@ and of the position.
 
 \subsection{The delay pattern}
 
-At each position the model predicts all $C$ codes of a step. A finer code,
-however, corrects a coarser one and is easier to predict once the coarser one
-is known.
+At each position the model predicts $C$ codes at once, one per output head.
+The factorization of \cref{sec:probability}, however, asks for each finer code
+only after the coarser codes of the same step are known.
 
 \begin{definition}[Delay pattern \cite{copet2023musicgen}]
 Write $a_{u}^{\ell}$ for the code of codebook $\ell$ at step $u$. Position $t$ of
@@ -522,14 +588,17 @@ that they refine are already part of its input.}
 
 In \cref{fig:delay}, position 2 predicts $a_2$, $b_1$ and $c_0$ together. By then
 $a_1$, which $b_1$ refines, and $a_0$ and $b_0$, which $c_0$ refines, are already
-known. The price is $C - 1$ additional positions, whereas giving each codebook
-its own positions would multiply the length of the sequence by $C$.
+known. Code $\ell$ of every step is therefore predicted after all coarser codes
+of its step, as the chain rule requires. The price is $C - 1$ additional
+positions, whereas giving each codebook its own positions would multiply the
+length of the sequence by $C$.
 
 \subsection{The network and its objective}
+\label{sec:objective}
 
 In each block, attention lets every position gather information from itself
 and from earlier positions, and a small feed-forward network then transforms
-each position on its own. Both parts normalise their input
+each position on its own. Both parts normalize their input
 \cite{zhang2019rmsnorm,xiong2020layernorm} and add their result to it:
 \begin{align*}
 h &= x + \operatorname{Attention}(\operatorname{Norm}(x)), \\
@@ -555,7 +624,9 @@ that have a target in codebook $\ell$ and then over the codebooks:
 \]
 where $z_p$ is the input at position $p$, $\theta$ denotes the parameters, and
 $P_\theta(y \mid \cdot)$ is the probability that the model assigns to the correct
-code $y$. The loss is measured in nats per code. A model that assigns equal
+code $y$. This is the negative logarithm of the likelihood of
+\cref{sec:probability}, averaged per code, so minimizing it maximizes the
+probability of the training music. The loss is measured in nats per code. A model that assigns equal
 probability to all 1\,024 codes has a loss of $\ln 1024 \approx 6.93$, and lower
 values mean that the model has learned something about the music.
 
@@ -727,6 +798,15 @@ In the procedure below, $j$ indexes the blocks, $q$, $k$ and $v$ are the query,
 key and value vectors of position $p$, and $\pi$ is the position map of
 \cref{sec:lyrics}.
 
+\begin{widefigure}
+\includegraphics[width=\linewidth]{figures/book-kv-cache}
+\caption{Why a key/value cache helps. Recomputing the whole prefix at every
+step evaluates a growing triangle of attention scores (left), so the work per
+new code grows with the length of the sequence; with a cache, each step
+computes one new row of scores against the stored keys and values (right).}
+\label{fig:kv-cache}
+\end{widefigure}
+
 \begin{procedure}{\proc{Decode-Step}$(z, p, \mathit{cache})$}
 {the symbols $z$ to place at position $p$ (a byte, or the $C$ codes of a step),
 the position index $p$, and the cache: for every block, the key and value
@@ -796,6 +876,15 @@ shared-memory tiled product in detail; here we describe one further step,
 register blocking, and the way we made one gradient repeatable.
 
 \subsection{Register blocking}
+
+\begin{widefigure}
+\includegraphics[width=\linewidth]{figures/book-tiled-matmul}
+\caption{Shared-memory tiling, the starting point of register blocking. Each
+block of threads copies one tile of $A$ and one of $B$ into the fast memory it
+shares, synchronizes, multiplies them, and slides along the inner dimension,
+so every value fetched from global memory is used 16 times.}
+\label{fig:tiling}
+\end{widefigure}
 
 A GPU runs many \emph{threads} at once, grouped into \emph{blocks} that
 cooperate. Each thread has up to 255 fast \emph{registers}, the threads of
@@ -906,11 +995,11 @@ of $e \approx 2.7$, or $10 \log_{10} e \approx 4.3$\,dB.
 kernel tests also pass on the Thor. They compare every kernel with a CPU
 implementation at deliberately awkward sizes, check every gradient
 numerically, verify the cache theorem, and confirm that a small network can
-memorise a fixed batch. On the Orin NX, register blocking makes a training
+memorize a fixed batch. On the Orin NX, register blocking makes a training
 step of the first model 1.8 times faster than tiling and 9.3 times faster than
 the direct kernel (\cref{tab:bench-train}).
 
-\paragraph{First training runs.} \Cref{tab:training} summarises the runs with
+\paragraph{First training runs.} \Cref{tab:training} summarizes the runs with
 the first tokenizer. A training \emph{step} here is one update of the
 parameters, computed from a batch of 8 sequences; the held-out loss is measured
 on songs by artists that the model never heard during training. A run of 1\,500 steps reached a held-out loss of 4.93, and
@@ -953,7 +1042,7 @@ exact spectrograms (\cref{fig:errors,tab:reconstruction}).
 \centering
 \resizebox{\linewidth}{!}{\input{figures/errors}}
 \caption{Mean spectral error of each stage on four held-out vocal excerpts,
-for the first tokenizer (grey) and the final one (blue). The bottom pair is
+for the first tokenizer (gray) and the final one (blue). The bottom pair is
 the best that any model trained on these tokens could achieve.}
 \label{fig:errors}
 \end{figure}
@@ -983,21 +1072,21 @@ With the first tokenizer, the tokens alone caused 3.6 times the error of the
 vocoder, and the end-to-end error of a perfect model, 0.71, was almost entirely
 due to the tokenizer. An error of about 0.7 log units, roughly 3\,dB in every
 band, is enough to blur the harmonic and formant detail on which an intelligible
-voice depends. This measure does not capture the phase artefacts of
+voice depends. This measure does not capture the phase artifacts of
 Griffin-Lim, which remain audible, so the tokenizer is the main spectral
 limitation rather than the only audible one.
 
 To examine the model on its own, we trained it on a single 12-second excerpt of
 562 steps. Its training loss fell to 0.054 after 100 steps and to 0.002 after
 200. We then generated 12 seconds from the excerpt's caption and compared the
-generated codes with the excerpt's own (\cref{tab:memorisation}). Greedy
+generated codes with the excerpt's own (\cref{tab:memorization}). Greedy
 decoding reproduced all 562 steps, and top-$k$ sampling departed from the
 excerpt only at isolated codes, without drifting away.
 
 \begin{table}[htbp]
 \centering
-\caption{Generated codes compared with a memorised excerpt.}
-\label{tab:memorisation}
+\caption{Generated codes compared with a memorized excerpt.}
+\label{tab:memorization}
 \small
 \begin{tabular}{lcc}
 \toprule
@@ -1021,7 +1110,7 @@ improve the tokens before training larger models.
 
 Guided by this analysis, we compared tokenizers that differ in the number of
 frames per step, the number of band groups and the number of levels
-(\cref{tab:tokenizer-study}). Quantising one frame per step in 4 band groups
+(\cref{tab:tokenizer-study}). Quantizing one frame per step in 4 band groups
 with 4 levels each lowered the mean error on the held-out songs from 0.776 to
 0.401. A control without band groups suggests that most of this gain comes from
 the larger number of codes per step, and a smaller part from the grouping. On the four vocal excerpts of \cref{fig:errors}, the error of the
@@ -1068,7 +1157,7 @@ training (73) & 4.0337 & 4.0395 & 4.0378 & $+0.0042 \pm 0.0006$ \\
 
 On the held-out songs, the right and the wrong lyrics give the same loss, so
 this model does not yet use the words. On the training songs the difference is
-statistically clear but small, which we take to indicate memorisation of those
+statistically clear but small, which we take to indicate memorization of those
 songs rather than a learned relation between words and sound. We hope that the
 paired test will be useful as a clear criterion for future attempts.
 
@@ -1076,7 +1165,7 @@ paired test will be useful as a clear criterion for future attempts.
 \label{sec:limitations}
 
 The tokenizer, although improved, still limits the fidelity of the output,
-and Griffin-Lim adds phase artefacts that a learned vocoder would remove. The
+and Griffin-Lim adds phase artifacts that a learned vocoder would remove. The
 data contain comparatively little singing (298 of the 706 songs mention a
 voice) and very little of some styles (two songs are described as grunge).
 Our models are much smaller than published systems \cite{copet2023musicgen},
@@ -1092,7 +1181,7 @@ We have described StaleyNET, a complete text-to-music system written in Rust
 and trained from scratch on embedded GPUs. Building every stage ourselves
 allowed us to measure each one separately, and these measurements pointed to
 the tokenizer, rather than the language model, as the main limitation on
-sound quality. A revised tokenizer that quantises groups of frequency bands
+sound quality. A revised tokenizer that quantizes groups of frequency bands
 roughly halved the reconstruction error, and a larger model is now being
 trained on it. We hope that the worked examples, the stage-by-stage analysis
 and the paired lyrics test will be of use to others who build similar systems

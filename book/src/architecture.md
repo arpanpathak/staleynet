@@ -3,7 +3,7 @@
 This chapter describes the system as a whole before the following chapters
 examine its parts. It covers what the system does during training and during
 generation, the probability model it learns, and the way the code is
-organised.
+organized.
 
 ![StaleyNET in training (top row) and in generation (bottom row)](figures/paper-overview.svg)
 
@@ -48,7 +48,7 @@ number of the same step, which this formula does not allow. The
 [delay pattern](model.md#the-delay-pattern) recovers almost all of that
 benefit with a small shift of the sequence.
 
-## Organisation of the code
+## Organization of the code
 
 The implementation is divided into six Rust crates, arranged so that each
 depends only on crates above it in the following table.
@@ -57,8 +57,8 @@ depends only on crates above it in the following table.
 |---|---|
 | `staleynet-audio` | Reading audio files, resampling, spectrogram analysis and the Griffin-Lim reconstruction, as plain CPU code that serves as the reference for the GPU versions. |
 | `staleynet-cuda` | The GPU kernels written in Rust and compiled by cuda-oxide, the tensor type that holds GPU data, and CPU versions of each kernel for testing. |
-| `staleynet-model` | The Transformer, its gradient computation, the optimiser, the incremental decoder used for generation, sampling, and checkpoint files. |
-| `staleynet-data` | Dataset catalogues, GPU spectrogram extraction, the tokenizer and the assembly of training batches. |
+| `staleynet-model` | The Transformer, its gradient computation, the optimizer, the incremental decoder used for generation, sampling, and checkpoint files. |
+| `staleynet-data` | Dataset catalogs, GPU spectrogram extraction, the tokenizer and the assembly of training batches. |
 | `staleynet-train` | The training loop, validation, logging and the checkpoint policy. |
 | `staleynet-cli` | The `staleynet` command-line program that ties the crates together. |
 
@@ -73,7 +73,7 @@ The GPU code is built from a small number of operations, the most important
 being one general matrix product. Spectrogram analysis, the tokenizer's
 nearest-prototype search and every layer of the Transformer are expressed
 through it. Concentrating the arithmetic in one kernel means that one set of
-tests covers most of the numerical work, and that one optimisation, such as
+tests covers most of the numerical work, and that one optimization, such as
 the register-blocked kernel described in [GPU Implementation](gpu.md), speeds
 up the whole system.
 
@@ -96,6 +96,6 @@ exactly the same numbers, which makes differences between experiments
 attributable to the change being tested.
 
 Finally, the trainer regularly saves not only the network's weights but also
-the internal state of the optimiser. If a run is interrupted, it can continue
+the internal state of the optimizer. If a run is interrupted, it can continue
 exactly where it stopped instead of restarting its learning-rate schedule and
-losing the optimiser's accumulated statistics.
+losing the optimizer's accumulated statistics.

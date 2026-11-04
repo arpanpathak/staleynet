@@ -1,6 +1,6 @@
 # The Model
 
-The network at the centre of StaleyNET is a Transformer of the kind used for
+The network at the center of StaleyNET is a Transformer of the kind used for
 language models such as GPT-2 (Radford et al., 2019). It reads one long
 sequence that begins with the text and continues with the audio, and at every
 position it predicts what comes next. This chapter describes how text and
@@ -58,7 +58,7 @@ make every sequence four times as long.
 
 ## Inside the network
 
-![The model: text bytes and audio tokens in one sequence, six pre-normalised blocks, and four output heads](figures/paper-model.svg)
+![The model: text bytes and audio tokens in one sequence, six pre-normalized blocks, and four output heads](figures/paper-model.svg)
 
 
 The network is a stack of six identical blocks. Each block lets every
@@ -66,7 +66,7 @@ position gather information from the earlier positions (attention) and then
 transforms each position on its own (a small feed-forward network). Each of
 the two parts adds its result to its input rather than replacing it, which
 makes deep networks much easier to train, and each part first rescales its
-input to a standard size (RMS normalisation; Zhang and Sennrich, 2019).
+input to a standard size (RMS normalization; Zhang and Sennrich, 2019).
 Written compactly, a block computes
 
 \\[

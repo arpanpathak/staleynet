@@ -26,7 +26,7 @@ thread computes one element of the output. The last block usually has more
 threads than elements remain; cuda-oxide's `DisjointSlice` type returns no
 element for such surplus threads, so they cannot write outside the array.
 
-Operations that need a whole row of a matrix at once, such as normalisation,
+Operations that need a whole row of a matrix at once, such as normalization,
 the softmax inside attention and the cross-entropy, assign one warp (a group
 of 32 threads that execute together) to each row. The 32 threads each take
 every 32nd element of the row and then combine their partial sums or maxima by
@@ -50,7 +50,7 @@ C \leftarrow \alpha \cdot A \cdot B \quad (\text{optionally } + \; C),
 
 where either input can be read as stored or as transposed. The kernel does not
 need a separate flag for this: each input is described by the distance in
-memory between neighbouring rows and between neighbouring columns (its
+memory between neighboring rows and between neighboring columns (its
 strides), and a transposed matrix is the same memory read with the two
 distances exchanged. The batch allows the attention of all heads and all
 sequences to be computed in one launch, and reading an input transposed avoids
@@ -79,12 +79,12 @@ register-blocked version each thread computes a 4 × 4 group of outputs instead
 of one. It reads four values of each input and combines them in all sixteen
 pairings, keeping the running sums in its registers, the fastest storage on
 the chip. Four times as much arithmetic is done for each value read. The
-threads are also arranged so that neighbouring threads read neighbouring
+threads are also arranged so that neighboring threads read neighboring
 memory words, which lets the hardware serve a whole group of threads in one
 access. On the AGX Thor this version reduced the time of a training step from
 238 ms to 147 ms, and it is now the default.
 
-![Register blocking: each thread owns outputs spread over the tile, so neighbouring threads read neighbouring memory](figures/paper-blocking.svg)
+![Register blocking: each thread owns outputs spread over the tile, so neighboring threads read neighboring memory](figures/paper-blocking.svg)
 
 ## Making the embedding gradient repeatable
 

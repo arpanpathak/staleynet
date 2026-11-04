@@ -15,7 +15,7 @@ perfectly still sounds only as good as this reconstruction. The detail that
 singing depends on, the harmonics and formants that make vowels
 recognisable, is precisely what is lost. Until the representation improves,
 longer training of the language model cannot make voices intelligible.
-Griffin-Lim adds a further, smaller loss in the form of phase artefacts.
+Griffin-Lim adds a further, smaller loss in the form of phase artifacts.
 
 The lyrics input does not yet influence the output measurably. The first
 models trained with it produced the same predictions with correct lyrics as
@@ -58,8 +58,8 @@ The analysis above suggests an order of priorities.
 
 1. **A better audio representation.** A learned tokenizer, consisting of a
    convolutional encoder and decoder trained together with residual
-   quantisation, as in SoundStream, would preserve far more detail at a
-   similar number of tokens. A lighter intermediate step is to quantise
+   quantization, as in SoundStream, would preserve far more detail at a
+   similar number of tokens. A lighter intermediate step is to quantize
    single frames instead of pairs, or to use more and larger codebooks, and to
    measure the effect with `staleynet reconstruct`.
 2. **A learned vocoder** to replace Griffin-Lim, trained from scratch on the

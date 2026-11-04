@@ -6,8 +6,9 @@
 workloads:
 
 * NVIDIA Jetson Orin NX 16 GB (Super developer kit), CUDA 12.6;
-* NVIDIA Jetson AGX Thor, on which other GPU services shared the device and
-  left about 4 GB of memory for training.
+* NVIDIA Jetson AGX Thor with 128 GB of memory shared by its CPU and GPU. In
+  the early runs other GPU services shared the device; the larger models were
+  trained with most of the device to themselves.
 
 Unless stated otherwise, figures were measured on the Orin NX.
 
@@ -26,52 +27,60 @@ in [Reproducibility](reproducing.md). Raw results are stored in
 
 ## 1. Correctness
 
-| Test suite | Scope | Result |
+All 169 tests pass on the Orin NX, and the kernel tests also pass on the Thor.
+
+| Test suite | Scope | Tests |
 |---|---|---|
-| `staleynet-cuda` (9 tests) | Every kernel against a CPU reference; the GEMM in all transpose, batch and accumulation modes, for all three implementations, on ragged sizes | pass |
-| `staleynet-model` (12 tests) | Gradients against central finite differences for every parameter tensor; cached decoding against the full forward pass (≤ 10⁻⁴), with and without a lyrics field; memorisation of a fixed batch; exact checkpoint round trip including optimiser moments; warm start into a model with lyrics; sequence layout and lyrics windowing | pass |
-| `staleynet-data` (10 tests) | GPU log-mel against the rustfft reference (≤ 10⁻² on audible bins); monotone RVQ error; next-position targets; lyrics cropping and even spreading of untimed lines; weighted sampling | pass |
-| `staleynet-audio` (7 tests) | STFT/iSTFT round trip ≤ 10⁻⁴; resampler accuracy in band and > 80 dB anti-aliasing; Griffin-Lim preserves the log-mel | pass |
+| `staleynet-cuda` | Every kernel against a CPU reference; the GEMM in all transpose, batch and accumulation modes, for all three implementations, on ragged sizes | 40 |
+| `staleynet-model` | Gradients against central finite differences for every parameter tensor; cached decoding against the full forward pass (≤ 10⁻⁴), with and without a lyrics field; memorization of a fixed batch; exact checkpoint round trip including optimizer moments; warm start into a model with lyrics; sequence layout and lyrics windowing | 38 |
+| `staleynet-data` | GPU log-mel against the rustfft reference (≤ 10⁻² on audible bins); monotone RVQ error; band groups; next-position targets; lyrics cropping and even spreading of untimed lines; weighted sampling; split groups | 31 |
+| `staleynet-audio` | STFT/iSTFT round trip ≤ 10⁻⁴; resampler accuracy in band and > 80 dB anti-aliasing; Griffin-Lim preserves the log-mel; every example of the crate's documentation | 45 |
+| `staleynet-train`, `staleynet-cli` | Configuration defaults, metrics parsing, paired statistics of the lyrics test | 15 |
 
 ## 2. GPU kernels
 
-Matrix products at the shapes used by the model (a batch of 4 × 512
-positions); each figure is the mean of five runs after one warm-up run.
+Matrix products at the shapes used by the first model (a batch of 4 × 512
+positions), measured with `staleynet bench` on the Orin NX. Each timing is the
+mean of five runs after one warm-up run, and each entry is the median of three
+such measurements, because the clock frequency of the device varies noticeably
+from run to run. These are the figures of the paper's appendix.
 
-| Product | Shape (M × N × K) | Naive GFLOP/s | Tiled GFLOP/s | Speed-up |
-|---|---|---|---|---|
-| QKV projection | 2048 × 768 × 256 | 32.2 | 263.4 | 8.2× |
-| Feed-forward expansion | 2048 × 1024 × 256 | 42.0 | 264.2 | 6.3× |
-| Codebook heads | 2048 × 4096 × 256 | 30.5 | 217.4 | 7.1× |
-| STFT as GEMM | 4096 × 513 × 1024 | 38.6 | 224.0 | 5.8× |
+| Product | Shape (M × N × K) | Direct GFLOP/s | Tiled GFLOP/s | Register-blocked GFLOP/s | Blocked / tiled |
+|---|---|---|---|---|---|
+| Attention projections | 2048 × 768 × 256 | 46.8 | 258.6 | 579.0 | 2.2× |
+| Feed-forward | 2048 × 1024 × 256 | 55.3 | 255.5 | 450.6 | 1.8× |
+| Output heads | 2048 × 4096 × 256 | 31.2 | 222.1 | 458.5 | 2.1× |
+| Spectrogram | 4096 × 513 × 1024 | 47.7 | 236.1 | 541.7 | 2.3× |
 
-A forward and backward training step on 4 × 512 positions takes 2 919 ms with
-the naive kernel and 537 ms with the tiled kernel, a speed-up of 5.4×.
+A forward and backward training step on 4 × 512 positions takes 2 930 ms with
+the direct kernel, 576 ms with the tiled kernel and 315 ms with the
+register-blocked kernel: 1.8 times faster than tiling and 9.3 times faster
+than the direct kernel.
 
-**Register blocking.** On the AGX Thor, replacing the tiled kernel with the
-register-blocked kernel reduced the time of a training step on 4 × 768
-positions from 238 ms to 147 ms (1.62×), raising throughput from 12 900 to
-20 800 positions per second. Both figures were measured during training runs
-with identical shapes, while other services shared the GPU. Isolated
-measurements of the three kernels are reported by `staleynet bench`.
+**On the Thor.** Measured during training runs of identical shape, register
+blocking reduced a training step of the first model on 4 × 768 positions from
+238 ms to 147 ms, raising throughput from 12 900 to 20 800 positions per
+second. A step of the 42.9-million-parameter model on 8 × 1 408 positions
+takes about 2.0 seconds.
 
-**Feature extraction.** The log-mel spectrogram of 60 s of audio takes 78 ms
-on the GPU and 98 ms with the multithreaded rustfft reference on the Orin's
-eight Cortex-A78AE cores. The \\(O(N^2)\\) cost of the DFT-as-GEMM formulation
-consumes most of the GPU's advantage on this device.
+**Feature extraction.** The log-mel spectrogram of 60 s of audio takes 47 ms
+on the GPU and 73 ms with the multithreaded rustfft reference on the Orin's
+eight Cortex-A78AE cores. The \\(O(N^2)\\) cost of the DFT-as-GEMM formulation,
+about 100 times the arithmetic of an FFT, consumes much of the GPU's advantage
+on this device.
 
 ## 3. Key/value caching
 
-Sampling 200 audio frames (203 delayed steps) with a randomly initialised
+Sampling 200 audio frames (203 delayed steps) with a randomly initialized
 default-size model:
 
 | Attention | ms per step |
 |---|---|
-| Recomputation of the full context | 23.42 |
-| Key/value cache | 3.19 |
+| Recomputation of the full context | 17.1 |
+| Key/value cache | 6.2 |
 
-The cache is 7.3 times faster at this context length, and the gap grows
-linearly with the context.
+The cache is 2.8 times faster at this context length, and the gap grows with
+the context, since recomputation repeats the work of every earlier position.
 
 ## 4. The tokenizer
 
@@ -87,16 +96,17 @@ absolute log-mel error, averaged over tracks, after decoding with the first
 | JamendoLyrics validation, reused codebooks | 1.089 | 0.959 | 0.879 | 0.821 |
 
 The validation error lies within 0.7 % of the training error, so the
-codebooks generalise to unseen artists, and they transfer to the lyrics corpus
+codebooks generalize to unseen artists, and they transfer to the lyrics corpus
 with a modest increase. The absolute error is nevertheless large: 0.77
-natural-log units correspond to about 6.7 dB per mel band, and each additional
-level removes less error than the previous one (−0.13, −0.08, −0.06).
+natural-log units correspond to about 3.4 dB per mel band (one unit is a
+factor of e in energy, 10 log₁₀ e ≈ 4.3 dB), and each additional level removes
+less error than the previous one (−0.13, −0.08, −0.06).
 
 ## 5. The audio pipeline in isolation
 
 Listening to generated samples suggested pitched, melodic content with a
 blurred and unintelligible voice. Two experiments were designed to locate the
-source of the blur without involving the generative behaviour of the model.
+source of the blur without involving the generative behavior of the model.
 
 ### Reconstruction without a model
 
@@ -107,13 +117,15 @@ all four codebooks. The last rendering is the best output that any language
 model trained on these tokens could produce. Errors are measured against the
 exact log-mel of the excerpt.
 
-| Excerpt (validation) | Griffin-Lim on exact mel | Tokenizer, 1 codebook | Tokenizer, 4 codebooks | Tokens through Griffin-Lim |
-|---|---|---|---|---|
-| sdd-1014963 (guitar, brass, female voice) | 0.230 | 1.055 | 0.807 | 0.821 |
-| sdd-103089 (folk metal, male voice) | 0.152 | 0.973 | 0.707 | 0.703 |
-| sdd-1116696 (electronic, vocal sample) | 0.170 | 0.801 | 0.569 | 0.554 |
-| sdd-1245191 (bass, piano, wordless vocals) | 0.222 | 0.984 | 0.732 | 0.763 |
-| **Mean** | **0.194** | **0.953** | **0.704** | **0.710** |
+| Excerpt (validation) | Griffin-Lim on exact mel | First tokenizer, 1 codebook | First tokenizer, 4 codebooks | First tokenizer through Griffin-Lim | Final tokenizer, 16 codebooks | Final tokenizer through Griffin-Lim |
+|---|---|---|---|---|---|---|
+| sdd-1014963 (guitar, brass, female voice) | 0.230 | 1.055 | 0.807 | 0.821 | 0.425 | 0.480 |
+| sdd-103089 (folk metal, male voice) | 0.152 | 0.973 | 0.707 | 0.703 | 0.353 | 0.378 |
+| sdd-1116696 (electronic, vocal sample) | 0.170 | 0.801 | 0.569 | 0.554 | 0.268 | 0.338 |
+| sdd-1245191 (bass, piano, wordless vocals) | 0.222 | 0.984 | 0.732 | 0.763 | 0.390 | 0.460 |
+| **Mean** | **0.194** | **0.953** | **0.704** | **0.710** | **0.359** | **0.414** |
+
+The final tokenizer, described below, is included for comparison.
 
 ![Where the spectral detail is lost: mean error of each stage](figures/paper-errors.svg)
 
@@ -122,12 +134,12 @@ Griffin-Lim, and the end-to-end error of a perfect language model is almost
 entirely that of the tokenizer. An error of 0.7 units, about 3 dB per mel
 band on average, is consistent with the blurred quality heard in generated
 voices, which depend on fine spectral detail (harmonics and formants). The
-measure does not capture the phase artefacts of Griffin-Lim, which are audible
+measure does not capture the phase artifacts of Griffin-Lim, which are audible
 in the second rendering although its spectral error is small; the comparison
 therefore establishes the tokenizer as the dominant *spectral* limitation,
 not as the only audible one. The renderings are in `samples/reconstruction/`.
 
-### Memorisation of a single excerpt
+### Memorization of a single excerpt
 
 To test the language model independently of data scarcity, a fresh
 default-size model was trained on a single 12-second excerpt (sdd-103089,
@@ -159,6 +171,37 @@ measured above. Together, the two experiments indicate that improving the
 audio representation is a precondition for intelligible singing: further
 training of the language model on the present tokens cannot exceed the
 fidelity of the reconstruction. The renderings are in `samples/overfit/`.
+
+### A finer tokenizer
+
+Guided by these two experiments, tokenizers were compared that differ in the
+number of frames per step, the number of band groups (the 128 mel bands are
+divided into groups of neighboring bands, each quantized with its own
+codebooks) and the number of residual levels in each group. All use 1 024
+prototypes per codebook and were trained on the same songs; the error is the
+mean over all 39 held-out songs, in log units per mel band.
+
+| Frames per step | Band groups | Levels | Codes per step | Held-out error |
+|---|---|---|---|---|
+| 2 | 1 | 4 | 4 | 0.776 |
+| 2 | 1 | 8 | 8 | 0.643 |
+| 1 | 1 | 4 | 4 | 0.745 |
+| 1 | 1 | 8 | 8 | 0.588 |
+| 1 | 4 | 2 | 8 | 0.597 |
+| 1 | 8 | 1 | 8 | 0.612 |
+| 1 | 1 | 16 | 16 | 0.427 |
+| 1 | 8 | 2 | 16 | 0.403 |
+| 1 | 4 | 4 | 16 | **0.401** |
+
+Quantizing one frame per step in 4 band groups with 4 levels each lowered the
+error from 0.776 to 0.401, about 1.7 dB per band. At 8 codes per step,
+dividing the bands into groups did not help; with 16 codes it helped a little
+(0.427 without groups against 0.401 with them). Most of the improvement
+therefore comes from describing each step with more codes, and a smaller part,
+about 6 %, from quantizing the band groups separately. On the four vocal
+excerpts above, the error of the tokens fell from 0.70 to 0.36 and the
+end-to-end error from 0.71 to 0.41. The price is a vocabulary of 16 codebooks
+instead of 4.
 
 ## 6. Training
 
@@ -199,7 +242,7 @@ improvement is attributable to tenfold longer training.
 Two runs were trained on the vocal subset (281 training and 19 validation
 tracks):
 
-| Run | Device | Initialisation | Schedule | Best validation | At step |
+| Run | Device | Initialization | Schedule | Best validation | At step |
 |---|---|---|---|---|---|
 | `vocal-finetune` | Thor | extended run | 8 000 steps, peak learning rate 3 × 10⁻⁴ | **4.23** | 250 |
 | `vocal-scratch` | Orin NX | random | 6 000 steps, batch 8 × 512, peak 6 × 10⁻⁴ | 4.72 | 5 500 |
@@ -208,7 +251,7 @@ These losses are measured on the vocal validation subset and are not
 comparable with the 4.02 of the extended run, which was measured on all 39
 validation tracks.
 
-Initialisation from the extended run is worth about 0.5 nats per code. The
+Initialization from the extended run is worth about 0.5 nats per code. The
 fine-tuned model reached its best validation loss after only 250 steps;
 thereafter its validation loss rose to about 4.30 and remained there while its
 training loss continued to fall, which indicates that 281 tracks do not
@@ -218,6 +261,27 @@ scratch improved until near its final step and ended with a training loss of
 insufficient data. On informal listening, samples from `vocal-scratch` were
 perceived as blurred but melodic voices; this is a single listener's
 impression rather than a controlled evaluation.
+
+### A larger model on the finer tokens (AGX Thor)
+
+With the finer tokens, a larger model is being trained on the Thor
+(`configs/pq-large-thor.json`): 8 blocks of width 512 with 8 heads, 42.9
+million parameters, with the lyrics field enabled from the start. It is trained
+on all 742 training songs of the combined corpora, with JamendoLyrics weighted
+4-fold and the author's two takes weighted 10-fold, in batches of 8 sequences
+of 1 408 positions. A step takes 2.0 seconds and about 11 GB of memory. At step
+10 500 of 20 000 the held-out loss is 5.09 nats per code, averaged over its 16
+codebooks, and still falling; because the vocabulary differs, this figure is
+not comparable with the losses above. Its curves are published on
+[Hugging Face](https://huggingface.co/arpanpathak/staleynet-checkpoints) every
+two hours.
+
+![pq-large training curves](https://huggingface.co/arpanpathak/staleynet-checkpoints/resolve/main/plots/pq-large.png)
+
+The per-codebook panel shows the coarse-to-fine structure directly: the four
+codebooks of the coarsest level are predicted at about 3.0 nats, each finer
+level is harder, and the finest approach the uniform guess of 6.93, because
+they encode residual detail that is close to noise.
 
 ## 7. Lyrics conditioning
 
@@ -260,7 +324,7 @@ difference, gave:
 
 On held-out songs the correct and the wrong lyrics give the same loss, so the
 model does not use the words. On training songs the difference is
-statistically clear but small, which points to memorisation of those songs
+statistically clear but small, which points to memorization of those songs
 rather than a general relation between words and sound. In both cases the
 model scores slightly worse with no lyrics than with any lyrics: it reacts to
 the presence of text, not to its content.

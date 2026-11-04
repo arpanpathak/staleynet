@@ -43,7 +43,7 @@ very unlikely values that sound like errors. Top-k sampling (Fan, Lewis and
 Dauphin, 2018) takes a middle course: for each tokenizer round it keeps the
 \\(k\\) most probable values (250 by default, as in MusicGen), discards the
 rest, and draws among the survivors in proportion to their probabilities. A
-temperature setting adjusts how strongly the draw favours the most probable
+temperature setting adjusts how strongly the draw favors the most probable
 values; a temperature of zero always picks the most probable one.
 
 ## Following the text more closely: classifier-free guidance
@@ -69,7 +69,7 @@ twice the computation per step and somewhat less variety between samples.
 
 When all steps have been generated, the delay pattern is undone so that the
 four numbers of each step are back together. Each step is decoded by adding up
-its four prototypes, the standardisation applied before tokenization is
+its four prototypes, the standardization applied before tokenization is
 reversed, and the resulting spectrogram is converted into a waveform with 64
 rounds of Griffin-Lim. `staleynet sing` writes the waveform and a short report
 of the time spent in each stage, including the real-time factor: the time

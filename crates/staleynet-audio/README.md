@@ -129,7 +129,7 @@ vocoder except for the number of bands:
 A spectrogram records the strength of each frequency but not its phase, that
 is, where in its cycle each wave is at each moment. `griffin_lim` starts from
 random phases and repeats two steps: build the waveform that the current
-spectrum describes, then analyse that waveform again and keep its phases while
+spectrum describes, then analyze that waveform again and keep its phases while
 restoring the target strengths. The fast variant of Perraudin et al. adds
 momentum (0.99), which reaches a good estimate in far fewer iterations. The
 result is recognisable but slightly "phasey"; a neural vocoder sounds cleaner.
@@ -140,13 +140,13 @@ result is recognisable but slightly "phasey"; a neural vocoder sounds cleaner.
 
 Below 1 kHz the mel bands are evenly spaced, so doubling the pitch roughly
 doubles the band index. The example finds the loudest band of a note and the
-frequency at which that band is centred.
+frequency at which that band is centered.
 
 ```rust
 use staleynet_audio::{MelAnalyzer, MelConfig};
 use std::f32::consts::TAU;
 
-/// The loudest band in frame 40 of a one-second note, and its centre in Hz.
+/// The loudest band in frame 40 of a one-second note, and its center in Hz.
 fn loudest_band(analyzer: &MelAnalyzer, frequency: f32) -> (usize, f32) {
     let config = analyzer.config;
     let note: Vec<f32> = (0..config.sample_rate)
@@ -158,7 +158,7 @@ fn loudest_band(analyzer: &MelAnalyzer, frequency: f32) -> (usize, f32) {
     let frame = &log_mel[40 * bands..41 * bands];
     let band = (0..bands).max_by(|&a, &b| frame[a].total_cmp(&frame[b])).unwrap();
 
-    // The filterbank is stored as [frequency bin][band]; a band's centre is the
+    // The filterbank is stored as [frequency bin][band]; a band's center is the
     // bin where its triangle peaks.
     let weight = |bin: usize| analyzer.filterbank[bin * bands + band];
     let peak_bin = (0..config.frequency_bins()).max_by(|&a, &b| weight(a).total_cmp(&weight(b))).unwrap();
@@ -168,10 +168,10 @@ fn loudest_band(analyzer: &MelAnalyzer, frequency: f32) -> (usize, f32) {
 
 let analyzer = MelAnalyzer::new(MelConfig::default());
 
-let (a4_band, a4_centre) = loudest_band(&analyzer, 440.0);
+let (a4_band, a4_center) = loudest_band(&analyzer, 440.0);
 let (a5_band, _) = loudest_band(&analyzer, 880.0);
 assert_eq!((a4_band, a5_band), (16, 32)); // one octave up, twice the index
-assert!((a4_centre - 440.0).abs() < 10.0); // band 16 is centred at 445.3 Hz
+assert!((a4_center - 440.0).abs() < 10.0); // band 16 is centered at 445.3 Hz
 ```
 
 ### The spectrogram as a matrix product
@@ -206,7 +206,7 @@ for bin in 0..bins {
 
 ### Measuring how much reconstruction loses
 
-A practical way to judge a reconstruction is to analyse it again and compare
+A practical way to judge a reconstruction is to analyze it again and compare
 the two spectrograms. For a two-second chord the mean difference after 64
 iterations is about 0.44 in natural-log units, an energy ratio of about
 1.9 dB. The waveform is 128 samples shorter than the input, because the last
@@ -237,7 +237,7 @@ assert!(mean_error < 0.5);
 assert_eq!(waveform.len(), 47_872);
 ```
 
-### Analysing a folder of songs
+### Analyzing a folder of songs
 
 For real recordings, decode each file and resample it before analysis.
 
@@ -289,7 +289,7 @@ fn main() -> anyhow::Result<()> {
 StaleyNET learns music from about 23 hours of Creative Commons songs (the Song
 Describer Dataset) and from JamendoLyrics, whose songs come with timed lyrics.
 Every song passes through this crate once: decoded, resampled to 24 kHz and
-analysed into a log-mel spectrogram. A residual k-means tokenizer then turns
+analyzed into a log-mel spectrogram. A residual k-means tokenizer then turns
 each spectrogram frame into a short list of integer codes, and a decoder-only
 Transformer, written in Rust with GPU kernels compiled by NVIDIA's cuda-oxide,
 learns to predict those codes from a text description and optional lyrics.

@@ -54,6 +54,6 @@
   <text class="small" x="875" y="195">B tile</text>
   <text class="label" x="810" y="150" font-size="18">×</text>
 
-  <text x="40" y="282" font-size="13" fill="#333">Each block loads one tile of A and one of B into shared memory, synchronises, multiplies them, and slides along the</text>
+  <text x="40" y="282" font-size="13" fill="#333">Each block loads one tile of A and one of B into shared memory, synchronizes, multiplies them, and slides along the</text>
   <text x="40" y="300" font-size="13" fill="#333">inner dimension. Every global value is read once per tile instead of once per multiply: 16× less global traffic.</text>
 </svg>

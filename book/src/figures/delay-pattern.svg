@@ -76,7 +76,7 @@
   <text x="660" y="120" font-size="13" fill="#333">When the first d code is predicted, the a, b</text>
   <text x="660" y="138" font-size="13" fill="#333">and c codes of its frame are already in context,</text>
   <text x="660" y="156" font-size="13" fill="#333">so fine codes are conditioned on coarse ones.</text>
-  <text x="660" y="188" font-size="13" fill="#333">Grey cells are empty slots: no embedding,</text>
+  <text x="660" y="188" font-size="13" fill="#333">Gray cells are empty slots: no embedding,</text>
   <text x="660" y="206" font-size="13" fill="#333">no loss.</text>
 
   <text x="320" y="240" font-size="12.5" fill="#555">audio steps →   (one step = 2 log-mel frames ≈ 21 ms)</text>

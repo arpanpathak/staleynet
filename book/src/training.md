@@ -2,11 +2,11 @@
 
 Training adjusts the network's parameters so that the recorded music becomes
 as probable as possible under the model. This chapter describes the quantity
-being minimised, how training examples are assembled, the data and how it is
-divided between training and evaluation, the optimiser, and the way progress
+being minimized, how training examples are assembled, the data and how it is
+divided between training and evaluation, the optimizer, and the way progress
 is saved.
 
-## What is minimised
+## What is minimized
 
 At every position of a training sequence, the network predicts a probability
 for each of the 1 024 possible values of each tokenizer round at the next
@@ -60,10 +60,10 @@ electronic, folk, classical and other styles. Of the 706 songs, 298 have a
 caption that mentions singing or a voice (about 9.9 hours), and 131 are
 described as instrumental.
 
-To measure whether the model generalises, about 10 % of the songs are held out
+To measure whether the model generalizes, about 10 % of the songs are held out
 and never used for training. The division is made by artist rather than by
 song, so that no artist appears on both sides. Otherwise the model could
-appear to generalise while merely recognising a familiar voice or production
+appear to generalize while merely recognizing a familiar voice or production
 style. The assignment of an artist to one side is determined by a fixed hash
 of the artist's identifier, which keeps it identical on every machine; it
 leaves 667 songs for training and 39 for evaluation. The lyrics corpus and the
@@ -85,18 +85,18 @@ the captions. Words are matched whole, so that "singer" does not match
   as grunge, one as psychedelic and none as soft rock, so the model cannot
   learn them as separate styles from this data.
 
-## The optimiser
+## The optimizer
 
 The parameters are updated with AdamW (Loshchilov and Hutter, 2019), which
 adapts the step size of each parameter to the recent size of its gradients
 and shrinks the weights slightly at every step (weight decay, here 0.1), a
-form of regularisation. Weight decay is not applied to the normalisation
+form of regularization. Weight decay is not applied to the normalization
 gains, the biases or the embedding tables, whose values carry meaning that
 shrinking would distort.
 
 The learning rate first rises linearly from zero over a few hundred steps,
 which prevents the large, poorly directed updates of the first steps from
-damaging the randomly initialised network. It then falls along a cosine curve
+damaging the randomly initialized network. It then falls along a cosine curve
 to one tenth of its peak by the end of the run, so that the final updates are
 small refinements. If the combined size of all gradients exceeds 1.0, they are
 scaled down to that size (Pascanu, Mikolov and Bengio, 2013), which protects
@@ -109,10 +109,10 @@ given with its results.
 Training on an edge device runs for hours and can be interrupted. The trainer
 keeps two checkpoints in each run's directory.
 
-The `latest/` checkpoint holds the weights together with the optimiser's
+The `latest/` checkpoint holds the weights together with the optimizer's
 internal statistics and the step count, and is rewritten every 250 steps by
 default. It allows a stopped run to resume with `--resume` exactly where it
-was, without restarting the learning-rate schedule or losing the optimiser's
+was, without restarting the learning-rate schedule or losing the optimizer's
 accumulated statistics; at most 250 steps of work can be lost. Its files are
 first written under temporary names and then renamed, so an interruption
 during saving cannot leave a half-written file in place.
@@ -124,7 +124,7 @@ from the run's log, so that `best/` is only replaced by a genuinely better
 model.
 
 A new run can also start from the weights of an earlier one with
-`--fine-tune-from`. It then begins with a fresh optimiser and schedule, and the
+`--fine-tune-from`. It then begins with a fresh optimizer and schedule, and the
 earlier model may lack the lyrics input, which is added as described in
 [Lyrics Conditioning](lyrics.md). Every logged event is appended to
 `metrics.jsonl` in the run directory.
@@ -133,8 +133,8 @@ earlier model may lack the lyrics input, which is added as described in
 
 Before any training on real data, a test checks the training machinery as a
 whole. A small network is trained repeatedly on one fixed batch, which it
-should be able to memorise. Its error must fall from the level of random
+should be able to memorize. Its error must fall from the level of random
 guessing (\\(\ln 7 \approx 1.95\\) nats for seven possible values) to below 0.1
 within 300 steps. A wrong sign in a gradient, a missing term or a broken
-optimiser state prevents this, even when each individual gradient passes the
+optimizer state prevents this, even when each individual gradient passes the
 numerical check described in [The Model](model.md#computing-gradients-by-hand).
