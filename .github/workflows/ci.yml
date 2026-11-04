@@ -1,0 +1,88 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly-2026-04-03
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: |
+          if [ ! -f Cargo.toml ]; then
+            echo "workspace not present yet"
+            exit 0
+          fi
+          cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly-2026-04-03
+          components: clippy
+      - name: Clippy on the host-only crate
+        run: |
+          if ! cargo metadata --no-deps --format-version 1 >/dev/null 2>&1; then
+            echo "workspace incomplete"
+            exit 0
+          fi
+          cargo clippy -p staleynet-audio --all-targets -- -D warnings
+
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly-2026-04-03
+      - name: Audio tests
+        run: |
+          if ! cargo metadata --no-deps --format-version 1 >/dev/null 2>&1; then
+            echo "workspace incomplete"
+            exit 0
+          fi
+          cargo test -p staleynet-audio
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly-2026-04-03
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Audio coverage
+        run: |
+          if ! cargo metadata --no-deps --format-version 1 >/dev/null 2>&1; then
+            echo "workspace incomplete"
+            exit 0
+          fi
+          cargo llvm-cov -p staleynet-audio --summary-only --fail-under-lines 99
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        if: hashFiles('Cargo.toml') != ''
+        with:
+          command: check
