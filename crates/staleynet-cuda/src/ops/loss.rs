@@ -5,6 +5,7 @@
 //! *Deep Learning*, §6.2.2.3: <https://www.deeplearningbook.org/contents/mlp.html>
 
 use crate::device::{Gpu, GpuResult, Tensor, TokenBuffer};
+use crate::kernels::loss::Classifier;
 use crate::launch;
 
 /// Which slice of a wide logits matrix (and of the targets) one classifier
@@ -45,9 +46,18 @@ impl Gpu {
         assert!(losses.len() >= shape.rows, "cross_entropy: losses too small");
         assert!(targets.len() >= shape.rows * head.target_stride, "cross_entropy: too few targets");
 
-        // SAFETY: warp per row; writes stay inside rows·cols and rows, asserted above.
+        let classifier = Classifier {
+            row_width: shape.cols,
+            column_offset: head.column_offset,
+            classes: head.classes,
+            target_stride: head.target_stride,
+            target_offset: head.target_offset,
+            grad_scale: head.grad_scale,
+        };
+
+        // SAFETY: one warp per row; the sizes the kernel indexes by were asserted above.
         unsafe {
-            self.kernels.cross_entropy(
+            self.kernels.loss.cross_entropy(
                 &self.stream,
                 launch::warp_per_row(shape.rows),
                 &logits.buffer,
@@ -55,12 +65,7 @@ impl Gpu {
                 &mut losses.buffer,
                 &mut logits_grad.buffer,
                 shape.rows,
-                shape.cols,
-                head.column_offset,
-                head.classes,
-                head.target_stride,
-                head.target_offset,
-                head.grad_scale,
+                classifier,
             )
         }
     }

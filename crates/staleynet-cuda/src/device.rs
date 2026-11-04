@@ -1,6 +1,6 @@
 //! The GPU handle and the device-resident tensor types.
 
-use crate::kernels::kernels;
+use crate::kernels::{attention, elementwise, embedding, loss, matmul, normalization, optimizer, signal};
 use cuda_core::{CudaContext, CudaStream, DeviceBuffer, DriverError};
 use cuda_host::EmbeddedModuleError;
 use std::fmt;
@@ -47,6 +47,49 @@ pub enum MatmulKernel {
     Blocked,
 }
 
+/// The loaded kernel modules, one per kind of computation (see [`crate::kernels`]).
+pub struct Kernels {
+    /// Matrix products.
+    pub(crate) matmul: matmul::kernels::LoadedModule,
+
+    /// Scaled addition, bias, column sums and GELU.
+    pub(crate) elementwise: elementwise::kernels::LoadedModule,
+
+    /// RMS normalisation and its gradients.
+    pub(crate) normalization: normalization::kernels::LoadedModule,
+
+    /// Head permutes and the causal softmax.
+    pub(crate) attention: attention::kernels::LoadedModule,
+
+    /// Embedding lookup and gradient.
+    pub(crate) embedding: embedding::kernels::LoadedModule,
+
+    /// Cross-entropy.
+    pub(crate) loss: loss::kernels::LoadedModule,
+
+    /// AdamW and the sum of squares.
+    pub(crate) optimizer: optimizer::kernels::LoadedModule,
+
+    /// Spectrogram helpers and the nearest-prototype search.
+    pub(crate) signal: signal::kernels::LoadedModule,
+}
+
+impl Kernels {
+    /// Loads every module into `context`.
+    fn load(context: &Arc<CudaContext>) -> Result<Self, EmbeddedModuleError> {
+        Ok(Self {
+            matmul: matmul::kernels::load(context)?,
+            elementwise: elementwise::kernels::load(context)?,
+            normalization: normalization::kernels::load(context)?,
+            attention: attention::kernels::load(context)?,
+            embedding: embedding::kernels::load(context)?,
+            loss: loss::kernels::load(context)?,
+            optimizer: optimizer::kernels::load(context)?,
+            signal: signal::kernels::load(context)?,
+        })
+    }
+}
+
 /// A CUDA context, its stream, and the loaded StaleyNET kernels.
 ///
 /// All work is issued on one stream, so operations execute in program order
@@ -59,7 +102,7 @@ pub struct Gpu {
     pub(crate) stream: Arc<CudaStream>,
 
     /// Handles to the compiled kernels.
-    pub(crate) kernels: kernels::LoadedModule,
+    pub(crate) kernels: Kernels,
 
     /// GEMM implementation used by matmul.
     pub matmul_kernel: MatmulKernel,
@@ -70,7 +113,7 @@ impl Gpu {
     pub fn new(ordinal: usize) -> Result<Self, GpuInitError> {
         let context = CudaContext::new(ordinal).map_err(GpuInitError::Driver)?;
         let stream = context.default_stream();
-        let kernels = kernels::load(&context).map_err(GpuInitError::Module)?;
+        let kernels = Kernels::load(&context).map_err(GpuInitError::Module)?;
 
         Ok(Self { context, stream, kernels, matmul_kernel: MatmulKernel::Blocked })
     }

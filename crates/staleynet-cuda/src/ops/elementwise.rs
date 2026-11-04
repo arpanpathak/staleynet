@@ -9,13 +9,15 @@ impl Gpu {
         assert_eq!(input.shape(), output.shape(), "add_scaled: shape mismatch");
 
         // SAFETY: one thread per output element; `get_mut` guards the tail.
-        unsafe { self.kernels.add_scaled(&self.stream, launch::elementwise(output.len()), scale, &input.buffer, &mut output.buffer) }
+        unsafe {
+            self.kernels.elementwise.add_scaled(&self.stream, launch::elementwise(output.len()), scale, &input.buffer, &mut output.buffer)
+        }
     }
 
     /// `values *= factor`.
     pub fn scale(&self, values: &mut Tensor, factor: f32) -> GpuResult {
         // SAFETY: one thread per element; `get_mut` guards the tail.
-        unsafe { self.kernels.scale_in_place(&self.stream, launch::elementwise(values.len()), &mut values.buffer, factor) }
+        unsafe { self.kernels.elementwise.scale_in_place(&self.stream, launch::elementwise(values.len()), &mut values.buffer, factor) }
     }
 
     /// `output[r, :] += bias` for every row.
@@ -24,7 +26,9 @@ impl Gpu {
         assert_eq!(bias.len(), cols, "add_row_bias: bias length must equal output columns");
 
         // SAFETY: one thread per output element; `get_mut` guards the tail.
-        unsafe { self.kernels.add_row_bias(&self.stream, launch::elementwise(output.len()), &mut output.buffer, &bias.buffer, cols) }
+        unsafe {
+            self.kernels.elementwise.add_row_bias(&self.stream, launch::elementwise(output.len()), &mut output.buffer, &bias.buffer, cols)
+        }
     }
 
     /// `sums += Σ_rows input`: the gradient of a bias.
@@ -34,7 +38,7 @@ impl Gpu {
 
         // SAFETY: one thread per column; out-of-range threads return early.
         unsafe {
-            self.kernels.accumulate_column_sums(
+            self.kernels.elementwise.accumulate_column_sums(
                 &self.stream,
                 launch::elementwise(shape.cols),
                 &input.buffer,
@@ -50,7 +54,7 @@ impl Gpu {
         assert_eq!(input.shape(), output.shape(), "gelu_forward: shape mismatch");
 
         // SAFETY: one thread per element; `get_mut` guards the tail.
-        unsafe { self.kernels.gelu_forward(&self.stream, launch::elementwise(output.len()), &input.buffer, &mut output.buffer) }
+        unsafe { self.kernels.elementwise.gelu_forward(&self.stream, launch::elementwise(output.len()), &input.buffer, &mut output.buffer) }
     }
 
     /// `input_grad = output_grad ⊙ GELU'(input)`.
@@ -60,7 +64,7 @@ impl Gpu {
 
         // SAFETY: one thread per element; `get_mut` guards the tail.
         unsafe {
-            self.kernels.gelu_backward(
+            self.kernels.elementwise.gelu_backward(
                 &self.stream,
                 launch::elementwise(input_grad.len()),
                 &input.buffer,

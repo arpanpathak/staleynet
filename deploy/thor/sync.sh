@@ -16,7 +16,7 @@ project="${THOR_PROJECT:-Projects/staleynet}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
 rsync -az --delete \
-  --exclude target --exclude .git --exclude .oxide-artifacts \
+  --exclude target --exclude .git --exclude .cargo --exclude .oxide-artifacts \
   --exclude data/raw --exclude "data/cache*/mel" --exclude data/recordings \
   --exclude studio/target --exclude studio/certs \
   --exclude logs --exclude runs --exclude samples --exclude book/book \

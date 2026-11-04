@@ -3,7 +3,8 @@
 //! They favour obviousness over speed and exist so every GPU kernel can be
 //! checked against an independent implementation of the same formula.
 
-use crate::kernels::{EMPTY_TOKEN, GELU_CUBIC, GELU_SQRT_2_OVER_PI};
+use crate::kernels::EMPTY_TOKEN;
+use crate::kernels::elementwise::{GELU_CUBIC, GELU_SQRT_2_OVER_PI};
 use crate::ops::{CrossEntropyHead, MatmulSpec, Storage, WriteMode};
 
 /// Element (`row`, `col`) of the logical `[rows, cols]` matrix `op(X)`.

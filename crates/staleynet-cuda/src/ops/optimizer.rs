@@ -1,6 +1,7 @@
 //! AdamW update and gradient-norm reduction.
 
 use crate::device::{Gpu, GpuResult, Shape, Tensor};
+use crate::kernels::optimizer::AdamWStep;
 use crate::launch;
 
 /// Per-step AdamW hyperparameters (Loshchilov & Hutter, 2019,
@@ -40,25 +41,26 @@ impl Gpu {
         assert!(gradient.shape() == shape && first_moment.shape() == shape && second_moment.shape() == shape, "adamw_step: shape mismatch");
 
         let step = hyper.step as i32;
-        let first_correction = 1.0 - hyper.beta1.powi(step);
-        let second_correction = 1.0 - hyper.beta2.powi(step);
+        let settings = AdamWStep {
+            learning_rate: hyper.learning_rate,
+            beta1: hyper.beta1,
+            beta2: hyper.beta2,
+            epsilon: hyper.epsilon,
+            weight_decay: hyper.weight_decay,
+            first_correction: 1.0 - hyper.beta1.powi(step),
+            second_correction: 1.0 - hyper.beta2.powi(step),
+        };
 
-        // SAFETY: one thread per element; the kernel bound-checks all three outputs.
+        // SAFETY: one thread per element; the four tensors have the same shape, asserted above.
         unsafe {
-            self.kernels.adamw_step(
+            self.kernels.optimizer.adamw_step(
                 &self.stream,
                 launch::elementwise(parameter.len()),
                 &mut parameter.buffer,
                 &gradient.buffer,
                 &mut first_moment.buffer,
                 &mut second_moment.buffer,
-                hyper.learning_rate,
-                hyper.beta1,
-                hyper.beta2,
-                hyper.epsilon,
-                hyper.weight_decay,
-                first_correction,
-                second_correction,
+                settings,
             )
         }
     }
@@ -69,7 +71,7 @@ impl Gpu {
 
         // SAFETY: fixed full-block grid matching the kernel's shared-memory size;
         // each block writes only its own partial sum.
-        unsafe { self.kernels.sum_of_squares(&self.stream, launch::reduction(), &values.buffer, &mut partial_sums.buffer)? };
+        unsafe { self.kernels.optimizer.sum_of_squares(&self.stream, launch::reduction(), &values.buffer, &mut partial_sums.buffer)? };
 
         let partials = self.download(&partial_sums)?;
         Ok(partials.iter().map(|&partial| partial as f64).sum())

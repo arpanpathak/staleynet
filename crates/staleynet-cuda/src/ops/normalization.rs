@@ -15,7 +15,7 @@ impl Gpu {
         // SAFETY: warp per row; kernel writes stay inside rows·cols and rows,
         // which the asserts above tie to the buffer sizes.
         unsafe {
-            self.kernels.rms_norm_forward(
+            self.kernels.normalization.rms_norm_forward(
                 &self.stream,
                 launch::warp_per_row(shape.rows),
                 &input.buffer,
@@ -47,7 +47,7 @@ impl Gpu {
 
         // SAFETY: warp per row; writes stay inside rows·cols == input_grad.len().
         unsafe {
-            self.kernels.rms_norm_backward_input(
+            self.kernels.normalization.rms_norm_backward_input(
                 &self.stream,
                 launch::warp_per_row(shape.rows),
                 &output_grad.buffer,
@@ -62,7 +62,7 @@ impl Gpu {
 
         // SAFETY: one thread per column; out-of-range threads return early.
         unsafe {
-            self.kernels.rms_norm_backward_gain(
+            self.kernels.normalization.rms_norm_backward_gain(
                 &self.stream,
                 launch::elementwise(shape.cols),
                 &output_grad.buffer,
