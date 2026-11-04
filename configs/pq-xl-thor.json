@@ -1,0 +1,50 @@
+{
+  "model": {
+    "width": 768,
+    "heads": 12,
+    "layers": 12,
+    "feed_forward_multiplier": 4,
+    "context_length": 1152,
+    "prompt_bytes": 126,
+    "lyrics_bytes": 256,
+    "codebooks": 16,
+    "codebook_size": 1024
+  },
+  "optimizer": {
+    "peak_learning_rate": 0.00025,
+    "final_learning_rate": 2.5e-05,
+    "warmup_steps": 2000,
+    "decay_steps": 36000,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "epsilon": 1e-08,
+    "weight_decay": 0.1,
+    "max_gradient_norm": 1.0
+  },
+  "batch_size": 12,
+  "sequence_length": 1152,
+  "steps": 36000,
+  "log_every": 25,
+  "validate_every": 1000,
+  "validation_batches": 24,
+  "checkpoint_every": 250,
+  "seed": 1994,
+  "track_filter": {
+    "require_any": [],
+    "exclude_any": []
+  },
+  "extra_sources": [
+    {
+      "cache": "data/cache-fma-rock",
+      "weight": 0.125
+    },
+    {
+      "cache": "data/cache-pq-jamendolyrics",
+      "weight": 3.0
+    },
+    {
+      "cache": "data/cache-pq-recordings",
+      "weight": 7.5
+    }
+  ]
+}
