@@ -1,6 +1,13 @@
 [package]
 name = "staleynet-audio"
 description = "Audio decoding, resampling, log-mel analysis and Griffin-Lim reconstruction."
+authors = ["Arpan Pathak"]
+readme = "README.md"
+repository = "https://github.com/arpanpathak/staleynet"
+homepage = "https://github.com/arpanpathak/staleynet"
+documentation = "https://docs.rs/staleynet-audio"
+keywords = ["audio", "music", "dsp", "mel", "griffin-lim"]
+categories = ["multimedia::audio", "science"]
 version.workspace = true
 edition.workspace = true
 license.workspace = true

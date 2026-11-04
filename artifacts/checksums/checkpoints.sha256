@@ -40,7 +40,7 @@ cb17d19d547544d0862f692c1e2c0bd805955d883231c04f6cf0560e529ff10e  ./metrics/lyri
 e6d9cf574d712b703414da3d132ee7a009ef01a0ddece9f797379f9bb919dbe7  ./metrics/vocal-finetune.jsonl
 def360b86dc2389d71c684f8e5a47f708d9df167b476221e0f88989ed133f905  ./metrics/vocal-scratch.jsonl
 34d5c85a79804bd1eafd23eeaded3abafc725d3818aa958e2d4956370ef4b1c6  ./NOTICE
-52958098715a59f973a3ff79dabc59f19d8cf692955c2fc3dd408fc46156e785  ./README.md
+49733bb6761fbaf474d288016f87bc99e4942b9d9b6e4bb2a9d5f8bd64754bc0  ./README.md
 b8e7d3815bebd5fcf71c5ffce6653b87dac8cb4fe39ae8a35d4195d931961187  ./run-configs/lyrics-orin.json
 14cedfe8e3a0c12497cc9138b7471255f5e756c3cf17d527c8f4d0be16bf5616  ./run-configs/overfit-one-take.json
 f60a8d50b9322b09cbf48fb784f5caca265f65f16cfa995f9136febc3b49c9bf  ./run-configs/smoke.json

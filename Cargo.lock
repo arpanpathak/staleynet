@@ -817,7 +817,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "staleynet-audio"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "hound",
@@ -828,7 +828,7 @@ dependencies = [
 
 [[package]]
 name = "staleynet-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -843,7 +843,7 @@ dependencies = [
 
 [[package]]
 name = "staleynet-cuda"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cuda-core",
  "cuda-device",
@@ -853,7 +853,7 @@ dependencies = [
 
 [[package]]
 name = "staleynet-data"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "csv",
@@ -868,7 +868,7 @@ dependencies = [
 
 [[package]]
 name = "staleynet-model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -878,7 +878,7 @@ dependencies = [
 
 [[package]]
 name = "staleynet-train"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "serde",
