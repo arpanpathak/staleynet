@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="122" height="34" viewBox="0 0 122 34" role="img" aria-label="Apache-2.0">
+  <title>Apache-2.0</title>
+  <rect x="0.5" y="0.5" width="121" height="33" rx="16.5" fill="#F3EDF7" stroke="#CAC4D0"/>
+  <g transform="translate(12 9) scale(0.667)" fill="none" stroke="#6750A4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19 6v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Z"/><path d="m9 12 2 2 4-4"/></g>
+  <text x="38" y="17.5" font-family="Inter, 'Segoe UI', Roboto, 'Noto Sans', 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#1D1B20" dominant-baseline="middle">Apache-2.0</text>
+  
+</svg>

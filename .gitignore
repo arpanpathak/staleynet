@@ -1,0 +1,18 @@
+/target
+/data
+/runs
+/logs
+/samples/*.wav
+*.ll
+*.ptx
+.oxide-artifacts
+/book/book
+/studio/target
+/studio/certs
+
+# LaTeX build products
+/paper/*.aux
+/paper/*.bbl
+/paper/*.blg
+/paper/*.log
+/paper/*.out
