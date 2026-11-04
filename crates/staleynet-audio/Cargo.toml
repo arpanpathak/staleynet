@@ -1,6 +1,6 @@
 [package]
 name = "staleynet-audio"
-description = "Audio decoding, resampling, log-mel analysis and Griffin-Lim reconstruction."
+description = "Pure-Rust audio front end for music models: decode MP3/FLAC/WAV/OGG to mono, polyphase resampling, log-mel spectrograms (STFT as a matrix product) and fast Griffin-Lim reconstruction."
 authors = ["Arpan Pathak"]
 readme = "README.md"
 repository = "https://github.com/arpanpathak/staleynet"

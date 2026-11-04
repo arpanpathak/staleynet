@@ -4,6 +4,10 @@
 //! sample rate, analyses them into log-mel spectrograms, and turns log-mel
 //! spectrograms back into waveforms. The spectral code here is the CPU
 //! reference against which the GPU feature extractor is validated.
+//!
+//! The rest of this page is the crate's README, so that its examples are
+//! compiled and run as documentation tests.
+#![doc = include_str!("../README.md")]
 
 pub mod decode;
 pub mod griffin_lim;

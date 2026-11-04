@@ -14,8 +14,9 @@ const OUTPUT_PEAK_LIMIT: f32 = 0.891;
 /// See <https://en.wikipedia.org/wiki/Audio_bit_depth>
 const PCM16_FULL_SCALE: f32 = 32767.0;
 
-/// Writes `samples` as 16-bit mono PCM, scaling down only if the peak exceeds
-/// [`OUTPUT_PEAK_LIMIT`].
+/// Writes `samples` as 16-bit mono PCM. The samples are scaled down only if
+/// their peak exceeds 0.891 (−1 dBFS), which leaves a little headroom against
+/// clipping; quieter signals are written unchanged.
 pub fn write_mono_pcm16(path: &Path, samples: &[f32], sample_rate: u32) -> Result<()> {
     let spec = hound::WavSpec { channels: 1, sample_rate, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
 
