@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/emblem.svg" width="96" alt="StaleyNET emblem: a rusted chain link enclosing a staircase of audio tokens">
+  <img src="docs/assets/emblem.svg" width="96" alt="StaleyNET emblem: a rusted chain link enclosing a staircase of audio tokens, with a small gear on the chain turning the Rust logo">
 </p>
 
 <h1 align="center">StaleyNET</h1>
