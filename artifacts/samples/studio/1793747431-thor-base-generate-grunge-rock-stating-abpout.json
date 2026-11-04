@@ -1,0 +1,13 @@
+{
+  "prompt": "generate grunge rock stating abpout everyday frustration of layoff",
+  "checkpoint": "runs/thor-base/best",
+  "checkpoint_step": 0,
+  "audio_seconds": 12.0,
+  "generation": {
+    "steps": 566,
+    "model_calls": 1132,
+    "seconds": 3.262708901
+  },
+  "vocoder_seconds": 1.002498698,
+  "real_time_factor": 0.3554339665833333
+}

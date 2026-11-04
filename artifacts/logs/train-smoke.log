@@ -1,0 +1,67 @@
+model 7.10 M parameters | 667 train tracks (3694669 steps) | 39 validation tracks | from step 0
+step     25  loss 6.851 [6.91, 6.88, 6.82, 6.80]  |g| 0.67  lr 1.5e-4  3982 pos/s  1029 ms/step
+step     50  loss 6.502 [6.58, 6.65, 6.49, 6.29]  |g| 1.29  lr 3.0e-4  3930 pos/s  1042 ms/step
+step     75  loss 6.599 [6.60, 6.81, 6.57, 6.42]  |g| 0.52  lr 4.5e-4  3898 pos/s  1051 ms/step
+step    100  loss 6.540 [6.61, 6.62, 6.53, 6.40]  |g| 0.76  lr 6.0e-4  4024 pos/s  1018 ms/step
+step    125  loss 6.383 [5.91, 6.71, 6.55, 6.37]  |g| 0.89  lr 6.0e-4  4045 pos/s  1013 ms/step
+step    150  loss 6.407 [6.22, 6.53, 6.54, 6.34]  |g| 1.12  lr 6.0e-4  4022 pos/s  1018 ms/step
+step    175  loss 6.348 [5.94, 6.52, 6.55, 6.38]  |g| 0.78  lr 6.0e-4  3900 pos/s  1050 ms/step
+step    200  loss 6.084 [5.31, 6.37, 6.36, 6.29]  |g| 0.63  lr 5.9e-4  3845 pos/s  1065 ms/step
+step    225  loss 6.117 [5.57, 6.28, 6.35, 6.27]  |g| 1.13  lr 5.9e-4  3924 pos/s  1044 ms/step
+step    250  loss 5.970 [4.57, 6.35, 6.65, 6.31]  |g| 0.81  lr 5.9e-4  3870 pos/s  1058 ms/step
+step    250  validation 5.932 [4.68, 6.32, 6.42, 6.30]  ← best
+step    275  loss 5.623 [4.06, 6.12, 6.23, 6.08]  |g| 0.81  lr 5.8e-4  3479 pos/s  1177 ms/step
+step    300  loss 5.932 [4.94, 6.07, 6.47, 6.25]  |g| 1.42  lr 5.7e-4  3829 pos/s  1070 ms/step
+step    325  loss 5.599 [3.94, 5.99, 6.25, 6.22]  |g| 0.73  lr 5.7e-4  3902 pos/s  1050 ms/step
+step    350  loss 5.550 [3.75, 5.95, 6.26, 6.24]  |g| 0.64  lr 5.6e-4  3859 pos/s  1061 ms/step
+step    375  loss 5.551 [3.81, 5.87, 6.29, 6.23]  |g| 0.82  lr 5.5e-4  3993 pos/s  1026 ms/step
+step    400  loss 5.379 [3.57, 5.71, 6.15, 6.09]  |g| 0.61  lr 5.4e-4  3996 pos/s  1025 ms/step
+step    425  loss 5.314 [3.02, 5.83, 6.27, 6.13]  |g| 0.77  lr 5.3e-4  3893 pos/s  1052 ms/step
+step    450  loss 5.304 [3.50, 5.51, 6.23, 5.97]  |g| 0.86  lr 5.2e-4  3961 pos/s  1034 ms/step
+step    475  loss 5.188 [3.41, 5.44, 5.99, 5.91]  |g| 0.85  lr 5.1e-4  3859 pos/s  1061 ms/step
+step    500  loss 4.973 [3.17, 5.17, 5.78, 5.77]  |g| 1.00  lr 5.0e-4  3900 pos/s  1050 ms/step
+step    500  validation 5.440 [3.55, 5.75, 6.26, 6.20]  ← best
+step    525  loss 5.520 [3.76, 6.01, 6.22, 6.09]  |g| 1.20  lr 4.9e-4  3584 pos/s  1143 ms/step
+step    550  loss 4.790 [3.02, 4.78, 5.68, 5.68]  |g| 0.71  lr 4.7e-4  3905 pos/s  1049 ms/step
+step    575  loss 5.051 [2.79, 5.25, 6.03, 6.13]  |g| 0.82  lr 4.6e-4  3903 pos/s  1049 ms/step
+step    600  loss 5.219 [3.07, 5.51, 6.20, 6.09]  |g| 0.71  lr 4.5e-4  3897 pos/s  1051 ms/step
+step    625  loss 5.149 [3.23, 5.32, 6.08, 5.96]  |g| 0.67  lr 4.3e-4  3893 pos/s  1052 ms/step
+step    650  loss 5.043 [2.96, 5.09, 6.06, 6.05]  |g| 0.83  lr 4.2e-4  3900 pos/s  1050 ms/step
+step    675  loss 4.825 [2.93, 4.68, 5.82, 5.87]  |g| 0.96  lr 4.1e-4  3912 pos/s  1047 ms/step
+step    700  loss 5.116 [3.08, 5.27, 6.08, 6.03]  |g| 0.63  lr 3.9e-4  3906 pos/s  1049 ms/step
+step    725  loss 4.611 [2.34, 4.51, 5.78, 5.83]  |g| 0.79  lr 3.8e-4  3902 pos/s  1050 ms/step
+step    750  loss 4.969 [2.78, 4.98, 6.02, 6.09]  |g| 0.72  lr 3.6e-4  3901 pos/s  1050 ms/step
+step    750  validation 5.207 [3.33, 5.30, 6.11, 6.10]  ← best
+step    775  loss 4.754 [2.83, 4.67, 5.72, 5.80]  |g| 0.77  lr 3.5e-4  3521 pos/s  1163 ms/step
+step    800  loss 5.037 [2.96, 5.11, 6.09, 5.99]  |g| 0.76  lr 3.3e-4  3887 pos/s  1054 ms/step
+step    825  loss 4.873 [2.68, 4.98, 5.90, 5.93]  |g| 0.67  lr 3.2e-4  3908 pos/s  1048 ms/step
+step    850  loss 4.831 [3.69, 4.40, 5.50, 5.74]  |g| 1.37  lr 3.0e-4  3894 pos/s  1052 ms/step
+step    875  loss 4.836 [3.14, 4.67, 5.78, 5.76]  |g| 0.72  lr 2.9e-4  3901 pos/s  1050 ms/step
+step    900  loss 4.947 [3.13, 4.97, 5.75, 5.94]  |g| 0.76  lr 2.7e-4  4012 pos/s  1021 ms/step
+step    925  loss 4.752 [2.83, 4.73, 5.68, 5.77]  |g| 0.57  lr 2.6e-4  4132 pos/s  991 ms/step
+step    950  loss 4.458 [2.57, 4.36, 5.56, 5.34]  |g| 0.67  lr 2.4e-4  4085 pos/s  1003 ms/step
+step    975  loss 4.663 [2.80, 4.59, 5.67, 5.59]  |g| 0.67  lr 2.3e-4  4048 pos/s  1012 ms/step
+step   1000  loss 4.811 [2.84, 4.82, 5.68, 5.90]  |g| 0.69  lr 2.1e-4  4135 pos/s  991 ms/step
+step   1000  validation 5.058 [3.22, 5.04, 5.97, 6.01]  ← best
+step   1025  loss 5.064 [3.58, 5.08, 5.66, 5.92]  |g| 0.80  lr 2.0e-4  3723 pos/s  1100 ms/step
+step   1050  loss 4.880 [2.72, 4.84, 5.98, 5.98]  |g| 0.65  lr 1.9e-4  4116 pos/s  995 ms/step
+step   1075  loss 4.469 [2.49, 4.26, 5.48, 5.65]  |g| 0.81  lr 1.7e-4  4132 pos/s  991 ms/step
+step   1100  loss 4.533 [2.54, 4.46, 5.51, 5.63]  |g| 0.69  lr 1.6e-4  4131 pos/s  992 ms/step
+step   1125  loss 4.994 [2.95, 5.09, 5.96, 5.97]  |g| 0.64  lr 1.5e-4  4134 pos/s  991 ms/step
+step   1150  loss 4.661 [2.57, 4.54, 5.73, 5.80]  |g| 0.62  lr 1.4e-4  4134 pos/s  991 ms/step
+step   1175  loss 4.911 [3.11, 4.88, 5.82, 5.83]  |g| 0.64  lr 1.3e-4  4134 pos/s  991 ms/step
+step   1200  loss 4.748 [2.84, 4.71, 5.64, 5.79]  |g| 0.66  lr 1.2e-4  4132 pos/s  991 ms/step
+step   1225  loss 4.862 [2.86, 4.84, 5.75, 5.99]  |g| 0.67  lr 1.1e-4  4132 pos/s  991 ms/step
+step   1250  loss 4.860 [2.95, 4.65, 5.87, 5.97]  |g| 0.67  lr 1.0e-4  4133 pos/s  991 ms/step
+step   1250  validation 4.975 [3.15, 4.90, 5.88, 5.96]  ← best
+step   1275  loss 4.690 [2.73, 4.51, 5.65, 5.87]  |g| 0.72  lr 9.4e-5  3725 pos/s  1100 ms/step
+step   1300  loss 4.666 [2.63, 4.58, 5.66, 5.80]  |g| 0.64  lr 8.7e-5  4119 pos/s  995 ms/step
+step   1325  loss 4.578 [2.49, 4.41, 5.68, 5.73]  |g| 0.66  lr 8.1e-5  4135 pos/s  991 ms/step
+step   1350  loss 4.356 [2.03, 4.12, 5.61, 5.67]  |g| 0.78  lr 7.5e-5  4134 pos/s  991 ms/step
+step   1375  loss 4.972 [3.13, 4.93, 5.89, 5.94]  |g| 0.66  lr 7.1e-5  4132 pos/s  991 ms/step
+step   1400  loss 4.593 [2.55, 4.51, 5.54, 5.78]  |g| 0.84  lr 6.7e-5  4133 pos/s  991 ms/step
+step   1425  loss 4.824 [2.66, 4.81, 5.86, 5.97]  |g| 0.69  lr 6.4e-5  4136 pos/s  990 ms/step
+step   1450  loss 4.641 [2.57, 4.41, 5.71, 5.88]  |g| 0.70  lr 6.2e-5  4134 pos/s  991 ms/step
+step   1475  loss 4.754 [2.90, 4.75, 5.65, 5.72]  |g| 0.67  lr 6.0e-5  4133 pos/s  991 ms/step
+step   1500  loss 4.632 [2.71, 4.35, 5.68, 5.79]  |g| 0.66  lr 6.0e-5  4136 pos/s  990 ms/step
+step   1500  validation 4.934 [3.12, 4.84, 5.84, 5.94]  ← best

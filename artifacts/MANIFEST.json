@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "project": "StaleyNET",
+  "generated_at": "2026-11-04T05:05:19.247692Z",
+  "github": {
+    "repo": "https://github.com/arpanpathak/staleynet",
+    "visibility": "public"
+  },
+  "huggingface": {
+    "checkpoints": {
+      "repo": "arpanpathak/staleynet-checkpoints",
+      "type": "model",
+      "url": "https://huggingface.co/arpanpathak/staleynet-checkpoints",
+      "visibility": "private",
+      "revision": "b5948a746a859275dc698894bc15f4c2fddad47f",
+      "files": 49,
+      "bytes": 512768174,
+      "note": "includes the .gitattributes added by the Hub"
+    },
+    "data": {
+      "repo": "arpanpathak/staleynet-data",
+      "type": "dataset",
+      "url": "https://huggingface.co/datasets/arpanpathak/staleynet-data",
+      "visibility": "private",
+      "revision": "5a17062952a931ef2cc0ed3fa95ebf746b227587",
+      "files": 2393,
+      "bytes": 2789914129,
+      "note": "includes the .gitattributes added by the Hub; 7 upload commits"
+    }
+  },
+  "checkpoints": {
+    "runs": [
+      {
+        "name": "lyrics-orin",
+        "parameters": 7165440,
+        "training_tracks": 354,
+        "validation_tracks": 25,
+        "tracks_with_lyrics": 73,
+        "best": {
+          "step": 3750,
+          "has_optimizer_state": false,
+          "bytes": 28661760,
+          "tensors_sha256": "605ece4b369534f73f969f681df20f6ed1fac22a6efe0f6eebfbbc901bbac680",
+          "model_json": {
+            "step": 3750,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": {
+          "step": 4000,
+          "has_optimizer_state": true,
+          "bytes": 85985280,
+          "tensors_sha256": "40940ad745386d15b44717e9e9714c05de559ad5c2c5883a50d8967730203d75",
+          "model_json": {
+            "step": 4000,
+            "has_optimizer_state": true
+          }
+        }
+      },
+      {
+        "name": "overfit-one-take",
+        "parameters": 7099904,
+        "training_tracks": 1,
+        "validation_tracks": 0,
+        "tracks_with_lyrics": 0,
+        "best": {
+          "step": 200,
+          "has_optimizer_state": false,
+          "bytes": 28399616,
+          "tensors_sha256": "db8418d1e6378b602f156136b2e7d891fe4d4627f1f6e0d6c4e82010410f9b00",
+          "model_json": {
+            "step": 200,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": {
+          "step": 200,
+          "has_optimizer_state": true,
+          "bytes": 85198848,
+          "tensors_sha256": "961b4f680c84b1a2bf3e85a64c62ab6a0d5a7d47792184c71453f23e307f802a",
+          "model_json": {
+            "step": 200,
+            "has_optimizer_state": true
+          }
+        }
+      },
+      {
+        "name": "smoke",
+        "parameters": 7099904,
+        "training_tracks": 667,
+        "validation_tracks": 39,
+        "tracks_with_lyrics": null,
+        "best": {
+          "step": 0,
+          "has_optimizer_state": false,
+          "bytes": 28399616,
+          "tensors_sha256": "429bfed56567eebc1c1c88bd50963c859490e681b35bcb1b68dbd07dbd51d915",
+          "model_json": {
+            "step": 0,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": {
+          "step": 1500,
+          "has_optimizer_state": true,
+          "bytes": 85198848,
+          "tensors_sha256": "cccbd67def6cca4838e4598ee767085a2d698d5b55a63885c5616edc1e8ddf82",
+          "model_json": {
+            "step": 1500,
+            "has_optimizer_state": true
+          }
+        }
+      },
+      {
+        "name": "thor-base",
+        "parameters": 7099904,
+        "training_tracks": 667,
+        "validation_tracks": 39,
+        "tracks_with_lyrics": null,
+        "best": {
+          "step": 0,
+          "has_optimizer_state": false,
+          "bytes": 28399616,
+          "tensors_sha256": "67c43b8a88c8ce44b31c61aec8e791adfe59c8a8fd1bc57b030a9a4963eaff7c",
+          "model_json": {
+            "step": 0,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": null
+      },
+      {
+        "name": "vocal-finetune",
+        "parameters": 7099904,
+        "training_tracks": 281,
+        "validation_tracks": 19,
+        "tracks_with_lyrics": null,
+        "best": {
+          "step": 250,
+          "has_optimizer_state": false,
+          "bytes": 28399616,
+          "tensors_sha256": "0d7b12d5c40e1ababe8925bf2c2c1f442a14dee9295a66d25d694be2c7a3b59e",
+          "model_json": {
+            "step": 250,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": null
+      },
+      {
+        "name": "vocal-scratch",
+        "parameters": 7099904,
+        "training_tracks": 281,
+        "validation_tracks": 19,
+        "tracks_with_lyrics": null,
+        "best": {
+          "step": 5500,
+          "has_optimizer_state": false,
+          "bytes": 28399616,
+          "tensors_sha256": "78d5529a108ce29d2ae4c308b13b6c2f86106b3e393b046df9419e089e35d85d",
+          "model_json": {
+            "step": 5500,
+            "has_optimizer_state": false
+          }
+        },
+        "latest": {
+          "step": 6000,
+          "has_optimizer_state": true,
+          "bytes": 85198848,
+          "tensors_sha256": "5d199a6dafa1c83232351b11f631a3e464dd831cd65a49bad36a9b8a6ec04533",
+          "model_json": {
+            "step": 6000,
+            "has_optimizer_state": true
+          }
+        }
+      }
+    ],
+    "layout": "checkpoints/<run>/{best,latest}/{model.json,tensors.bin}; tensors are little-endian f32, parameters then AdamW moments for latest",
+    "steps_note": "Step values are exactly those recorded in model.json. thor-base and smoke store best at step 0; prefer latest/ where present for the late state."
+  },
+  "data": {
+    "directories": {
+      "cache": {
+        "files": 1415,
+        "bytes": 2046633282
+      },
+      "cache-jamendolyrics": {
+        "files": 161,
+        "bytes": 427098717
+      },
+      "cache-g4l4f1": {
+        "files": 708,
+        "bytes": 256803589
+      },
+      "cache-overfit": {
+        "files": 5,
+        "bytes": 12311763
+      },
+      "cache-recordings": {
+        "files": 3,
+        "bytes": 2275671
+      },
+      "recordings": {
+        "files": 8,
+        "bytes": 8337981
+      },
+      "overfit": {
+        "files": 2,
+        "bytes": 575720
+      },
+      "samples": {
+        "files": 79,
+        "bytes": 35041385
+      },
+      "raw": {
+        "files": 7,
+        "bytes": 466403
+      }
+    },
+    "tokenizer_sha256": "90d999f8a3376cec7fdf3edc40aea73b822a2e78c11175f07819c7e9cd687dfa",
+    "cache_manifest_sha256": "d8032f1be08f0609d519f0eb049f0ebc0be737db2859f342d6ebe08cad2ee24b",
+    "cache_g4l4f1_mel": "omitted; source tree symlinked it to ../cache/mel",
+    "raw_audio_included": false
+  },
+  "provenance": [
+    {
+      "name": "Song Describer Dataset",
+      "url": "https://zenodo.org/records/10072001",
+      "included": "metadata only (song_describer.csv, audio_metadata.tsv, audio_licenses.txt)",
+      "license": "captions CC BY-SA 4.0; recordings per-track CC, including BY-NC-ND and BY-NC-SA"
+    },
+    {
+      "name": "JamendoLyrics MultiLang",
+      "url": "https://github.com/f90/jamendolyrics",
+      "included": "metadata only (JamendoLyrics.csv, LICENSE, README.md)",
+      "license": "code and metadata MIT; songs and lyrics per-song CC"
+    }
+  ],
+  "own_recordings": {
+    "paths": [
+      "recordings/",
+      "overfit/",
+      "cache-recordings/"
+    ],
+    "license": "not licensed for reuse; all rights reserved"
+  },
+  "licenses": {
+    "code": "Apache-2.0",
+    "paper_book": "CC BY 4.0",
+    "checkpoints_data": "CC BY-SA 4.0 subject to upstream dataset terms"
+  }
+}

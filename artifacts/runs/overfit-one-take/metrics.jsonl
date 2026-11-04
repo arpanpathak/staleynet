@@ -1,0 +1,6 @@
+{"event":"started","parameters":7099904,"train_tracks":1,"train_steps":562,"validation_tracks":0,"first_step":0,"tracks_with_lyrics":0,"best_validation":null}
+{"event":"progress","step":50,"loss":2.4926627,"loss_per_codebook":[1.816829,2.4552815,2.8007264,2.8978138],"gradient_norm":1.500508,"learning_rate":0.0005,"positions_per_second":2479.4793975466737,"milliseconds_per_step":1135.72228218}
+{"event":"progress","step":100,"loss":0.05443774,"loss_per_codebook":[0.04993906,0.054209325,0.057090472,0.056512102],"gradient_norm":0.06491182,"learning_rate":0.001,"positions_per_second":2374.7956698882563,"milliseconds_per_step":1185.78622814}
+{"event":"progress","step":150,"loss":0.00766012,"loss_per_codebook":[0.0073498273,0.0076542664,0.007794555,0.007841831],"gradient_norm":0.0076370346,"learning_rate":0.0009956007,"positions_per_second":2470.3999126114,"milliseconds_per_step":1139.89641338}
+{"event":"progress","step":200,"loss":0.0023038452,"loss_per_codebook":[0.002201616,0.0023011407,0.002348519,0.002364105],"gradient_norm":0.0023440493,"learning_rate":0.0009821322,"positions_per_second":2604.89916490733,"milliseconds_per_step":1081.03992582}
+{"event":"validation","step":200,"loss":0.0022464758,"loss_per_codebook":[0.0021490627,0.0022438006,0.0022894274,0.0023036122],"improved":true}

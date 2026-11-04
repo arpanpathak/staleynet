@@ -1,0 +1,307 @@
+{
+  "model": {
+    "width": 256,
+    "heads": 8,
+    "layers": 6,
+    "feed_forward_multiplier": 4,
+    "context_length": 768,
+    "prompt_bytes": 126,
+    "codebooks": 4,
+    "codebook_size": 1024
+  },
+  "tensors": [
+    {
+      "name": "token_embedding",
+      "len": 1114880
+    },
+    {
+      "name": "position_embedding",
+      "len": 196608
+    },
+    {
+      "name": "blocks.0.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.0.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.0.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.0.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.0.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.0.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.0.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.0.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.0.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.0.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.1.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.1.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.1.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.1.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.1.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.1.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.1.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.1.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.1.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.1.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.2.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.2.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.2.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.2.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.2.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.2.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.2.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.2.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.2.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.2.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.3.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.3.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.3.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.3.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.3.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.3.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.3.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.3.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.3.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.3.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.4.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.4.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.4.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.4.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.4.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.4.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.4.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.4.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.4.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.4.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.5.attention_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.5.attention.qkv.weight",
+      "len": 196608
+    },
+    {
+      "name": "blocks.5.attention.qkv.bias",
+      "len": 768
+    },
+    {
+      "name": "blocks.5.attention.output.weight",
+      "len": 65536
+    },
+    {
+      "name": "blocks.5.attention.output.bias",
+      "len": 256
+    },
+    {
+      "name": "blocks.5.feed_forward_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "blocks.5.feed_forward.expand.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.5.feed_forward.expand.bias",
+      "len": 1024
+    },
+    {
+      "name": "blocks.5.feed_forward.project.weight",
+      "len": 262144
+    },
+    {
+      "name": "blocks.5.feed_forward.project.bias",
+      "len": 256
+    },
+    {
+      "name": "final_norm.gain",
+      "len": 256
+    },
+    {
+      "name": "head.weight",
+      "len": 1048576
+    },
+    {
+      "name": "head.bias",
+      "len": 4096
+    }
+  ],
+  "step": 0,
+  "has_optimizer_state": false,
+  "training": {
+    "batch_size": 8,
+    "checkpoint_every": 250,
+    "log_every": 25,
+    "model": {
+      "codebook_size": 1024,
+      "codebooks": 4,
+      "context_length": 768,
+      "feed_forward_multiplier": 4,
+      "heads": 8,
+      "layers": 6,
+      "prompt_bytes": 126,
+      "width": 256
+    },
+    "optimizer": {
+      "beta1": 0.8999999761581421,
+      "beta2": 0.949999988079071,
+      "decay_steps": 1500,
+      "epsilon": 9.99999993922529e-9,
+      "final_learning_rate": 0.00005999999848427251,
+      "max_gradient_norm": 1.0,
+      "peak_learning_rate": 0.0006000000284984708,
+      "warmup_steps": 100,
+      "weight_decay": 0.10000000149011612
+    },
+    "seed": 1234,
+    "sequence_length": 512,
+    "steps": 1500,
+    "validate_every": 250,
+    "validation_batches": 8
+  }
+}

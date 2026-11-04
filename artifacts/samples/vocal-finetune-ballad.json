@@ -1,0 +1,13 @@
+{
+  "prompt": "slow rock ballad with a raw male voice singing over distorted guitars",
+  "checkpoint": "runs/vocal-finetune/best",
+  "checkpoint_step": 250,
+  "audio_seconds": 12.0,
+  "generation": {
+    "steps": 566,
+    "model_calls": 1132,
+    "seconds": 3.793022745
+  },
+  "vocoder_seconds": 1.160581601,
+  "real_time_factor": 0.4128003621666667
+}

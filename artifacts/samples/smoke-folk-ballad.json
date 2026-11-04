@@ -1,0 +1,13 @@
+{
+  "prompt": "slow acoustic folk ballad with a male singer and fingerpicked guitar",
+  "checkpoint": "runs/smoke/best",
+  "checkpoint_step": 0,
+  "audio_seconds": 12.0,
+  "generation": {
+    "steps": 566,
+    "model_calls": 1132,
+    "seconds": 3.362704486
+  },
+  "vocoder_seconds": 1.045845271,
+  "real_time_factor": 0.3673791464166667
+}

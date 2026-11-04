@@ -1,0 +1,13 @@
+{
+  "prompt": "Generate a simpel song burry me softly in this womb",
+  "checkpoint": "runs/thor-base/best",
+  "checkpoint_step": 0,
+  "audio_seconds": 9.994667,
+  "generation": {
+    "steps": 472,
+    "model_calls": 944,
+    "seconds": 11.281164568
+  },
+  "vocoder_seconds": 1.3024360179999999,
+  "real_time_factor": 1.2590314933945272
+}

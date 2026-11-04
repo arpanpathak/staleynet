@@ -1,0 +1,13 @@
+{
+  "prompt": "slow rock ballad with a raw male voice singing over distorted guitars",
+  "checkpoint": "runs/vocal-scratch/best",
+  "checkpoint_step": 5500,
+  "audio_seconds": 12.0,
+  "generation": {
+    "steps": 566,
+    "model_calls": 1132,
+    "seconds": 3.9612894499999998
+  },
+  "vocoder_seconds": 1.1281664519999999,
+  "real_time_factor": 0.4241213251666666
+}

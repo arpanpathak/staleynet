@@ -1,0 +1,13 @@
+{
+  "prompt": "sings my lyrics about layoffs",
+  "checkpoint": "runs/vocal-scratch/best",
+  "checkpoint_step": 5500,
+  "audio_seconds": 12.0,
+  "generation": {
+    "steps": 566,
+    "model_calls": 1132,
+    "seconds": 3.355676016
+  },
+  "vocoder_seconds": 0.985152554,
+  "real_time_factor": 0.36173571416666667
+}

@@ -1,0 +1,15 @@
+{
+  "prompt": "Heavy metal song with folk influences, drum and distorted guitars are sustained by a French speaking male voice and a synth lead, in some point the music stops and there is a rain sample.",
+  "lyrics": "",
+  "model_reads_lyrics": false,
+  "checkpoint": "runs/overfit-one-take/best",
+  "checkpoint_step": 200,
+  "audio_seconds": 12.0,
+  "generation": {
+    "steps": 566,
+    "model_calls": 566,
+    "seconds": 10.678495826
+  },
+  "vocoder_seconds": 1.111054514,
+  "real_time_factor": 0.9824625283333335
+}

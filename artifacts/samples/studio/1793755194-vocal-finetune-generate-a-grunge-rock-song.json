@@ -1,0 +1,13 @@
+{
+  "prompt": "Generate a grunge rock song stating the frustration of layioffs and extreme capitalism. sharing lyrics as inspiration Ooh, ooh-ooh-ooh, ooh, ooh-ooh-ooh [Intro: Layne Staley & Jerry Cantrell, Jerry Cantrell] Bury me softly in this womb I give this part of me for you Sand rains down and here I sit Holding rare flowers in a tomb, in bloom [Verse 1: Layne Staley] Down in a hole and I don't know if",
+  "checkpoint": "runs/vocal-finetune/best",
+  "checkpoint_step": 250,
+  "audio_seconds": 12.0,
+  "generation": {
+    "steps": 566,
+    "model_calls": 1132,
+    "seconds": 3.17610252
+  },
+  "vocoder_seconds": 1.068167696,
+  "real_time_factor": 0.3536891846666667
+}
