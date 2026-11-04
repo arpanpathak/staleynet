@@ -16,3 +16,6 @@
 /paper/*.blg
 /paper/*.log
 /paper/*.out
+
+# Machine-local build settings (see docs/legacy-cuda-oxide.md).
+/.cargo/

@@ -11,6 +11,3 @@ cuda-device.workspace = true
 cuda-host.workspace = true
 libm.workspace = true
 
-[features]
-# Build against cuda-oxide 0.4 (cuda-core with the `simt` launch module).
-cuda-oxide-0-4 = []

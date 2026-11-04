@@ -126,6 +126,5 @@ implementation is written in inline assembly, whereas `f32::sqrt` works. A
 CUDA context belongs to one CPU thread at a time, so multi-threaded test
 runners must attach it in each test (`Gpu::bind_to_current_thread`). A crate's
 tests are run through the backend with `cargo oxide test -- -p <crate>`.
-Version 0.4 of cuda-oxide, installed on the AGX Thor, moved `LaunchConfig` into
-`cuda_core::simt`, and the Thor build selects it through the `cuda-oxide-0-4`
-feature.
+The project follows cuda-oxide's main branch, and the revision it was last
+tested with is recorded in `Cargo.lock` (see the README).

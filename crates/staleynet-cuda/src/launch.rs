@@ -3,12 +3,8 @@
 //! <https://docs.nvidia.com/cuda/cuda-c-programming-guide/#thread-hierarchy>
 
 use crate::kernels::{BLOCK_THREADS, BLOCKED_THREADS_PER_EDGE, BLOCKED_TILE, MATMUL_TILE, WARPS_PER_BLOCK};
-// cuda-oxide 0.4 moved `LaunchConfig` into `cuda_core::simt`; the Jetson Thor
-// build (`deploy/thor/`) enables the `cuda-oxide-0-4` feature.
-#[cfg(not(feature = "cuda-oxide-0-4"))]
+// The launch configuration taken by the launchers that `#[cuda_module]` generates.
 use cuda_core::LaunchConfig;
-#[cfg(feature = "cuda-oxide-0-4")]
-use cuda_core::simt::LaunchConfig;
 
 /// Blocks a grid-stride reduction launches; enough to fill every SM on Orin
 /// and Thor several times over, small enough that the host sum is trivial.

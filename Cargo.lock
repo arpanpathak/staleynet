@@ -81,9 +81,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bindgen"
-version = "0.71.1"
+version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
 dependencies = [
  "bitflags 2.13.2",
  "cexpr",
@@ -125,6 +125,20 @@ name = "bytemuck"
 version = "1.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a1f896587b6f2c069c73d2f0913e2d590c3990285cd2f0b6aa02b786b4c679c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
 
 [[package]]
 name = "cexpr"
@@ -286,8 +300,8 @@ dependencies = [
 
 [[package]]
 name = "cuda-artifact-finalizer"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 dependencies = [
  "libnvvm-sys",
  "nvjitlink-sys",
@@ -298,41 +312,63 @@ dependencies = [
 
 [[package]]
 name = "cuda-bindings"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.5.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 dependencies = [
  "bindgen",
+ "libloading",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
 name = "cuda-core"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.5.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 dependencies = [
  "anyhow",
+ "bytemuck",
  "cuda-bindings",
- "cuda-macros",
+ "cuda-core-derive",
+ "cuda-repr",
  "half",
  "oxide-artifacts",
 ]
 
 [[package]]
-name = "cuda-device"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+name = "cuda-core-derive"
+version = "0.5.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "cuda-device"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
+dependencies = [
+ "bytemuck",
  "cuda-macros",
+ "cuda-repr",
 ]
 
 [[package]]
 name = "cuda-host"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 dependencies = [
  "cuda-artifact-finalizer",
  "cuda-core",
+ "cuda-device",
  "cuda-macros",
  "half",
+ "libc",
+ "oxide-artifacts",
  "ptx-parse",
  "sha2",
  "thiserror",
@@ -340,14 +376,25 @@ dependencies = [
 
 [[package]]
 name = "cuda-macros"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 dependencies = [
+ "oxide-tile-export",
  "proc-macro2",
  "quote",
  "reserved-oxide-symbols",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "cuda-repr"
+version = "0.5.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
+
+[[package]]
+name = "cuda-target-spec"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 
 [[package]]
 name = "digest"
@@ -419,6 +466,7 @@ version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
 dependencies = [
+ "bytemuck",
  "cfg-if",
  "crunchy",
  "zerocopy",
@@ -512,9 +560,10 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libnvvm-sys"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 dependencies = [
+ "cuda-target-spec",
  "libloading",
  "thiserror",
 ]
@@ -582,8 +631,8 @@ dependencies = [
 
 [[package]]
 name = "nvjitlink-sys"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 dependencies = [
  "libloading",
  "thiserror",
@@ -610,9 +659,20 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 [[package]]
 name = "oxide-artifacts"
 version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74d9a941c0c43d2dceaf25f5c9ca4c9f9cceb28dfa5e4e3cfd14e476f003e7c9"
 dependencies = [
  "object",
+]
+
+[[package]]
+name = "oxide-tile-export"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -645,8 +705,8 @@ dependencies = [
 
 [[package]]
 name = "ptx-parse"
-version = "0.1.0"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 
 [[package]]
 name = "quote"
@@ -708,8 +768,8 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "reserved-oxide-symbols"
-version = "0.2.1"
-source = "git+https://github.com/NVlabs/cuda-oxide.git?rev=b7fe543b863cdef46362e5f69797906b84d499c7#b7fe543b863cdef46362e5f69797906b84d499c7"
+version = "0.3.0"
+source = "git+https://github.com/NVlabs/cuda-oxide.git?branch=main#2ffc19b9e728c58c592fe187518ed6410bfa9fa0"
 
 [[package]]
 name = "rustc-hash"
@@ -1188,3 +1248,15 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[patch.unused]]
+name = "cuda-core"
+version = "0.2.1"
+
+[[patch.unused]]
+name = "cuda-device"
+version = "0.2.1"
+
+[[patch.unused]]
+name = "cuda-host"
+version = "0.2.1"
