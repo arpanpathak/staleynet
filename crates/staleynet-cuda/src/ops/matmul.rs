@@ -8,6 +8,7 @@
 
 use super::WriteMode;
 use crate::device::{Gpu, GpuResult, MatmulKernel, Tensor};
+use crate::kernels::{Operand, Product};
 use crate::launch;
 
 /// How an operand is laid out relative to the logical matrix `op(X)`.
@@ -21,11 +22,12 @@ pub enum Storage {
 }
 
 impl Storage {
-    /// Kernel flag: 1 for transposed, 0 for row-major.
-    fn flag(self) -> u32 {
+    /// The strides of a logical `[rows, cols]` matrix stored this way, with
+    /// `batch_stride` between consecutive matrices.
+    fn operand(self, rows: usize, cols: usize, batch_stride: usize) -> Operand {
         match self {
-            Storage::RowMajor => 0,
-            Storage::Transposed => 1,
+            Storage::RowMajor => Operand { row_stride: cols, col_stride: 1, batch_stride },
+            Storage::Transposed => Operand { row_stride: 1, col_stride: rows, batch_stride },
         }
     }
 }
@@ -119,6 +121,20 @@ impl MatmulSpec {
         Self { batch: strides, ..self }
     }
 
+    /// The description of this product that the kernels receive.
+    fn product(&self) -> Product {
+        Product {
+            rows: self.rows,
+            cols: self.cols,
+            inner: self.inner,
+            left: self.left.operand(self.rows, self.inner, self.batch.left),
+            right: self.right.operand(self.inner, self.cols, self.batch.right),
+            output_batch_stride: self.batch.output,
+            scale: self.scale,
+            accumulate: self.write.flag(),
+        }
+    }
+
     /// Elements an operand of `per_matrix` elements must hold for this batch.
     fn required_len(&self, stride: usize, per_matrix: usize) -> usize {
         (self.batch.count - 1) * stride + per_matrix
@@ -136,70 +152,19 @@ impl Gpu {
             MatmulKernel::Naive | MatmulKernel::Tiled => launch::matmul_tiles(spec.rows, spec.cols, spec.batch.count),
             MatmulKernel::Blocked => launch::matmul_blocks(spec.rows, spec.cols, spec.batch.count),
         };
-        let (left_flag, right_flag, write_flag) = (spec.left.flag(), spec.right.flag(), spec.write.flag());
-        let BatchStrides { left: left_stride, right: right_stride, output: output_stride, .. } = spec.batch;
+        let product = spec.product();
+        let kernels = &self.kernels.matmul;
+        let (left, right, output) = (&left.buffer, &right.buffer, &mut output.buffer);
 
-        // SAFETY: the launch is the 2-D tile grid both kernels index by
-        // (x = column tile, y = row tile, z = batch); operand sizes were
-        // asserted above and every global write is bound-checked in-kernel.
-        match self.matmul_kernel {
-            MatmulKernel::Naive => unsafe {
-                self.kernels.matmul_naive(
-                    &self.stream,
-                    config,
-                    &left.buffer,
-                    &right.buffer,
-                    &mut output.buffer,
-                    spec.rows,
-                    spec.cols,
-                    spec.inner,
-                    left_flag,
-                    right_flag,
-                    left_stride,
-                    right_stride,
-                    output_stride,
-                    spec.scale,
-                    write_flag,
-                )
-            },
-            MatmulKernel::Tiled => unsafe {
-                self.kernels.matmul_tiled(
-                    &self.stream,
-                    config,
-                    &left.buffer,
-                    &right.buffer,
-                    &mut output.buffer,
-                    spec.rows,
-                    spec.cols,
-                    spec.inner,
-                    left_flag,
-                    right_flag,
-                    left_stride,
-                    right_stride,
-                    output_stride,
-                    spec.scale,
-                    write_flag,
-                )
-            },
-            MatmulKernel::Blocked => unsafe {
-                self.kernels.matmul_blocked(
-                    &self.stream,
-                    config,
-                    &left.buffer,
-                    &right.buffer,
-                    &mut output.buffer,
-                    spec.rows,
-                    spec.cols,
-                    spec.inner,
-                    left_flag,
-                    right_flag,
-                    left_stride,
-                    right_stride,
-                    output_stride,
-                    spec.scale,
-                    write_flag,
-                )
-            },
+        // SAFETY: the grid is the tile grid each kernel indexes by (x: column tile,
+        // y: row tile, z: matrix of the batch); the operand sizes were asserted
+        // above, and every write is bound-checked in the kernel.
+        unsafe {
+            match self.matmul_kernel {
+                MatmulKernel::Naive => kernels.matmul_naive(&self.stream, config, left, right, output, product),
+                MatmulKernel::Tiled => kernels.matmul_tiled(&self.stream, config, left, right, output, product),
+                MatmulKernel::Blocked => kernels.matmul_blocked(&self.stream, config, left, right, output, product),
+            }
         }
     }
 }

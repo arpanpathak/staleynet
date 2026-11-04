@@ -13,7 +13,14 @@ impl Gpu {
 
         // SAFETY: one thread per frame element; reads were bounded by the assert.
         unsafe {
-            self.kernels.frame_signal(&self.stream, launch::elementwise(frames.len()), &signal.buffer, &mut frames.buffer, shape.cols, hop)
+            self.kernels.signal.frame_signal(
+                &self.stream,
+                launch::elementwise(frames.len()),
+                &signal.buffer,
+                &mut frames.buffer,
+                shape.cols,
+                hop,
+            )
         }
     }
 
@@ -23,14 +30,20 @@ impl Gpu {
 
         // SAFETY: one thread per element; `get_mut` guards the tail.
         unsafe {
-            self.kernels.power_spectrum(&self.stream, launch::elementwise(power.len()), &real.buffer, &imaginary.buffer, &mut power.buffer)
+            self.kernels.signal.power_spectrum(
+                &self.stream,
+                launch::elementwise(power.len()),
+                &real.buffer,
+                &imaginary.buffer,
+                &mut power.buffer,
+            )
         }
     }
 
     /// `values = ln(max(values, floor))`.
     pub fn log_compress(&self, values: &mut Tensor, floor: f32) -> GpuResult {
         // SAFETY: one thread per element; `get_mut` guards the tail.
-        unsafe { self.kernels.log_compress(&self.stream, launch::elementwise(values.len()), &mut values.buffer, floor) }
+        unsafe { self.kernels.signal.log_compress(&self.stream, launch::elementwise(values.len()), &mut values.buffer, floor) }
     }
 
     /// For each row of `dots` (`x·cᵀ`, `[points, centroids]`), the index of the
@@ -42,7 +55,7 @@ impl Gpu {
 
         // SAFETY: one thread per point; out-of-range threads return early.
         unsafe {
-            self.kernels.nearest_centroid(
+            self.kernels.signal.nearest_centroid(
                 &self.stream,
                 launch::elementwise(shape.rows),
                 &dots.buffer,

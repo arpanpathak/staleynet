@@ -4,112 +4,48 @@
 //! [`MatmulSpec`](super::MatmulSpec)s.
 
 use crate::device::{Gpu, GpuResult, Tensor};
+pub use crate::kernels::attention::HeadLayout;
 use crate::launch;
 
-/// Where a group of heads lives in a packed activation and in a head-major tensor.
-///
-/// Packed layout: `[batch · time, width]`, head `h` occupying columns
-/// `column_offset + h·head_dim ..`. Head-major layout:
-/// `[batch, heads, time_capacity, head_dim]`, written at `time_offset ..`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct HeadLayout {
-    /// Sequences in the batch.
-    pub batch: usize,
-
-    /// Time steps being moved.
-    pub time: usize,
-
-    /// Attention heads.
-    pub heads: usize,
-
-    /// Width of one head.
-    pub head_dim: usize,
-
-    /// Row width of the packed activation.
-    pub width: usize,
-
-    /// First packed column of head 0 (selects Q, K or V inside a fused QKV row).
-    pub column_offset: usize,
-
-    /// Time length allocated in the head-major tensor (≥ `time_offset + time`).
-    pub time_capacity: usize,
-
-    /// First head-major time step written or read (non-zero when appending to a KV cache).
-    pub time_offset: usize,
-}
-
-impl HeadLayout {
-    /// Layout for dense activations: capacity equals `time`, offset 0.
-    pub fn dense(batch: usize, time: usize, heads: usize, head_dim: usize, width: usize, column_offset: usize) -> Self {
-        Self { batch, time, heads, head_dim, width, column_offset, time_capacity: time, time_offset: 0 }
-    }
-
-    /// Same layout, but addressing a cache of `capacity` steps starting at `offset`.
-    pub fn in_cache(self, capacity: usize, offset: usize) -> Self {
-        Self { time_capacity: capacity, time_offset: offset, ..self }
-    }
-
-    /// Elements moved by one permute.
-    fn element_count(&self) -> usize {
-        self.batch * self.heads * self.time * self.head_dim
-    }
-
-    /// Asserts both tensors are large enough for this layout.
-    fn check(&self, packed: &Tensor, head_major: &Tensor) {
-        assert!(self.time_offset + self.time <= self.time_capacity, "HeadLayout: time range exceeds capacity");
-        assert!(packed.len() >= self.batch * self.time * self.width, "HeadLayout: packed tensor too small");
-        assert!(
-            head_major.len() >= self.batch * self.heads * self.time_capacity * self.head_dim,
-            "HeadLayout: head-major tensor too small"
-        );
-    }
+/// Asserts that both tensors are large enough for `layout`.
+fn check_layout(layout: &HeadLayout, packed: &Tensor, head_major: &Tensor) {
+    assert!(layout.time_offset + layout.time <= layout.time_capacity, "HeadLayout: time range exceeds capacity");
+    assert!(packed.len() >= layout.batch * layout.time * layout.width, "HeadLayout: packed tensor too small");
+    assert!(
+        head_major.len() >= layout.batch * layout.heads * layout.time_capacity * layout.head_dim,
+        "HeadLayout: head-major tensor too small"
+    );
 }
 
 impl Gpu {
     /// Packed columns → head-major tensor.
     pub fn split_heads(&self, packed: &Tensor, head_major: &mut Tensor, layout: &HeadLayout) -> GpuResult {
-        layout.check(packed, head_major);
-        let HeadLayout { batch, time, heads, head_dim, width, column_offset, time_capacity, time_offset } = *layout;
+        check_layout(layout, packed, head_major);
 
-        // SAFETY: one thread per moved element; every write is bound-checked in-kernel.
+        // SAFETY: one thread per moved element; every write is bound-checked in the kernel.
         unsafe {
-            self.kernels.split_heads(
+            self.kernels.attention.split_heads(
                 &self.stream,
                 launch::elementwise(layout.element_count()),
                 &packed.buffer,
                 &mut head_major.buffer,
-                batch,
-                time,
-                heads,
-                head_dim,
-                width,
-                column_offset,
-                time_capacity,
-                time_offset,
+                *layout,
             )
         }
     }
 
     /// Head-major tensor → packed columns (other columns are left untouched).
     pub fn merge_heads(&self, head_major: &Tensor, packed: &mut Tensor, layout: &HeadLayout) -> GpuResult {
-        layout.check(packed, head_major);
-        let HeadLayout { batch, time, heads, head_dim, width, column_offset, time_capacity, time_offset } = *layout;
+        check_layout(layout, packed, head_major);
 
-        // SAFETY: one thread per moved element; every write is bound-checked in-kernel.
+        // SAFETY: one thread per moved element; every write is bound-checked in the kernel.
         unsafe {
-            self.kernels.merge_heads(
+            self.kernels.attention.merge_heads(
                 &self.stream,
                 launch::elementwise(layout.element_count()),
                 &head_major.buffer,
                 &mut packed.buffer,
-                batch,
-                time,
-                heads,
-                head_dim,
-                width,
-                column_offset,
-                time_capacity,
-                time_offset,
+                *layout,
             )
         }
     }
@@ -124,7 +60,7 @@ impl Gpu {
 
         // SAFETY: warp per row; writes stay inside rows·keys == scores.len().
         unsafe {
-            self.kernels.causal_softmax(
+            self.kernels.attention.causal_softmax(
                 &self.stream,
                 launch::warp_per_row(shape.rows),
                 &mut scores.buffer,
@@ -144,7 +80,7 @@ impl Gpu {
 
         // SAFETY: warp per row; writes stay inside rows·cols == grad.len().
         unsafe {
-            self.kernels.softmax_backward(
+            self.kernels.attention.softmax_backward(
                 &self.stream,
                 launch::warp_per_row(shape.rows),
                 &probabilities.buffer,
