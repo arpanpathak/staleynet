@@ -1,0 +1,16 @@
+[package]
+name = "staleynet-cuda"
+description = "cuda-oxide kernels and safe tensor operations for StaleyNET."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cuda-core.workspace = true
+cuda-device.workspace = true
+cuda-host.workspace = true
+libm.workspace = true
+
+[features]
+# Build against cuda-oxide 0.4 (cuda-core with the `simt` launch module).
+cuda-oxide-0-4 = []
