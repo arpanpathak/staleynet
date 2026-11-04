@@ -8,7 +8,7 @@
 use crate::decode::Decoder;
 use crate::gpt::Gpt;
 use crate::random::Random;
-use crate::vocabulary::{Conditioning, DelayPattern};
+use crate::vocabulary::{Conditioning, DelayPattern, Vocabulary};
 use staleynet_cuda::{EMPTY_TOKEN, Gpu, GpuResult};
 use std::time::Instant;
 
@@ -222,68 +222,162 @@ fn sample(logits: &[f32], sampling: Sampling, random: &mut Random) -> u32 {
 
 /// Generates `config.frames` frames of audio codes for `prompt`; its lyrics
 /// are sung in order across the whole output.
+///
+/// Each delayed step asks the model for the next codes (twice under
+/// classifier-free guidance), samples one code per codebook, and appends them
+/// to the history the model reads at the following step.
 pub fn generate(gpu: &Gpu, model: &Gpt, prompt: Conditioning, config: &GenerationConfig) -> GpuResult<Generation> {
     let vocabulary = model.vocabulary();
-    let codebooks = vocabulary.codebooks;
-    let codebook_size = vocabulary.codebook_size;
-    let pattern = DelayPattern { codebooks };
-    let mut random = Random::new(config.seed);
-
-    let windows = lyrics_windows(prompt.lyrics, vocabulary.lyrics_bytes);
-    let window_prompt = |index: usize| vocabulary.prompt_slots(Conditioning { caption: prompt.caption, lyrics: &windows[index] });
-    let mut current_window = 0;
-
-    let mut conditional = ConditionedStream { prompt_slots: window_prompt(current_window), decoder: Decoder::new(gpu, model)? };
-    let mut unconditional = match config.guidance {
-        Guidance::Off => None,
-        Guidance::ClassifierFree { .. } => {
-            Some(ConditionedStream { prompt_slots: vocabulary.prompt_slots(Conditioning::NONE), decoder: Decoder::new(gpu, model)? })
-        }
-    };
-
+    let pattern = DelayPattern { codebooks: vocabulary.codebooks };
     let steps = pattern.delayed_steps(config.frames);
-    let mut history: Vec<u32> = Vec::with_capacity(steps * codebooks);
-    let mut delayed_codes: Vec<u32> = Vec::with_capacity(steps * codebooks);
-    let mut model_calls = 0;
+
+    let mut lyrics = LyricsSchedule::new(prompt, vocabulary.lyrics_bytes, steps);
+    let mut streams = GuidedStreams::new(gpu, model, lyrics.prompt_slots(&vocabulary), config.guidance)?;
+    let mut codes = DelayedCodes::with_capacity(steps * vocabulary.codebooks);
+    let mut random = Random::new(config.seed);
     let started = Instant::now();
 
     for step in 0..steps {
-        let window = step * windows.len() / steps;
-        if window != current_window {
-            current_window = window;
-            conditional.condition_on(window_prompt(window));
+        if lyrics.advance_to(step) {
+            streams.conditional.condition_on(lyrics.prompt_slots(&vocabulary));
         }
 
-        let mut logits = conditional.next_logits(gpu, model, &history, config.attention)?;
-        model_calls += 1;
+        let logits = streams.next_logits(gpu, model, &codes.history, config.attention)?;
+        codes.append_step(step, &logits, &vocabulary, config, &mut random);
+    }
 
-        if let (Some(stream), Guidance::ClassifierFree { scale }) = (unconditional.as_mut(), config.guidance) {
-            let unconditional_logits = stream.next_logits(gpu, model, &history, config.attention)?;
-            model_calls += 1;
+    gpu.synchronize()?;
+    let stats = GenerationStats { steps, model_calls: streams.model_calls, seconds: started.elapsed().as_secs_f64() };
+    Ok(Generation { codes: pattern.undelay(&codes.delayed), stats })
+}
 
-            for (guided, &free) in logits.iter_mut().zip(&unconditional_logits) {
-                *guided = free + scale * (*guided - free);
-            }
+/// Which window of the lyrics is in the prompt at each step. The output is
+/// divided evenly between the windows, so each is sung for the same time.
+struct LyricsSchedule<'a> {
+    /// The caption, which stays the same in every window.
+    caption: &'a str,
+
+    /// The lyrics cut into windows that fit the model's lyrics field.
+    windows: Vec<String>,
+
+    /// Index of the window currently in the prompt.
+    current: usize,
+
+    /// Delayed steps in the whole generation.
+    total_steps: usize,
+}
+
+impl<'a> LyricsSchedule<'a> {
+    /// Cuts the lyrics of `prompt` into windows of at most `lyrics_bytes` bytes
+    /// and starts at the first one.
+    fn new(prompt: Conditioning<'a>, lyrics_bytes: usize, total_steps: usize) -> Self {
+        Self { caption: prompt.caption, windows: lyrics_windows(prompt.lyrics, lyrics_bytes), current: 0, total_steps }
+    }
+
+    /// Moves to the window that `step` falls in; true when the window changed.
+    fn advance_to(&mut self, step: usize) -> bool {
+        let window = step * self.windows.len() / self.total_steps;
+        if window == self.current {
+            return false;
         }
 
-        for codebook in 0..codebooks {
+        self.current = window;
+        true
+    }
+
+    /// Prompt slots for the caption and the current window.
+    fn prompt_slots(&self, vocabulary: &Vocabulary) -> Vec<u32> {
+        vocabulary.prompt_slots(Conditioning { caption: self.caption, lyrics: &self.windows[self.current] })
+    }
+}
+
+/// The prompted stream and, under classifier-free guidance, the unprompted
+/// one, each with its own key/value caches.
+struct GuidedStreams {
+    /// The stream conditioned on the caption and the current lyrics.
+    conditional: ConditionedStream,
+
+    /// The stream with an empty prompt; present only under guidance.
+    unconditional: Option<ConditionedStream>,
+
+    /// How the two streams are combined.
+    guidance: Guidance,
+
+    /// Forward calls made so far, for the statistics.
+    model_calls: usize,
+}
+
+impl GuidedStreams {
+    /// Opens the prompted stream on `prompt_slots`, and the unprompted one when
+    /// `guidance` needs it.
+    fn new(gpu: &Gpu, model: &Gpt, prompt_slots: Vec<u32>, guidance: Guidance) -> GpuResult<Self> {
+        let conditional = ConditionedStream { prompt_slots, decoder: Decoder::new(gpu, model)? };
+        let unconditional = match guidance {
+            Guidance::Off => None,
+            Guidance::ClassifierFree { .. } => Some(ConditionedStream {
+                prompt_slots: model.vocabulary().prompt_slots(Conditioning::NONE),
+                decoder: Decoder::new(gpu, model)?,
+            }),
+        };
+
+        Ok(Self { conditional, unconditional, guidance, model_calls: 0 })
+    }
+
+    /// Logits for the next step. Under guidance they are moved away from the
+    /// unprompted logits: `unconditional + scale · (conditional − unconditional)`.
+    fn next_logits(&mut self, gpu: &Gpu, model: &Gpt, history: &[u32], attention: AttentionMode) -> GpuResult<Vec<f32>> {
+        let mut logits = self.conditional.next_logits(gpu, model, history, attention)?;
+        self.model_calls += 1;
+
+        let (Some(stream), Guidance::ClassifierFree { scale }) = (self.unconditional.as_mut(), self.guidance) else {
+            return Ok(logits);
+        };
+        let unconditional_logits = stream.next_logits(gpu, model, history, attention)?;
+        self.model_calls += 1;
+
+        for (guided, &free) in logits.iter_mut().zip(&unconditional_logits) {
+            *guided = free + scale * (*guided - free);
+        }
+        Ok(logits)
+    }
+}
+
+/// The codes sampled so far, in delayed order: as vocabulary tokens for the
+/// model to read, and as plain codes for the tokenizer to decode.
+struct DelayedCodes {
+    /// Vocabulary tokens, `[delayed step, codebook]`, fed back to the model.
+    history: Vec<u32>,
+
+    /// Codes in `[0, codebook_size)`, `[delayed step, codebook]`.
+    delayed: Vec<u32>,
+}
+
+impl DelayedCodes {
+    /// Empty buffers with room for `capacity` codes.
+    fn with_capacity(capacity: usize) -> Self {
+        Self { history: Vec::with_capacity(capacity), delayed: Vec::with_capacity(capacity) }
+    }
+
+    /// Samples one code per codebook for delayed `step`. Codebook `c` runs `c`
+    /// steps behind codebook 0, so near the start and the end some codebooks
+    /// have no frame to describe and receive the empty token instead.
+    fn append_step(&mut self, step: usize, logits: &[f32], vocabulary: &Vocabulary, config: &GenerationConfig, random: &mut Random) {
+        let codebook_size = vocabulary.codebook_size;
+
+        for codebook in 0..vocabulary.codebooks {
             let inside_pattern = step >= codebook && step - codebook < config.frames;
             if !inside_pattern {
-                history.push(EMPTY_TOKEN);
-                delayed_codes.push(EMPTY_TOKEN);
+                self.history.push(EMPTY_TOKEN);
+                self.delayed.push(EMPTY_TOKEN);
                 continue;
             }
 
             let head_logits = &logits[codebook * codebook_size..(codebook + 1) * codebook_size];
-            let code = sample(head_logits, config.sampling, &mut random);
-            history.push(vocabulary.audio_token(codebook, code));
-            delayed_codes.push(code);
+            let code = sample(head_logits, config.sampling, random);
+            self.history.push(vocabulary.audio_token(codebook, code));
+            self.delayed.push(code);
         }
     }
-
-    gpu.synchronize()?;
-    let stats = GenerationStats { steps, model_calls, seconds: started.elapsed().as_secs_f64() };
-    Ok(Generation { codes: pattern.undelay(&delayed_codes), stats })
 }
 
 #[cfg(test)]
