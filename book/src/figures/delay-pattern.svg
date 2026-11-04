@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <title>The delay pattern: one sequence position per step, codebooks staggered</title>
+  <style>
+    .label { fill: #1f1f1f; text-anchor: middle; }
+    .row { font-size: 12.5px; fill: #444; text-anchor: end; }
+    .cell { stroke: #fff; stroke-width: 2; }
+    .q0 { fill: #2f6fb0; } .q1 { fill: #4f8cc7; } .q2 { fill: #86b2dd; } .q3 { fill: #b9d3ee; }
+    .empty { fill: #eeeeee; }
+    .code { font-size: 11px; fill: #fff; text-anchor: middle; }
+    .codedark { font-size: 11px; fill: #1f3d5c; text-anchor: middle; }
+  </style>
+  <rect x="0" y="0" width="960" height="300" fill="#fbfaf7" rx="12"/>
+
+  <!-- prompt positions -->
+  <g>
+    <rect x="130" y="40" width="40" height="160" fill="#f6f1e7" stroke="#a07a3a"/>
+    <text class="label" x="150" y="125" font-size="11">BOS</text>
+    <rect x="172" y="40" width="96" height="160" fill="#f6f1e7" stroke="#a07a3a"/>
+    <text class="label" x="220" y="118" font-size="12">prompt</text>
+    <text class="label" x="220" y="134" font-size="12">bytes</text>
+    <rect x="270" y="40" width="40" height="160" fill="#f6f1e7" stroke="#a07a3a"/>
+    <text class="label" x="290" y="125" font-size="11">SEP</text>
+  </g>
+
+  <text class="row" x="120" y="65">codebook 0</text>
+  <text class="row" x="120" y="105">codebook 1</text>
+  <text class="row" x="120" y="145">codebook 2</text>
+  <text class="row" x="120" y="185">codebook 3</text>
+
+  <!-- audio grid: columns at x = 320 + 46*s -->
+  <g>
+    <!-- step 0 -->
+    <rect class="cell q0" x="320" y="42" width="44" height="38"/><text class="code" x="342" y="66">a<tspan dy="3" font-size="8">0</tspan></text>
+    <rect class="cell empty" x="320" y="82" width="44" height="38"/>
+    <rect class="cell empty" x="320" y="122" width="44" height="38"/>
+    <rect class="cell empty" x="320" y="162" width="44" height="38"/>
+    <!-- step 1 -->
+    <rect class="cell q0" x="366" y="42" width="44" height="38"/><text class="code" x="388" y="66">a<tspan dy="3" font-size="8">1</tspan></text>
+    <rect class="cell q1" x="366" y="82" width="44" height="38"/><text class="code" x="388" y="106">b<tspan dy="3" font-size="8">0</tspan></text>
+    <rect class="cell empty" x="366" y="122" width="44" height="38"/>
+    <rect class="cell empty" x="366" y="162" width="44" height="38"/>
+    <!-- step 2 -->
+    <rect class="cell q0" x="412" y="42" width="44" height="38"/><text class="code" x="434" y="66">a<tspan dy="3" font-size="8">2</tspan></text>
+    <rect class="cell q1" x="412" y="82" width="44" height="38"/><text class="code" x="434" y="106">b<tspan dy="3" font-size="8">1</tspan></text>
+    <rect class="cell q2" x="412" y="122" width="44" height="38"/><text class="codedark" x="434" y="146">c<tspan dy="3" font-size="8">0</tspan></text>
+    <rect class="cell empty" x="412" y="162" width="44" height="38"/>
+    <!-- steps 3..8 -->
+    <rect class="cell q0" x="458" y="42" width="44" height="38"/><text class="code" x="480" y="66">a<tspan dy="3" font-size="8">3</tspan></text>
+    <rect class="cell q1" x="458" y="82" width="44" height="38"/><text class="code" x="480" y="106">b<tspan dy="3" font-size="8">2</tspan></text>
+    <rect class="cell q2" x="458" y="122" width="44" height="38"/><text class="codedark" x="480" y="146">c<tspan dy="3" font-size="8">1</tspan></text>
+    <rect class="cell q3" x="458" y="162" width="44" height="38"/><text class="codedark" x="480" y="186">d<tspan dy="3" font-size="8">0</tspan></text>
+
+    <rect class="cell q0" x="504" y="42" width="44" height="38"/><text class="code" x="526" y="66">a<tspan dy="3" font-size="8">4</tspan></text>
+    <rect class="cell q1" x="504" y="82" width="44" height="38"/><text class="code" x="526" y="106">b<tspan dy="3" font-size="8">3</tspan></text>
+    <rect class="cell q2" x="504" y="122" width="44" height="38"/><text class="codedark" x="526" y="146">c<tspan dy="3" font-size="8">2</tspan></text>
+    <rect class="cell q3" x="504" y="162" width="44" height="38"/><text class="codedark" x="526" y="186">d<tspan dy="3" font-size="8">1</tspan></text>
+
+    <rect class="cell q0" x="550" y="42" width="44" height="38"/><text class="code" x="572" y="66">a<tspan dy="3" font-size="8">5</tspan></text>
+    <rect class="cell q1" x="550" y="82" width="44" height="38"/><text class="code" x="572" y="106">b<tspan dy="3" font-size="8">4</tspan></text>
+    <rect class="cell q2" x="550" y="122" width="44" height="38"/><text class="codedark" x="572" y="146">c<tspan dy="3" font-size="8">3</tspan></text>
+    <rect class="cell q3" x="550" y="162" width="44" height="38"/><text class="codedark" x="572" y="186">d<tspan dy="3" font-size="8">2</tspan></text>
+
+    <rect class="cell q0" x="596" y="42" width="44" height="38"/><text class="code" x="618" y="66">a<tspan dy="3" font-size="8">6</tspan></text>
+    <rect class="cell q1" x="596" y="82" width="44" height="38"/><text class="code" x="618" y="106">b<tspan dy="3" font-size="8">5</tspan></text>
+    <rect class="cell q2" x="596" y="122" width="44" height="38"/><text class="codedark" x="618" y="146">c<tspan dy="3" font-size="8">4</tspan></text>
+    <rect class="cell q3" x="596" y="162" width="44" height="38"/><text class="codedark" x="618" y="186">d<tspan dy="3" font-size="8">3</tspan></text>
+  </g>
+
+  <!-- sweeping prediction cursor -->
+  <rect x="320" y="38" width="44" height="166" fill="none" stroke="#d9822b" stroke-width="3" rx="4">
+    <animate attributeName="x" values="320;366;412;458;504;550;596" dur="7s" calcMode="discrete" repeatCount="indefinite"/>
+  </rect>
+
+  <text x="660" y="70" font-size="13" fill="#333">The orange column is predicted in one</text>
+  <text x="660" y="88" font-size="13" fill="#333">forward pass: four parallel heads.</text>
+  <text x="660" y="120" font-size="13" fill="#333">When the first d code is predicted, the a, b</text>
+  <text x="660" y="138" font-size="13" fill="#333">and c codes of its frame are already in context,</text>
+  <text x="660" y="156" font-size="13" fill="#333">so fine codes are conditioned on coarse ones.</text>
+  <text x="660" y="188" font-size="13" fill="#333">Grey cells are empty slots: no embedding,</text>
+  <text x="660" y="206" font-size="13" fill="#333">no loss.</text>
+
+  <text x="320" y="240" font-size="12.5" fill="#555">audio steps →   (one step = 2 log-mel frames ≈ 21 ms)</text>
+  <text x="20" y="280" font-size="13" fill="#333">Copet et al. (2023) introduced this layout for MusicGen; it costs three extra steps instead of making the sequence four times longer.</text>
+</svg>

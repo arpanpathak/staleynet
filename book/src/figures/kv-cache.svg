@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 310" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <title>Recomputing attention versus extending a key/value cache</title>
+  <style>
+    .label { fill: #1f1f1f; text-anchor: middle; }
+    .small { font-size: 12px; fill: #555; text-anchor: middle; }
+  </style>
+  <rect x="0" y="0" width="960" height="310" fill="#fbfaf7" rx="12"/>
+
+  <!-- recompute -->
+  <text class="label" x="240" y="34">Recompute: every step re-runs the whole prefix</text>
+  <g transform="translate(110,50)">
+    <polygon points="0,0 0,200 200,200" fill="#f3d2b3" stroke="#d9822b"/>
+    <polygon points="0,0 0,200 200,200" fill="#d9822b" fill-opacity="0.45">
+      <animate attributeName="opacity" values="0.2;0.9;0.2" dur="1.2s" repeatCount="indefinite"/>
+    </polygon>
+    <text x="100" y="225" class="small">keys →</text>
+    <text x="-20" y="100" class="small" transform="rotate(-90 -20 100)">queries →</text>
+  </g>
+  <text class="small" x="210" y="292">work per new token grows with the whole prefix: O(t²) scores</text>
+
+  <!-- cache -->
+  <text class="label" x="720" y="34">KV cache: one new query row per step</text>
+  <g transform="translate(590,50)">
+    <polygon points="0,0 0,200 200,200" fill="#e8f1fb" stroke="#2f6fb0"/>
+    <rect x="0" y="0" width="200" height="8" fill="#2f6fb0">
+      <animate attributeName="y" values="0;40;80;120;160;192" dur="6s" calcMode="discrete" repeatCount="indefinite"/>
+      <animate attributeName="width" values="8;48;88;128;168;200" dur="6s" calcMode="discrete" repeatCount="indefinite"/>
+    </rect>
+    <rect x="210" y="0" width="22" height="200" fill="#eaf5ee" stroke="#3a9a5b"/>
+    <rect x="210" y="0" width="22" height="8" fill="#3a9a5b">
+      <animate attributeName="height" values="8;48;88;128;168;200" dur="6s" calcMode="discrete" repeatCount="indefinite"/>
+    </rect>
+    <text x="221" y="225" class="small">K,V</text>
+    <text x="100" y="225" class="small">keys →</text>
+  </g>
+  <text class="small" x="700" y="292">keys and values of past positions are stored once and reused: O(t) scores per step</text>
+</svg>
