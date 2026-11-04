@@ -16,6 +16,7 @@ Usage: python3 transcribe.py <cache> <output.jsonl> [limit]
 """
 
 import json
+import os
 import re
 import sys
 import zlib
@@ -35,7 +36,11 @@ WHISPER_RATE = 16_000
 WINDOW_SECONDS = 30.0
 
 # Clips sent to the GPU together.
-BATCH = 64
+BATCH = 512
+
+# Tokens Whisper may write per clip; 30 seconds of singing needs far fewer,
+# and the cap ends the loops it falls into on instrumental passages.
+MAX_TOKENS = 200
 
 # Seconds per timestamp token step in Whisper's output.
 TIMESTAMP_PATTERN = re.compile(r"<\|(\d+\.\d+)\|>")
@@ -94,6 +99,8 @@ def parse(output):
     """The language and the kept lines of one Whisper output."""
     text = output.outputs[0].text
     token_ids = output.outputs[0].token_ids
+    if os.environ.get("WHISPER_DEBUG"):
+        print(repr(output.prompt), repr(text[:400]), list(token_ids[:12]), flush=True)
     logprobs = output.outputs[0].logprobs or []
 
     language_match = LANGUAGE_PATTERN.search(text)
@@ -141,8 +148,8 @@ def main():
         pending = pending[:limit]
     print(f"{len(done)} done, {len(pending)} to transcribe", flush=True)
 
-    llm = LLM(model=MODEL, max_model_len=448, max_num_seqs=BATCH, gpu_memory_utilization=0.15, limit_mm_per_prompt={"audio": 1})
-    sampling = SamplingParams(temperature=0.0, max_tokens=440, skip_special_tokens=False, logprobs=0)
+    llm = LLM(model=MODEL, max_model_len=448, max_num_seqs=BATCH, gpu_memory_utilization=0.35, limit_mm_per_prompt={"audio": 1}, enforce_eager=True)
+    sampling = SamplingParams(temperature=0.0, max_tokens=MAX_TOKENS, skip_special_tokens=False, logprobs=0)
 
     with out_path.open("a") as out:
         for first in range(0, len(pending), BATCH):
@@ -155,7 +162,7 @@ def main():
                 batch_ids.append(track_id)
                 prompts.append({
                     "encoder_prompt": {"prompt": "", "multi_modal_data": {"audio": (audio, WHISPER_RATE)}},
-                    "decoder_prompt": "<|startoftranscript|>",
+                    "decoder_prompt": "<|startoftranscript|><|en|><|transcribe|><|0.00|>",
                 })
 
             outputs = llm.generate(prompts, sampling, use_tqdm=False)
