@@ -1,0 +1,54 @@
+[
+  {
+    "id": "sdd-1014963",
+    "caption": "This song starts with a electric guitar riff and then gets rich with brass instruments and a female vocal singing in English.",
+    "offset": 29.994667,
+    "tokenizer_error_by_levels": [
+      0.8212713,
+      0.63487667,
+      0.51495636,
+      0.42533767
+    ],
+    "vocoder_error_from_exact_mel": 0.22978415,
+    "end_to_end_error_from_tokens": 0.4795827
+  },
+  {
+    "id": "sdd-103089",
+    "caption": "Heavy metal song with folk influences, drum and distorted guitars are sustained by a French speaking male voice and a synth lead, in some point the music stops and there is a rain sample.",
+    "offset": 29.994667,
+    "tokenizer_error_by_levels": [
+      0.68494165,
+      0.5254612,
+      0.42539978,
+      0.3533181
+    ],
+    "vocoder_error_from_exact_mel": 0.15196297,
+    "end_to_end_error_from_tokens": 0.37839544
+  },
+  {
+    "id": "sdd-1116696",
+    "caption": "Electronic track with a strong drum beat and a simple repeated vocal sample, the track is noisy and harsh with little to no melodic components.",
+    "offset": 29.994667,
+    "tokenizer_error_by_levels": [
+      0.5439035,
+      0.4032333,
+      0.32336563,
+      0.26760963
+    ],
+    "vocoder_error_from_exact_mel": 0.16958041,
+    "end_to_end_error_from_tokens": 0.33761778
+  },
+  {
+    "id": "sdd-1245191",
+    "caption": "A catchy bassline with a drum rhythm sequence introduces the song, followed by a simple chord cadence played on a piano, with some vocals with no lyrics.",
+    "offset": 29.994667,
+    "tokenizer_error_by_levels": [
+      0.7317488,
+      0.5728599,
+      0.4657323,
+      0.38951626
+    ],
+    "vocoder_error_from_exact_mel": 0.2221037,
+    "end_to_end_error_from_tokens": 0.45961675
+  }
+]

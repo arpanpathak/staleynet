@@ -1,0 +1,10 @@
+catalogue: 1 recordings (0 described only by file name, 0 with lyrics)
+[1/1] own-take_wav 12.0s Train
+prepared 1 recordings, 0.00 h (0 validation) → data/cache-overfit
+Train: mean |log-mel error| by levels used [0.973, 0.831, 0.756, 0.707]
+model 7.10 M parameters | 1 train tracks (562 steps, 0 with lyrics) | 0 validation tracks | from step 0, best so far None
+step     50  loss 2.493 [1.82, 2.46, 2.80, 2.90]  |g| 1.50  lr 5.0e-4  2479 pos/s  1136 ms/step
+step    100  loss 0.054 [0.05, 0.05, 0.06, 0.06]  |g| 0.06  lr 1.0e-3  2375 pos/s  1186 ms/step
+step    150  loss 0.008 [0.01, 0.01, 0.01, 0.01]  |g| 0.01  lr 1.0e-3  2470 pos/s  1140 ms/step
+step    200  loss 0.002 [0.00, 0.00, 0.00, 0.00]  |g| 0.00  lr 9.8e-4  2605 pos/s  1081 ms/step
+step    200  validation 0.002 [0.00, 0.00, 0.00, 0.00]  ← best

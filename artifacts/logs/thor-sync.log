@@ -1,0 +1,20 @@
+cannot delete non-empty directory: data/cache-l8f2
+cannot delete non-empty directory: data/cache-l8f1
+cannot delete non-empty directory: data/cache-l4f1
+info: override toolchain for /home/arpanpathak/Projects/stayleNET set to nightly-2026-10-11-aarch64-unknown-linux-gnu
+Building rustc-codegen-cuda backend...
+✓ Backend built: /home/arpanpathak/.cargo/git/checkouts/cuda-oxide-6d394bb007f5e114/e027ac3/cuda-oxide/crates/rustc-codegen-cuda/target/aarch64-unknown-linux-gnu/debug/librustc_codegen_cuda.so
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+=========================================
+RUSTC-CODEGEN-CUDA CARGO build
+=========================================
+
+Warning: no target architecture is configured; `cargo oxide build` will use the backend default. The first GPU reported by `nvidia-smi` has architecture sm_110a. Pass `--arch <sm_XX>` to target a specific architecture explicitly.
+Running cargo build --release --features staleynet-cuda/cuda-oxide-0-4...
+
+   Compiling staleynet-data v0.1.0 (/home/arpanpathak/Projects/stayleNET/crates/staleynet-data)
+   Compiling staleynet-train v0.1.0 (/home/arpanpathak/Projects/stayleNET/crates/staleynet-train)
+   Compiling staleynet-cli v0.1.0 (/home/arpanpathak/Projects/stayleNET/crates/staleynet-cli)
+    Finished `release` profile [optimized] target(s) in 3.50s
+
+✓ Cargo build succeeded

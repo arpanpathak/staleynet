@@ -1,0 +1,13 @@
+{
+  "prompt": "energetic electronic dance music with a heavy kick drum",
+  "checkpoint": "runs/smoke/best",
+  "checkpoint_step": 0,
+  "audio_seconds": 12.0,
+  "generation": {
+    "steps": 566,
+    "model_calls": 1132,
+    "seconds": 3.375108114
+  },
+  "vocoder_seconds": 1.053866158,
+  "real_time_factor": 0.3690811893333333
+}
