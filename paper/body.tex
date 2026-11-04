@@ -311,7 +311,7 @@ band, and its entries are natural logarithms of energy.
 \end{definition}
 
 \begin{widefigure}
-\includegraphics[width=\linewidth]{figures/book-stft-gemm}
+\includegraphics[width=\linewidth,height=0.3\textheight,keepaspectratio]{figures/book-stft-gemm}
 \caption{The spectrogram computed as two matrix products. The frames of the
 signal, one per row, are multiplied by the windowed Fourier matrix $W$, which
 gives the energy $|X|^2$ at each of 513 frequencies; a second product with the
@@ -441,7 +441,7 @@ described.
 \end{definition}
 
 \begin{widefigure}
-\includegraphics[width=\linewidth]{figures/book-rvq}
+\includegraphics[width=\linewidth,height=0.3\textheight,keepaspectratio]{figures/book-rvq}
 \caption{Residual quantization as a picture. Level 0 replaces a step $x$ by the
 nearest of its prototypes (left); level 1 applies the same rule to what level
 0 missed (middle); each further level removes part of the error that remains
@@ -863,7 +863,7 @@ key and value vectors of position $p$, and $\pi$ is the position map of
 \cref{sec:lyrics}.
 
 \begin{widefigure}
-\includegraphics[width=\linewidth]{figures/book-kv-cache}
+\includegraphics[width=\linewidth,height=0.3\textheight,keepaspectratio]{figures/book-kv-cache}
 \caption{Why a key/value cache helps. Recomputing the whole prefix at every
 step evaluates a growing triangle of attention scores (left), so the work per
 new code grows with the length of the sequence; with a cache, each step
@@ -942,7 +942,7 @@ register blocking, and the way we made one gradient repeatable.
 \subsection{Register blocking}
 
 \begin{widefigure}
-\includegraphics[width=\linewidth]{figures/book-tiled-matmul}
+\includegraphics[width=\linewidth,height=0.3\textheight,keepaspectratio]{figures/book-tiled-matmul}
 \caption{Shared-memory tiling, the starting point of register blocking. Each
 block of threads copies one tile of $A$ and one of $B$ into the fast memory it
 shares, synchronizes, multiplies them, and slides along the inner dimension,
