@@ -34,6 +34,10 @@ Third-party material and provenance
     CC BY 4.0, Rust Foundation, modified in the emblem and the book figures.
     See README.md.
 
+  Rust texture of the emblem
+    "Rust Coarse 01" by Dimitrios Savva and Rico Cilliers, Poly Haven, CC0 1.0.
+    https://polyhaven.com/a/rust_coarse_01
+
 
   cuda-oxide
     External GPU compiler and runtime dependency, not vendored here.

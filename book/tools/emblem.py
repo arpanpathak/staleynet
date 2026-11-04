@@ -9,17 +9,27 @@ shifted right by `l` columns, the delay pattern of MusicGen, so the tokens
 form a staircase. When animated, the columns appear one after another, the
 way the model generates audio one step at a time.
 
-The chain ends in the Rust logo, heavily rusted, hanging from the right-hand
-link: the language the whole system is written in. The logo is the official
-single-path artwork of the Rust Foundation, licensed CC BY 4.0
-(https://github.com/rust-lang/rust-artwork), modified here (rust colours).
+A small gear is bolted to the bottom of the right-hand link and drives the
+Rust logo, itself a gear with 32 teeth: the language the whole system is
+written in. The small gear has 16 teeth, so when animated it turns twice for
+each turn of the logo, in the opposite direction, and their teeth stay meshed. The logo is the
+official single-path artwork of the Rust Foundation, licensed CC BY 4.0
+(https://github.com/rust-lang/rust-artwork), modified here (rust texture).
+
+The metal is a photograph of rusted steel (Poly Haven, CC0; see
+assets/SOURCES.md) laid over the shapes as a texture, with shading on top so
+that the links read as round bars and the gears as discs.
 
 `emblem()` returns the drawing as SVG in a 512 x 512 box, so the cover
 generator can place it at any size.
 """
+import base64
+import math
 import re
 import sys
 from pathlib import Path
+
+ASSETS = Path(__file__).parent / "assets"
 
 BOX = 512
 CENTRE = BOX / 2
@@ -45,71 +55,156 @@ BEAT_SECONDS = 0.45
 CYCLE_SECONDS = 5.4
 DIMMED_OPACITY = 0.12
 
-# The hanging Rust gear: its source file, size and position below the right-hand link.
-RUST_LOGO = Path(__file__).parent / "assets" / "rust-logo-single-path.svg"
+# The rust photograph, and the size of one tile of it in the emblem's units.
+RUST_TEXTURE = ASSETS / "rust-texture.jpg"
+TEXTURE_TILE = 200
+
+# The Rust logo: its source file and the placement of its own viewBox.
+RUST_LOGO = ASSETS / "rust-logo-single-path.svg"
 LOGO_SOURCE_SIZE = 27.781801             # width of the logo's own viewBox, mm
 LOGO_SOURCE_OFFSET = (41.583546, -3.0484439)
-GEAR_DIAMETER = 104
-GEAR_CENTRE = (CENTRE + SIDE_LINK_OFFSET, 462)
-HANGER_TOP = CENTRE + SIDE_LINK_HEIGHT / 2 - 10
-SWING_DEGREES = 5
-SWING_SECONDS = 4.2
+
+# The logo as a gear: 32 teeth, one pointing straight up in the artwork. Its
+# tooth roots lie at 91 % of its outer radius (measured from the artwork), so
+# its pitch circle, halfway between roots and tips, is at 95.5 % of it.
+LOGO_DIAMETER = 96
+LOGO_TEETH = 32
+LOGO_ROOT_FRACTION = 0.91
+LOGO_PITCH_RADIUS = LOGO_DIAMETER / 2 * (1 + LOGO_ROOT_FRACTION) / 2
+TOOTH_HEIGHT = LOGO_DIAMETER / 2 * (1 - LOGO_ROOT_FRACTION) / 2   # pitch circle to tip, and to root
+
+# The driving gear: 16 teeth on the logo's tooth pitch, with 4 round holes
+# between its hub and its rim, and a bolt through its centre.
+DRIVER_TEETH = 16
+DRIVER_PITCH_RADIUS = LOGO_PITCH_RADIUS * DRIVER_TEETH / LOGO_TEETH
+DRIVER_HOLES = 4
+DRIVER_HOLE_RADIUS = 4.2
+DRIVER_HOLE_DISTANCE = 12.5
+DRIVER_BOLT = 4.5
+
+# The driver is bolted to the bottom bar of the right-hand link; the logo
+# meshes directly below it.
+DRIVER_CENTRE = (CENTRE + SIDE_LINK_OFFSET, CENTRE + SIDE_LINK_HEIGHT / 2)
+LOGO_CENTRE = (DRIVER_CENTRE[0], DRIVER_CENTRE[1] + DRIVER_PITCH_RADIUS + LOGO_PITCH_RADIUS)
+
+# One turn of the logo; the driver turns LOGO_TEETH / DRIVER_TEETH times as often.
+LOGO_TURN_SECONDS = 24
 
 INK = "#170a06"
 HIGHLIGHT = "#f6c08a"
-RUST_STOPS = [("0", "#e08a45"), ("0.45", "#a8471a"), ("1", "#4a1a08")]
 
 
 def definitions(prefix):
-    """Rust gradients, a corrosion texture and the clip path of the lower half,
-    with ids made unique by `prefix`."""
-    stops = "".join(f'<stop offset="{offset}" stop-color="{colour}"/>' for offset, colour in RUST_STOPS)
-    gradient = f'<linearGradient id="{prefix}-rust" x1="0" y1="0" x2="0" y2="1">{stops}</linearGradient>'
-    disc = (f'<radialGradient id="{prefix}-gear" cx="0.38" cy="0.32" r="0.8">'
-            '<stop offset="0" stop-color="#e08a46"/><stop offset="0.4" stop-color="#a5481a"/>'
-            '<stop offset="0.75" stop-color="#5e260d"/><stop offset="1" stop-color="#2a1006"/></radialGradient>')
-    corrosion = (f'<filter id="{prefix}-corrode" x="-10%" y="-10%" width="120%" height="120%">'
-                 '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise"/>'
-                 '<feColorMatrix in="noise" type="matrix" values="0 0 0 0 0.25  0 0 0 0 0.08  0 0 0 0 0.02  0 0 0 1.8 -0.7" result="pits"/>'
-                 '<feComposite in="pits" in2="SourceAlpha" operator="in" result="crust"/>'
-                 '<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="crust"/></feMerge></filter>')
+    """The rust texture, the shading laid over it, and the clip path of the
+    lower half, with ids made unique by `prefix`."""
+    photo = base64.b64encode(RUST_TEXTURE.read_bytes()).decode("ascii")
+    texture = (f'<pattern id="{prefix}-rust" patternUnits="userSpaceOnUse" width="{TEXTURE_TILE}" height="{TEXTURE_TILE}">'
+               f'<image href="data:image/jpeg;base64,{photo}" width="{TEXTURE_TILE}" height="{TEXTURE_TILE}"/></pattern>')
+
+    # Light from above: a round bar is brighter on its upper side and darker below.
+    bar_shade = (f'<linearGradient id="{prefix}-bar-shade" x1="0" y1="0" x2="0" y2="1">'
+                 '<stop offset="0" stop-color="#ffd9a8" stop-opacity="0.28"/>'
+                 '<stop offset="0.45" stop-color="#ffd9a8" stop-opacity="0"/>'
+                 '<stop offset="1" stop-color="#0b0402" stop-opacity="0.55"/></linearGradient>')
+
+    # A disc lit from the upper left, darkening toward its rim.
+    disc_shade = (f'<radialGradient id="{prefix}-disc-shade" cx="0.38" cy="0.32" r="0.8">'
+                  '<stop offset="0" stop-color="#ffd9a8" stop-opacity="0.25"/>'
+                  '<stop offset="0.5" stop-color="#ffd9a8" stop-opacity="0"/>'
+                  '<stop offset="1" stop-color="#0b0402" stop-opacity="0.6"/></radialGradient>')
+
     lower_half = f'<clipPath id="{prefix}-lower"><rect x="0" y="{CENTRE}" width="{BOX}" height="{CENTRE}"/></clipPath>'
-    return f"<defs>{gradient}{disc}{corrosion}{lower_half}</defs>"
+    return f"<defs>{texture}{bar_shade}{disc_shade}{lower_half}</defs>"
+
+
+def spin(centre, degrees, seconds):
+    """An endless rotation about `centre` by `degrees` every `seconds`."""
+    cx, cy = centre
+    return (f'<animateTransform attributeName="transform" type="rotate" from="0 {cx} {cy}" '
+            f'to="{degrees} {cx} {cy}" dur="{seconds}s" repeatCount="indefinite"/>')
+
+
+def gear_outline(centre, teeth, pitch_radius, first_tooth_degrees):
+    """A spur gear's outline: trapezoidal teeth between the root and tip circles."""
+    cx, cy = centre
+    tip = pitch_radius + TOOTH_HEIGHT
+    root = pitch_radius - TOOTH_HEIGHT
+    pitch_angle = 2 * math.pi / teeth
+
+    # Fractions of one tooth pitch: the flank rises over 15 %, the tip spans 20 %.
+    corners = [(-0.35, root), (-0.2, tip), (0.0, tip), (0.15, root)]
+    points = []
+    for tooth in range(teeth):
+        centre_angle = math.radians(first_tooth_degrees) + tooth * pitch_angle
+        for fraction, radius in corners:
+            angle = centre_angle + (fraction + 0.025) * pitch_angle
+            points.append(f"{cx + radius * math.cos(angle):.2f},{cy + radius * math.sin(angle):.2f}")
+
+    return "M" + " L".join(points) + " Z"
+
+
+def circle_path(cx, cy, radius):
+    """A circle as a path, so that it can cut a hole in another path."""
+    return (f"M{cx + radius:.2f},{cy:.2f} A{radius},{radius} 0 1 0 {cx - radius:.2f},{cy:.2f} "
+            f"A{radius},{radius} 0 1 0 {cx + radius:.2f},{cy:.2f} Z")
+
+
+def driver(prefix, animated):
+    """The small gear, bolted to the bottom of the right-hand link."""
+    cx, cy = DRIVER_CENTRE
+
+    # A tooth pitch is 360 / 16 = 22.5 degrees; teeth centred at 11.25 + 22.5 k
+    # leave a gap pointing straight down, where the logo's upward tooth sits.
+    outline = gear_outline(DRIVER_CENTRE, DRIVER_TEETH, DRIVER_PITCH_RADIUS, 360 / DRIVER_TEETH / 2)
+    holes = "".join(
+        circle_path(
+            cx + DRIVER_HOLE_DISTANCE * math.cos(2 * math.pi * hole / DRIVER_HOLES + math.pi / 4),
+            cy + DRIVER_HOLE_DISTANCE * math.sin(2 * math.pi * hole / DRIVER_HOLES + math.pi / 4),
+            DRIVER_HOLE_RADIUS,
+        )
+        for hole in range(DRIVER_HOLES)
+    )
+    gear = f'path d="{outline} {holes}" fill-rule="evenodd"'
+
+    turns = LOGO_TEETH / DRIVER_TEETH
+    rotation = spin(DRIVER_CENTRE, 360, LOGO_TURN_SECONDS / turns) if animated else ""
+    bolt = f'cx="{cx}" cy="{cy}"'
+
+    return (f"<g>{rotation}"
+            f'<{gear} fill="url(#{prefix}-rust)" stroke="{INK}" stroke-width="2.2" stroke-linejoin="round"/>'
+            f'<{gear} fill="url(#{prefix}-disc-shade)"/>'
+            "</g>"
+            f'<circle {bolt} r="{DRIVER_BOLT}" fill="url(#{prefix}-rust)" stroke="{INK}" stroke-width="2"/>'
+            f'<circle {bolt} r="{DRIVER_BOLT}" fill="url(#{prefix}-disc-shade)"/>')
 
 
 def rust_gear(prefix, animated):
-    """The rusted Rust logo on a small ring link below the right-hand link,
-    swinging gently about the top of the ring when animated."""
+    """The Rust logo as a gear, turned by the driver in the opposite direction."""
     logo_path = re.search(r' d="([^"]+)"', RUST_LOGO.read_text()).group(1)
-    cx, cy = GEAR_CENTRE
-    scale = GEAR_DIAMETER / LOGO_SOURCE_SIZE
+    cx, cy = LOGO_CENTRE
+    scale = LOGO_DIAMETER / LOGO_SOURCE_SIZE
     half = LOGO_SOURCE_SIZE / 2
     placement = (f"translate({cx},{cy}) scale({scale:.4f}) translate({-half:.4f},{-half:.4f}) "
                  f"translate({LOGO_SOURCE_OFFSET[0]},{LOGO_SOURCE_OFFSET[1]})")
-    pivot = f"{cx} {HANGER_TOP}"
-    swing = (f'<animateTransform attributeName="transform" type="rotate" '
-             f'values="-{SWING_DEGREES} {pivot};{SWING_DEGREES} {pivot};-{SWING_DEGREES} {pivot}" '
-             f'dur="{SWING_SECONDS}s" repeatCount="indefinite"/>') if animated else ""
-    ring_centre = (HANGER_TOP + cy - GEAR_DIAMETER / 2) / 2 + 4
-    ring = f'cx="{cx}" cy="{ring_centre:.1f}" rx="11" ry="19" fill="none"'
-    return (f"<g>{swing}"
-            f'<ellipse {ring} stroke="{INK}" stroke-width="15"/>'
-            f'<ellipse {ring} stroke="url(#{prefix}-rust)" stroke-width="8"/>'
-            f'<path transform="{placement}" d="{logo_path}" fill="url(#{prefix}-gear)" stroke="{INK}" '
-            f'stroke-width="{1.6 / scale:.4f}" stroke-linejoin="round" filter="url(#{prefix}-corrode)"/>'
-            f'<path transform="translate(-1.5,-1.5) {placement}" d="{logo_path}" fill="none" stroke="{HIGHLIGHT}" '
-            f'stroke-width="{0.7 / scale:.4f}" opacity="0.45"/>'
+    rotation = spin(LOGO_CENTRE, -360, LOGO_TURN_SECONDS) if animated else ""
+    logo = f'path transform="{placement}" d="{logo_path}"'
+
+    return (f"<g>{rotation}"
+            f'<{logo} fill="url(#{prefix}-rust)" stroke="{INK}" stroke-width="{1.6 / scale:.4f}" stroke-linejoin="round"/>'
+            f'<{logo} fill="url(#{prefix}-disc-shade)"/>'
             "</g>")
 
 
 def link(cx, cy, width, height, stroke, prefix):
-    """One chain link seen face on: a dark edge, a rust body and a thin highlight."""
+    """One chain link seen face on: a dark edge, rusted steel, shading and a thin highlight."""
     x, y, radius = cx - width / 2, cy - height / 2, min(width, height) / 2
     shape = f'x="{x}" y="{y}" width="{width}" height="{height}" rx="{radius}" fill="none"'
     highlight = f'stroke-dasharray="{width * 0.6} {width * 4}" stroke-dashoffset="{-width * 0.2}"'
+
     return (f'<rect {shape} stroke="{INK}" stroke-width="{stroke + 8}"/>'
             f'<rect {shape} stroke="url(#{prefix}-rust)" stroke-width="{stroke}"/>'
-            f'<rect {shape} stroke="{HIGHLIGHT}" stroke-width="2" {highlight} opacity="0.7"/>')
+            f'<rect {shape} stroke="url(#{prefix}-bar-shade)" stroke-width="{stroke}"/>'
+            f'<rect {shape} stroke="{HIGHLIGHT}" stroke-width="1.5" {highlight} opacity="0.22"/>')
 
 
 def side_links(prefix):
@@ -121,6 +216,7 @@ def side_links(prefix):
         drawing = link(CENTRE + side * SIDE_LINK_OFFSET, CENTRE, SIDE_LINK_WIDTH, SIDE_LINK_HEIGHT, SIDE_LINK_STROKE, prefix)
         behind.append(drawing)
         in_front.append(f'<g clip-path="url(#{prefix}-lower)">{drawing}</g>')
+
     return "".join(behind), "".join(in_front)
 
 
@@ -147,6 +243,7 @@ def tokens(animated):
             animation = reveal(column) if animated else ""
             cells.append(f'<rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" rx="6" '
                          f'fill="{LEVEL_COLOURS[level]}" stroke="{INK}" stroke-width="3">{animation}</rect>')
+
     return "".join(cells)
 
 
@@ -154,7 +251,9 @@ def emblem(prefix="emblem", animated=True):
     """The emblem as SVG elements in a 512 x 512 box."""
     behind, in_front = side_links(prefix)
     main_link = link(CENTRE, CENTRE, LINK_WIDTH, LINK_HEIGHT, LINK_STROKE, prefix)
-    return f"{definitions(prefix)}<g>{rust_gear(prefix, animated)}{behind}{main_link}{in_front}{tokens(animated)}</g>"
+    gears = rust_gear(prefix, animated) + driver(prefix, animated)
+
+    return f"{definitions(prefix)}<g>{behind}{main_link}{in_front}{gears}{tokens(animated)}</g>"
 
 
 def main(output):
