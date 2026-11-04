@@ -971,11 +971,15 @@ share of the output, while the most recent audio is kept as context.
 \section{GPU kernels}
 \label{sec:gpu}
 
-Matrix products account for almost all of the arithmetic: the spectrogram,
-the nearest-prototype search, the projections of the Transformer and both
-products inside attention. Our tutorial \cite{pathak2026tiled} derives the
-shared-memory tiled product in detail; here we describe one further step,
-register blocking, and the way we made one gradient repeatable.
+Almost all of the arithmetic in StaleyNET is matrix multiplication: the
+spectrogram, the nearest-prototype search, every projection of the Transformer
+and both products inside attention. A GPU runs thousands of lightweight
+\emph{threads} at once, grouped into \emph{blocks} that cooperate, so the speed
+of the whole system depends on how well one matrix-product kernel keeps those
+threads busy and fed with data. Our tutorial \cite{pathak2026tiled} derives the
+shared-memory tiled product in detail. Here we describe one further step,
+register blocking, which roughly doubles its speed, and a way to make one
+gradient repeatable bit for bit.
 
 \subsection{Register blocking}
 
@@ -1082,18 +1086,17 @@ bit on the same device.
 \section{Experiments}
 \label{sec:experiments}
 
-The hardware is described in \cref{tab:hardware} in the appendix. The main
-corpus is the Song Describer Dataset \cite{manco2023songdescriber}, 706
-two-minute Creative Commons excerpts with 1\,106 captions written by
-listeners. Songs are divided between training and evaluation by artist, so
-that no voice appears on both sides, which leaves 667 songs for training and 39
-for evaluation. We report spectral errors as the mean absolute difference
+Our main corpus is the Song Describer Dataset \cite{manco2023songdescriber}:
+706 two-minute Creative Commons excerpts with 1\,106 captions written by
+listeners. Songs are split between training and evaluation by artist, so that
+no voice appears on both sides, leaving 667 songs for training and 39 for
+evaluation; \cref{tab:hardware} in the appendix describes the hardware. We report spectral errors as the mean absolute difference
 between two log-mel spectrograms, averaged over frames and bands, in
 \emph{log units per band}. Because the spectrogram holds natural logarithms of
 energy, an error of one log unit means that a band's energy is off by a factor
 of $e \approx 2.7$, or $10 \log_{10} e \approx 4.3$\,dB.
 
-\paragraph{Correctness and speed.} All 38 tests pass on the Orin NX, and the
+\paragraph{Correctness and speed.} All 169 tests pass on the Orin NX, and the
 kernel tests also pass on the Thor. They compare every kernel with a CPU
 implementation at deliberately awkward sizes, check every gradient
 numerically, verify the cache theorem, and confirm that a small network can
