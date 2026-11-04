@@ -21,6 +21,6 @@
   \draw[flow] (sample) -- (decode);
   \draw[flow] (decode) -- (gl);
   \draw[flow] (gl) -- (out);
-  \node[caption text, above=1.5mm of mel.north east, anchor=south] {training};
-  \node[caption text, below=1.5mm of decode.south west, anchor=north] {generation};
+  \node[font=\sffamily\footnotesize\bfseries, text=muted, anchor=south west] at ($(audio.north west)+(0,2.5mm)$) {Training};
+  \node[font=\sffamily\footnotesize\bfseries, text=muted, anchor=north west] at ($(out.south west)+(0,-2.5mm)$) {Generation};
 \end{tikzpicture}

@@ -12,6 +12,8 @@ for source in figures/*.tex; do
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \input{$PWD/macros}
+% Blurred shadows do not survive the conversion to SVG; the book draws flat blocks.
+\tikzset{block/.style={rounded corners=6pt, draw=inkline!28, line width=0.45pt, align=center, inner sep=5pt, minimum height=2.2em}}
 \begin{document}
 \input{$PWD/figures/$name}
 \end{document}
