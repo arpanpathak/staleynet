@@ -10,12 +10,14 @@ mod matmul;
 mod normalization;
 mod optimizer;
 mod signal;
+mod synthesis;
 
 pub use attention::HeadLayout;
 pub use embedding::TokenIndex;
 pub use loss::CrossEntropyHead;
 pub use matmul::{BatchStrides, MatmulSpec, Storage};
 pub use optimizer::AdamWHyperparameters;
+pub use synthesis::Convolution;
 
 /// Whether an operation replaces its output or adds into it. Accumulation is
 /// how gradients from several uses of one parameter are summed.

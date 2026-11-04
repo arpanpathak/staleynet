@@ -27,6 +27,7 @@ pub mod matmul;
 pub mod normalization;
 pub mod optimizer;
 pub mod signal;
+pub mod synthesis;
 
 /// Threads per warp on every NVIDIA architecture to date.
 /// See <https://docs.nvidia.com/cuda/cuda-c-programming-guide/#simt-architecture>
@@ -45,3 +46,4 @@ pub const EMPTY_TOKEN: u32 = u32::MAX;
 pub const NEGATIVE_LARGE: f32 = -3.0e38;
 
 pub use matmul::{BLOCKED_THREADS_PER_EDGE, BLOCKED_TILE, MATMUL_TILE, Operand, Product};
+pub use synthesis::Convolution;

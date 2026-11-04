@@ -1,6 +1,6 @@
 //! The GPU handle and the device-resident tensor types.
 
-use crate::kernels::{attention, elementwise, embedding, loss, matmul, normalization, optimizer, signal};
+use crate::kernels::{attention, elementwise, embedding, loss, matmul, normalization, optimizer, signal, synthesis};
 use cuda_core::{CudaContext, CudaStream, DeviceBuffer, DriverError};
 use cuda_host::EmbeddedModuleError;
 use std::fmt;
@@ -72,6 +72,9 @@ pub struct Kernels {
 
     /// Spectrogram helpers and the nearest-prototype search.
     pub(crate) signal: signal::kernels::LoadedModule,
+
+    /// The neural vocoder: inverse STFT, predicted spectrum, convolutions.
+    pub(crate) synthesis: synthesis::kernels::LoadedModule,
 }
 
 impl Kernels {
@@ -86,6 +89,7 @@ impl Kernels {
             loss: loss::kernels::load(context)?,
             optimizer: optimizer::kernels::load(context)?,
             signal: signal::kernels::load(context)?,
+            synthesis: synthesis::kernels::load(context)?,
         })
     }
 }
