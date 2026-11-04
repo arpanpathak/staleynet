@@ -1,0 +1,31 @@
+{
+  "model": {
+    "width": 256,
+    "heads": 8,
+    "layers": 6,
+    "feed_forward_multiplier": 4,
+    "context_length": 768,
+    "prompt_bytes": 126,
+    "codebooks": 4,
+    "codebook_size": 1024
+  },
+  "optimizer": {
+    "peak_learning_rate": 0.0006,
+    "final_learning_rate": 6e-05,
+    "warmup_steps": 500,
+    "decay_steps": 30000,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "epsilon": 1e-08,
+    "weight_decay": 0.1,
+    "max_gradient_norm": 1.0
+  },
+  "batch_size": 4,
+  "sequence_length": 768,
+  "steps": 30000,
+  "log_every": 25,
+  "validate_every": 500,
+  "validation_batches": 16,
+  "checkpoint_every": 500,
+  "seed": 1234
+}

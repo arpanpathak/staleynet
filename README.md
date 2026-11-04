@@ -102,6 +102,33 @@ Training writes `latest/` (weights, AdamW moments and step) every
 `checkpoint_every` steps; `--resume` continues from it without losing the
 optimiser state, and `--steps N` extends a finished run.
 
+## Training configurations and a second Jetson
+
+`configs/` holds the configuration of every training run reported in the book
+and the paper, from `smoke.json` (a short first run) to `pq-large-thor.json`
+(the 42.9-million-parameter model on the 16-code tokenizer).
+
+A second Jetson can train while this one samples or records. With an ssh host
+named `thor`:
+
+```bash
+deploy/thor/sync.sh                   # copy code and tokenised data, then build there
+ssh thor 'cd Projects/staleynet && target/release/staleynet train --cache data/cache-g4l4f1 --run runs/pq-large --config configs/pq-large-thor.json'
+deploy/thor/pull-run.sh pq-large      # fetch the best checkpoint and its tokenizer
+```
+
+`THOR_HOST` and `THOR_PROJECT` select another host or directory.
+
+## Toolchain
+
+cuda-oxide follows upstream `main`; `Cargo.lock` records the commit last built
+and tested, and `rust-toolchain.toml` names the toolchain that this commit of
+cuda-oxide requires. To move to a newer cuda-oxide, run
+`cargo update -p cuda-core -p cuda-device -p cuda-host` and copy the channel
+from `cuda-oxide/rust-toolchain.toml` upstream into `rust-toolchain.toml`.
+A machine that has to stay on an older cuda-oxide can still build the project;
+see [docs/legacy-cuda-oxide.md](docs/legacy-cuda-oxide.md).
+
 ## Book and paper
 
 The book covers the method, the measurements, and the limitations. It is built
@@ -204,7 +231,7 @@ the browser's warning once:
 cd studio && ./make-certificate.sh
 cargo run --release -- --address 0.0.0.0:8765 --tls-cert certs/studio.crt --tls-key certs/studio.key
 # open https://<jetson-ip>:8765
-deploy/thor/pull-run.sh thor-base   # refresh the Thor checkpoint while it trains
+deploy/thor/pull-run.sh pq-large    # refresh a remote checkpoint while it trains
 ```
 
 ## Visual assets
