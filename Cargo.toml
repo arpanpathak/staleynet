@@ -1,0 +1,40 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/staleynet-audio",
+    "crates/staleynet-cuda",
+    "crates/staleynet-model",
+    "crates/staleynet-data",
+    "crates/staleynet-train",
+    "crates/staleynet-cli",
+]
+default-members = ["crates/staleynet-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# cuda-oxide is pinned to the revision whose codegen backend is installed.
+cuda-device = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "b7fe543b863cdef46362e5f69797906b84d499c7" }
+cuda-host = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "b7fe543b863cdef46362e5f69797906b84d499c7" }
+cuda-core = { git = "https://github.com/NVlabs/cuda-oxide.git", rev = "b7fe543b863cdef46362e5f69797906b84d499c7" }
+libm = "0.2"
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+half = "2"
+hound = "3.5"
+rayon = "1"
+rustfft = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "flac", "ogg", "vorbis", "wav", "pcm"] }
+
+[profile.release]
+opt-level = 3
+
+[profile.dev]
+opt-level = 2
