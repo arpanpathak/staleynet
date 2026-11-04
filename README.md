@@ -102,6 +102,13 @@ use 8 blocks of width 512 (42.9 million) and 12 blocks of width 768
   per band (about 3.4 dB to 1.7 dB).
 * **The language model learns.** Held-out loss falls well below a uniform
   guess (6.93 nats per code) in every run; the best first model reached 4.02.
+* **Griffin-Lim limits how human the voices sound.** It estimates phase
+  without ever hearing real audio, so sustained harmonics, the substance of a
+  sung vowel, lose their coherence and voices take on a metallic smear. Even on
+  a perfect spectrogram it adds 0.19 log units of error per band, and the
+  audible damage is larger than that number shows. A neural vocoder in the
+  style of Vocos, trained on spectrograms decoded from our own tokens with the
+  original recordings as targets, is being built to replace it.
 * **Lyrics are not yet used.** A paired test that compares the loss with the
   right, no and wrong lyrics finds no reliable difference on held-out songs.
   The lyrics corpus (78 songs) is small, and a larger one is in preparation.

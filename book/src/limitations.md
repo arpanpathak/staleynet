@@ -13,9 +13,15 @@ show that the tokenizer loses about 0.7 log units of spectral detail, roughly
 3 dB per frequency band, and that a model which reproduces its training audio
 perfectly still sounds only as good as this reconstruction. The detail that
 singing depends on, the harmonics and formants that make vowels
-recognisable, is precisely what is lost. Until the representation improves,
+recognizable, is precisely what is lost. Until the representation improves,
 longer training of the language model cannot make voices intelligible.
-Griffin-Lim adds a further, smaller loss in the form of phase artifacts.
+
+Griffin-Lim adds a further loss that the spectral measure understates: it
+estimates phase without ever having heard real audio, so harmonics lose their
+frame-to-frame coherence and voices take on a metallic smear (see
+[Audio Representation](audio.md#why-griffin-lim-smears-voices)). A neural
+vocoder in the style of Vocos, trained on spectrograms decoded from
+StaleyNET's own tokens, is being built to replace it.
 
 The lyrics input does not yet influence the output measurably. The first
 models trained with it produced the same predictions with correct lyrics as
