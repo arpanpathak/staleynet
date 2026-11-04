@@ -223,7 +223,11 @@ fn locate_song_describer_audio(audio_root: &Path, relative: &str) -> Option<Path
 
 /// Every audio file under `root` (recursively), described by its sidecar
 /// `.txt` (one caption per non-empty line) or, failing that, its file name.
-/// Each file is its own split group.
+///
+/// A file directly in `root` is its own split group. Files inside a subfolder
+/// share that subfolder as their group, so a folder per artist keeps all of an
+/// artist's songs on the same side of the train/validation split, and the
+/// validation loss measures how well the model handles voices it never heard.
 pub fn folder(root: &Path) -> Result<Vec<Track>> {
     let mut audio_files = Vec::new();
     collect_audio_files(root, &mut audio_files)?;
@@ -248,10 +252,22 @@ pub fn folder(root: &Path) -> Result<Vec<Track>> {
 
         let lyrics =
             std::fs::read_to_string(audio_path.with_extension(LYRICS_SIDECAR_SUFFIX)).map(|text| untimed_lines(&text)).unwrap_or_default();
-        tracks.push(Track { split: split_for(&id), split_group: id.clone(), id, audio_path, captions, lyrics });
+        let split_group = folder_split_group(root, &audio_path).unwrap_or_else(|| id.clone());
+        tracks.push(Track { split: split_for(&split_group), split_group, id, audio_path, captions, lyrics });
     }
 
     Ok(tracks)
+}
+
+/// The first subfolder of `root` that contains `audio_path`, as a split group,
+/// or `None` for a file directly in `root`.
+fn folder_split_group(root: &Path, audio_path: &Path) -> Option<String> {
+    let relative = audio_path.strip_prefix(root).ok()?;
+    let mut components = relative.components();
+    let first = components.next()?;
+    components.next()?;
+
+    Some(format!("folder-{}", first.as_os_str().to_string_lossy()))
 }
 
 /// Non-empty lines of `text` as lyrics with unknown timing.
@@ -361,6 +377,15 @@ mod tests {
             lines,
             vec![LyricLine { text: "first line".into(), timing: None }, LyricLine { text: "second line".into(), timing: None }]
         );
+    }
+
+    #[test]
+    fn subfolders_are_split_groups_and_root_files_are_their_own() {
+        let root = Path::new("/music");
+
+        assert_eq!(folder_split_group(root, Path::new("/music/artist-7/song.mp3")).as_deref(), Some("folder-artist-7"));
+        assert_eq!(folder_split_group(root, Path::new("/music/artist-7/live/song.mp3")).as_deref(), Some("folder-artist-7"));
+        assert_eq!(folder_split_group(root, Path::new("/music/take.wav")), None);
     }
 
     #[test]
