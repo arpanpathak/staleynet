@@ -9,11 +9,12 @@
 </p>
 
 <p align="center">
-  <a href="https://crates.io/crates/staleynet-audio"><img src="docs/assets/badges/crates.svg" height="34" alt="crates.io 0.1.2"></a>&nbsp;
+  <a href="https://crates.io/crates/staleynet-audio"><img src="docs/assets/badges/crates.svg" height="34" alt="crates.io 0.1.3"></a>&nbsp;
   <a href="LICENSE"><img src="docs/assets/badges/license.svg" height="34" alt="Apache-2.0"></a>&nbsp;
   <a href="docs/assets/paper-preprint.pdf"><img src="docs/assets/badges/paper.svg" height="34" alt="Paper"></a>&nbsp;
   <a href="#book-and-paper"><img src="docs/assets/badges/book.svg" height="34" alt="Book"></a>&nbsp;
-  <a href="https://huggingface.co/arpanpathak/staleynet-checkpoints"><img src="docs/assets/badges/checkpoints.svg" height="34" alt="Checkpoints"></a>
+  <a href="https://huggingface.co/arpanpathak/staleynet-checkpoints"><img src="docs/assets/badges/checkpoints.svg" height="34" alt="Checkpoints on Hugging Face: 9 runs"></a>&nbsp;
+  <a href="https://huggingface.co/datasets/arpanpathak/staleynet-data"><img src="docs/assets/badges/data.svg" height="34" alt="Dataset on Hugging Face: 3.1 GB"></a>
 </p>
 
 <p align="center">
