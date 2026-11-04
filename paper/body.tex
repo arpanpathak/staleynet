@@ -559,10 +559,12 @@ tried.
 \section{The model}
 \label{sec:model}
 
-The model (\cref{fig:model}) is a decoder-only Transformer
-\cite{vaswani2017attention,radford2019language}. It reads text and audio as a
-single sequence and predicts, at each position, what comes next, much as a
-text model predicts the next word.
+At the heart of StaleyNET is a Transformer of the kind used for language
+models such as GPT-2 \cite{vaswani2017attention,radford2019language}
+(\cref{fig:model}): a stack of identical blocks that reads one long sequence,
+beginning with the text and continuing with the audio, and predicts at every
+position what comes next. It is called \emph{decoder-only} because one stack
+both reads the text and produces the audio, with no separate encoder.
 
 \begin{figure}[htbp]
 \centering
@@ -667,23 +669,44 @@ length of the sequence by $C$.
 \subsection{The network and its objective}
 \label{sec:objective}
 
-In each block, attention lets every position gather information from itself
-and from earlier positions, and a small feed-forward network then transforms
-each position on its own. Both parts normalize their input
-\cite{zhang2019rmsnorm,xiong2020layernorm} and add their result to it:
+Each block does two things. \emph{Attention} lets every position gather
+information from earlier positions: each position forms a query, compares it
+with a key formed by every earlier position, and takes a weighted average of
+their values, the weights reflecting how well query and key match. Attention
+is \emph{causal}: a position may look only at itself and at earlier positions,
+since during generation later ones do not yet exist. A small
+\emph{feed-forward} network then transforms each position on its own. Each
+part first rescales its input to a standard size (RMS normalization
+\cite{zhang2019rmsnorm,xiong2020layernorm}) and then adds its result to its
+input rather than replacing it, a \emph{residual connection} that keeps deep
+stacks easy to train:
 \begin{align*}
 h &= x + \operatorname{Attention}(\operatorname{Norm}(x)), \\
 y &= h + \operatorname{FeedForward}(\operatorname{Norm}(h)),
 \end{align*}
 where $x$ is the sequence entering the block, one vector of $d$ numbers per
-position, and $y$ the sequence leaving it, of the same size. Norm rescales each
-vector to unit root-mean-square size and multiplies it by learned weights, and attention is split into several
-\emph{heads}, each of which attends with its own $d/\text{heads}$ numbers. The
-feed-forward network expands each vector to $4d$ numbers, applies the GELU
-activation \cite{hendrycks2016gelu}, and projects it back to $d$. Our first
-model has 6 blocks of width $d = 256$ with 8 attention heads (7.1 million
-parameters); the larger model of \cref{sec:large} has 8 blocks of width
-$d = 512$ (42.9 million parameters).
+position, and $y$ the sequence leaving it. Attention is split into $h$
+\emph{heads}, each attending with its own $d/h$ numbers, so that different
+heads can track different relations; the feed-forward network expands each
+vector to $4d$ numbers, applies the GELU activation \cite{hendrycks2016gelu},
+and projects it back to $d$. \Cref{tab:models} lists the two models of this
+paper.
+
+\begin{table}[htbp]
+\centering
+\caption{Model sizes: blocks $N$, width $d$, heads $h$ and codes per step $C$.}
+\label{tab:models}
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lrrrrr}
+\toprule
+model & $N$ & $d$ & $h$ & $C$ & parameters \\
+\midrule
+first & 6 & 256 & 8 & 4 & 7.1\,M \\
+large (\cref{sec:large}) & 8 & 512 & 8 & 16 & 42.9\,M \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 At position $p$ the model outputs, for each codebook $\ell$, a score for each of
 the $K$ possible codes, and a softmax turns the scores into a probability
