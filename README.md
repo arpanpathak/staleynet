@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/emblem.png" width="132" alt="StaleyNET emblem: a rusted chain whose central link holds a staircase of enamelled audio tokens, with the Rust logo hanging below">
+  <img src="docs/assets/emblem.svg" width="96" alt="StaleyNET emblem: a rusted chain link enclosing a staircase of audio tokens">
 </p>
 
 <h1 align="center">StaleyNET</h1>
@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/cover.png" alt="StaleyNET cover: a rusted chain holding a staircase of audio tokens beside the words Music from a sentence" width="100%">
+  <img src="docs/assets/cover.svg" alt="StaleyNET cover: a chain link around a staircase of audio tokens, with the words Music from a sentence" width="100%">
 </p>
 
 StaleyNET turns a short description such as *"grunge rock, raw male voice"*,
@@ -268,22 +268,14 @@ cargo run --release -- --address 0.0.0.0:8765 --tls-cert certs/studio.crt --tls-
 ## Name and emblem
 
 StaleyNET is named for Layne Staley (1967 to 2002), singer of Alice in Chains.
-The emblem is a rusted chain. Its central link holds the model's view of music:
-4 rows of enamelled tiles, one per residual level of the tokenizer from bone
-(coarse) to deep rust (fine), each row shifted one column to the right as in
-the delay pattern, so that the tiles form a staircase. From the link's lower
-wire hangs the Rust logo on a small shackle.
-
-Nothing in it is drawn by hand. The chain is rendered as three-dimensional
-geometry: every link is a tube that turns a quarter turn from its neighbour,
-the links interlock through a depth buffer, and every pixel is lit from its
-true surface orientation. The rust comes from a public-domain photograph of a
-corroded chain ([W.carter, CC0](https://commons.wikimedia.org/wiki/File:Very_rusty_chain.jpg)),
-and the tiles are embossed and glazed. [`book/tools/assets/SOURCES.md`](book/tools/assets/SOURCES.md)
-lists the sources.
+The emblem is a chain link enclosing the model's view of music: 4 rows of
+tokens, 1 per residual codebook from coarse (bone) to fine (rust), shifted
+into the staircase of the delay pattern. On the animated cover the columns
+light up in sequence, as the model generates step by step. Both are
+drawn by code:
 
 ```bash
-python3 book/tools/emblem.py book/src/figures/emblem.png
+python3 book/tools/emblem.py book/src/figures/emblem.svg
 python3 book/tools/cover.py  book/src/figures/cover.svg
 ```
 
