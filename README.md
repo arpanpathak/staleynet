@@ -13,7 +13,7 @@
   <a href="https://crates.io/crates/staleynet-audio"><img src="docs/assets/badges/crates.svg" height="34" alt="crates.io 0.1.3"></a>&nbsp;
   <a href="LICENSE"><img src="docs/assets/badges/license.svg" height="34" alt="Apache-2.0"></a>&nbsp;
   <a href="docs/assets/paper-preprint.pdf"><img src="docs/assets/badges/paper.svg" height="34" alt="Paper"></a>&nbsp;
-  <a href="#book-and-paper"><img src="docs/assets/badges/book.svg" height="34" alt="Book"></a>&nbsp;
+  <a href="https://arpanpathak.github.io/staleynet/"><img src="docs/assets/badges/book.svg" height="34" alt="Book"></a>&nbsp;
   <a href="https://huggingface.co/arpanpathak/staleynet-checkpoints"><img src="docs/assets/badges/checkpoints.svg" height="34" alt="Checkpoints on Hugging Face: 9 runs"></a>&nbsp;
   <a href="https://huggingface.co/datasets/arpanpathak/staleynet-data"><img src="docs/assets/badges/data.svg" height="34" alt="Dataset on Hugging Face: 3.1 GB"></a>
 </p>
@@ -34,7 +34,7 @@ stage by stage, what limits the sound.
 The models train on an NVIDIA Jetson Orin NX (16 GB) and an NVIDIA Jetson AGX
 Thor (128 GB), two embedded computers. The method, the measurements and the
 limitations are written up in a [paper](docs/assets/paper-preprint.pdf) and a
-[book](book/src/SUMMARY.md).
+[book](https://arpanpathak.github.io/staleynet/).
 
 ## How it works
 
@@ -203,8 +203,10 @@ the dataset card describes how to obtain it.
 
 ## Book and paper
 
-The [book](book/src/SUMMARY.md) explains the method, the measurements and the
-limitations chapter by chapter; build it with `mdbook serve book`. The paper
+The [book](https://arpanpathak.github.io/staleynet/) explains the method, the
+measurements and the limitations chapter by chapter. It is rebuilt and
+published on GitHub Pages whenever `book/` changes; to read it locally, run
+`mdbook serve book`. The paper
 has a single-column [preprint](docs/assets/paper-preprint.pdf) and a
 two-column [IEEE version](docs/assets/paper-ieee.pdf), with every algorithm
 given as numbered pseudocode with a worked example. The LaTeX sources are in

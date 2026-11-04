@@ -9,4 +9,5 @@ additional-css = ["theme/custom.css"]
 mathjax-support = true
 default-theme = "light"
 preferred-dark-theme = "navy"
-git-repository-url = ""
+git-repository-url = "https://github.com/arpanpathak/staleynet"
+site-url = "/staleynet/"
