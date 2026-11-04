@@ -82,8 +82,8 @@ per frequency instead of about ten. It was nevertheless chosen because the GPU
 code for matrix products is the same code that runs the Transformer, which is
 tested thoroughly, so the spectrogram inherits that verification instead of
 requiring a second numerical kernel. In practice the cost is acceptable: on
-the Orin NX the GPU analyses 60 seconds of audio in 78 ms, slightly faster than
-a multithreaded CPU FFT (98 ms). A test compares the GPU spectrogram with an
+the Orin NX the GPU analyzes 60 seconds of audio in 47 ms, against 73 ms for a
+multithreaded CPU FFT. A test compares the GPU spectrogram with an
 FFT-based reference and finds them within 0.01 log units in every audible
 band.
 

@@ -25,24 +25,31 @@ algorithm is presented with a worked example.
 \section{Introduction}
 \label{sec:introduction}
 
-Generating music from a sentence of text has made remarkable progress in
-recent years \cite{agostinelli2023musiclm,copet2023musicgen}. Most current
-systems combine several large components that are trained separately: a
-neural codec that turns audio into tokens, a text encoder that turns the
-prompt into vectors, and a Transformer that relates the two. This division of
-labor works very well, although it can make it difficult to tell which
-component is responsible for a particular quality, or a particular flaw, in
-what one hears.
+Text-to-music generation has advanced quickly
+\cite{agostinelli2023musiclm,copet2023musicgen}. Most current systems assemble
+large components trained separately: a neural codec compresses audio into
+discrete \emph{tokens}, small integers that each stand for a short stretch of
+sound; a text encoder turns the prompt into vectors; and a Transformer learns
+to predict the tokens from the text. Such a division of labor performs well,
+yet it obscures which component is responsible for a given quality, or a given
+flaw, in what one hears.
 
-In this work we approached the problem from the other direction and built a
-complete, if modest, system ourselves (\cref{fig:overview}). StaleyNET
-computes its spectrograms, learns its tokenizer, trains its Transformer and
-reconstructs its waveforms without any pretrained component. It is written in
-Rust, and its GPU kernels are compiled from Rust by cuda-oxide \cite{cudaoxide}.
-We trained it on an NVIDIA Jetson Orin NX with 16\,GB of memory and on an
-NVIDIA Jetson AGX Thor with 128\,GB, two embedded computers designed for
-robotics. Owning every stage gave us the opportunity to study each one in
-isolation, and much of the paper is about what that study revealed.
+StaleyNET approaches the problem from the other end (\cref{fig:overview}).
+Rather than borrowing pretrained parts, it builds every stage itself: it
+computes its own spectrograms, learns its own tokenizer, trains its own
+Transformer and reconstructs its own waveforms. Everything is written in Rust,
+including the GPU kernels, which cuda-oxide \cite{cudaoxide} compiles from Rust.
+Training ran on two embedded computers designed for robotics: an NVIDIA Jetson
+Orin NX with 16\,GB of memory and an NVIDIA Jetson AGX Thor with 128\,GB.
+
+A single probabilistic model organizes the whole system. Music is represented
+as a sequence of tokens, and its probability given the text is factorized by
+the chain rule into a product of next-token predictions
+(\cref{sec:probability}). One autoregressive Transformer learns all of these
+predictions at once, and generation samples them one after another. Because
+this factorization separates the audio representation from the model of it,
+each stage can be measured on its own, and much of this paper reports what
+those measurements revealed.
 
 \begin{widefigure}
 \resizebox{\linewidth}{!}{\input{figures/overview}}
@@ -54,45 +61,45 @@ back into sound.}
 \label{fig:overview}
 \end{widefigure}
 
-Our first models learned text-conditioned structure well above chance, yet the
-voices they produced sounded blurred. Two experiments helped us locate the
-cause. When we passed held-out recordings through the tokenizer and the
-vocoder alone, without any model, most of the spectral detail was already
-lost. When we trained the model on a single excerpt, it reproduced that
-excerpt token for token. Together these results suggested that the tokenizer
-was the main limitation, and a revised tokenizer that quantizes groups of
-frequency bands separately reduced the reconstruction error by about half.
+Our first models learned text-conditioned structure well above chance, yet
+their voices sounded blurred. Two experiments located the cause. Passed
+through the tokenizer and the vocoder alone, with no model involved, held-out
+recordings had already lost most of their spectral detail; trained on a single
+excerpt, the model reproduced it token for token. The tokenizer, not the
+language model, was the main limitation, and a revised tokenizer that
+quantizes groups of frequency bands separately halved the reconstruction
+error.
 
-The contributions of this paper are as follows.
+This paper makes four contributions.
 \begin{itemize}[leftmargin=1.4em, itemsep=1pt]
-\item A complete text-to-music pipeline written in Rust, including its GPU
-  kernels, and trained from scratch on embedded GPUs.
-\item A description of each algorithm with a worked example and, where an
-  algorithm is easy to get wrong, an argument for its correctness.
-\item A way of adding a lyrics input to a trained model without discarding
-  what it has learned, together with a paired test of whether the input is
+\item A complete text-to-music system written in Rust, GPU kernels included,
+  and trained from scratch on embedded GPUs.
+\item Every algorithm stated as numbered pseudocode with a worked example and,
+  where an algorithm is easy to get wrong, a proof of its correctness.
+\item A position map that adds a lyrics input to a trained model without
+  discarding what it has learned, and a paired test of whether that input is
   used.
-\item A stage-by-stage analysis that separates the errors of the tokenizer,
-  the vocoder and the language model, and a tokenizer study guided by it.
+\item A stage-by-stage error analysis that separates the tokenizer, the
+  vocoder and the language model, and a tokenizer study guided by it.
 \end{itemize}
 
-We write algorithms in the style of Cormen et al.\
-\cite{cormen2022introduction}, as in our earlier tutorial on tiled matrix
-multiplication \cite{pathak2026tiled}. Each procedure first states its inputs
-and its output in words, with their units; its lines are numbered, and the text
-refers to them. The range $[a, b)$ denotes the integers $a, \dots, b-1$, and
-indices start at 0. Every symbol is defined where it first appears, and
-\cref{tab:symbols} collects the ones used in more than one section. A few
-letters are reused for a different purpose inside a single subsection, for
-example $K$ for the keys of attention; the text says so where this happens.
+\paragraph{Conventions.} Algorithms follow the style of Cormen et al.\
+\cite{cormen2022introduction}, as in our tutorial on tiled matrix
+multiplication \cite{pathak2026tiled}: each procedure states its inputs and its
+output in words, with units, and the text refers to its numbered lines.
+$[a, b)$ denotes the integers $a, \dots, b-1$, and indices start at 0. Each
+symbol is defined where it first appears, and \cref{tab:symbols} collects those
+used in more than one section. A few letters take a different meaning inside a
+single subsection, such as $K$ for the keys of attention, and the text points
+this out.
 
-Two units recur throughout. Frequencies and sample rates are given in hertz
-(Hz): a tone of 440\,Hz vibrates 440 times per second, and a sample rate of
-24\,kHz means that the waveform is recorded as 24\,000 numbers per second.
-Losses are given in \emph{nats}, the unit of information obtained with the
-natural logarithm: a prediction that gives the correct answer probability $q$
-costs $-\ln q$ nats, so a certain prediction costs 0 and a uniform guess among
-1\,024 codes costs $\ln 1024 \approx 6.93$.
+Two units recur. Frequencies and sample rates are measured in hertz (Hz): a
+440\,Hz tone vibrates 440 times per second, and audio sampled at 24\,kHz is
+stored as 24\,000 numbers per second. Losses are measured in \emph{nats}, the
+unit of information based on the natural logarithm: a prediction that assigns
+probability $q$ to the correct answer costs $-\ln q$ nats, so a certain
+prediction costs nothing and a uniform guess among 1\,024 tokens costs
+$\ln 1024 \approx 6.93$.
 
 \begin{table}[htbp]
 \centering
@@ -108,8 +115,8 @@ $N$ & samples in one spectrogram frame & 1\,024 (42.7\,ms) \\
 $H$ & hop: samples between the starts of two frames & 256 (10.7\,ms) \\
 $S$ & log-mel spectrogram, one row per frame, one column per mel band & $\cdot \times 128$ \\
 step & the frames described by one set of codes & 1 or 2 frames \\
-$C$ & codebooks (codes) per step & 4 or 16 \\
-$K$ & prototypes per codebook & 1\,024 \\
+$C$ & codes per step, one from each codebook & 4 or 16 \\
+$K$ & prototypes per codebook (a codebook is a learned list of typical steps) & 1\,024 \\
 $G$ & groups of mel bands quantized separately & 1 or 4 \\
 $d$ & width of the vectors inside the model & 256 or 512 \\
 $L$ & bytes reserved for lyrics & 256 \\
