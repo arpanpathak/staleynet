@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/emblem.png" width="132" alt="StaleyNET emblem: a raised fist gripping a rusted chain, bleeding where the links bite, with the Rust logo hanging from the last link">
+  <img src="docs/assets/emblem.png" width="132" alt="StaleyNET emblem: a rusted chain whose central link holds a staircase of enamelled audio tokens, with the Rust logo hanging below">
 </p>
 
 <h1 align="center">StaleyNET</h1>
@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/cover.png" alt="StaleyNET cover: a raised fist gripping a rusted chain beside the words Music from a sentence" width="100%">
+  <img src="docs/assets/cover.png" alt="StaleyNET cover: a rusted chain holding a staircase of audio tokens beside the words Music from a sentence" width="100%">
 </p>
 
 StaleyNET turns a short description such as *"grunge rock, raw male voice"*,
@@ -268,26 +268,23 @@ cargo run --release -- --address 0.0.0.0:8765 --tls-cert certs/studio.crt --tls-
 ## Name and emblem
 
 StaleyNET is named for Layne Staley (1967 to 2002), singer of Alice in Chains.
-The emblem is a raised fist gripping a rusted chain. The chain runs through
-the closed hand; below it, where the links bite into the palm, the hand
-bleeds, and from the last link hangs the Rust logo, rusted through.
+The emblem is a rusted chain. Its central link holds the model's view of music:
+4 rows of enamelled tiles, one per residual level of the tokenizer from bone
+(coarse) to deep rust (fine), each row shifted one column to the right as in
+the delay pattern, so that the tiles form a staircase. From the link's lower
+wire hangs the Rust logo on a small shackle.
 
-It is built from real material rather than drawn. The hand is a photograph,
-[Clenched fist](https://commons.wikimedia.org/wiki/File:Clenched_fist.jpg) by
-Tomas Gunnarsson (Genusfotografen),
-[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), cut out by
-`book/tools/fist_cutout.py`. The chain is rendered as three-dimensional
-geometry, every link lit from its true surface orientation and coloured with
-the corrosion of a public-domain photograph of rusted chain
-([W.carter, CC0](https://commons.wikimedia.org/wiki/File:Very_rusty_chain.jpg)).
-As an adaptation of a CC BY-SA photograph, the emblem and the cover are shared
-under CC BY-SA 4.0; [`book/tools/assets/SOURCES.md`](book/tools/assets/SOURCES.md)
-lists every source.
+Nothing in it is drawn by hand. The chain is rendered as three-dimensional
+geometry: every link is a tube that turns a quarter turn from its neighbour,
+the links interlock through a depth buffer, and every pixel is lit from its
+true surface orientation. The rust comes from a public-domain photograph of a
+corroded chain ([W.carter, CC0](https://commons.wikimedia.org/wiki/File:Very_rusty_chain.jpg)),
+and the tiles are embossed and glazed. [`book/tools/assets/SOURCES.md`](book/tools/assets/SOURCES.md)
+lists the sources.
 
 ```bash
-python3 book/tools/fist_cutout.py book/tools/assets/fist.webp   # once, downloads the photograph
-python3 book/tools/emblem.py      book/src/figures/emblem.png
-python3 book/tools/cover.py       book/src/figures/cover.svg
+python3 book/tools/emblem.py book/src/figures/emblem.png
+python3 book/tools/cover.py  book/src/figures/cover.svg
 ```
 
 The Rust logo is the [official artwork](https://github.com/rust-lang/rust-artwork)
@@ -299,8 +296,8 @@ and does not imply endorsement by the Rust project.
 
 ## Licences
 
-The code is [Apache-2.0](LICENSE). The paper and book text are CC BY 4.0, and
-the emblem and cover CC BY-SA 4.0. Checkpoints and derived caches are CC BY-SA
+The code is [Apache-2.0](LICENSE). The paper, the book, the emblem and the cover
+are CC BY 4.0. Checkpoints and derived caches are CC BY-SA
 4.0 to the extent that the upstream datasets allow:
 
 * the [Song Describer Dataset](https://zenodo.org/records/10072001): Jamendo
