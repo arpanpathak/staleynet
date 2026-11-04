@@ -386,9 +386,22 @@ because $P = P_\text{prev}$. We use $T = 64$ rounds. Since $S$ holds
 logarithms of mel energies, the target magnitudes come from undoing its
 definition step by step: $e^{S}$ gives the band energies, a regularized
 least-squares inverse of $B$ spreads them back over the 513 frequencies, and a
-square root turns energy into magnitude. Griffin-Lim needs no training, but its
-estimated phase leaves a faintly metallic, smeared quality, whose cost
-\cref{sec:pipeline} weighs against the other losses of the pipeline.
+square root turns energy into magnitude.
+
+\paragraph{Limits of Griffin-Lim.} The algorithm needs no training, and it
+recovers the magnitudes well, but its phase remains an estimate, and that is
+audible. A sustained harmonic, a sung vowel for example, needs a phase that
+advances smoothly from frame to frame at the harmonic's own frequency.
+Griffin-Lim only makes neighboring frames agree, so its phases drift and
+partly cancel where frames overlap, which a listener hears as a metallic,
+phasey smear. The smear is worst on voices, whose pitch and vowel identity live
+in exactly these harmonics, and on sharp onsets, which spread into a faint
+pre-echo. Even on a perfect spectrogram the method adds a spectral error of
+0.19 log units per band (\cref{tab:reconstruction}), and the artifacts it
+causes are larger than that number suggests, because a spectral error measures
+magnitudes only. A neural vocoder, which learns phase from real recordings
+\cite{kong2020hifigan,siuzdak2023vocos}, removes these artifacts; we are
+building one in the same framework (\cref{sec:limitations}).
 
 \section{From spectrogram to tokens}
 \label{sec:tokenizer}
@@ -1270,7 +1283,14 @@ paired test will be useful as a clear criterion for future attempts.
 \label{sec:limitations}
 
 The tokenizer, although improved, still limits the fidelity of the output,
-and Griffin-Lim adds phase artifacts that a learned vocoder would remove. The
+and Griffin-Lim estimates phase without ever having heard real audio, which
+leaves a metallic smear that is most audible on voices (\cref{sec:representation}).
+A learned vocoder removes it. We are building one in the same Rust framework
+on the design of Vocos \cite{siuzdak2023vocos}: a network that predicts the
+magnitude and phase of every frame from the mel spectrogram, followed by an
+inverse Fourier transform. Because it will be trained on spectrograms decoded
+from our own tokens, with the original recordings as targets, it should also
+restore part of the detail that the tokens lose. The
 data contain comparatively little singing (298 of the 706 songs mention a
 voice) and very little of some styles (two songs are described as grunge).
 Our models are much smaller than published systems \cite{copet2023musicgen},

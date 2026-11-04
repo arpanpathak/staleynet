@@ -109,3 +109,28 @@ Griffin-Lim needs no training, but its estimated phase leaves a characteristic
 metallic, slightly smeared quality. How much this matters, compared with the
 other losses in the pipeline, is measured in
 [Experiments](experiments.md#5-the-audio-pipeline-in-isolation).
+
+## Why Griffin-Lim smears voices
+
+A sustained harmonic, such as a sung vowel, needs a phase that advances
+smoothly from one frame to the next at the harmonic's own frequency. Griffin-Lim
+never hears real audio; it only makes neighboring frames agree with each other.
+Its phases therefore drift, and where frames overlap they partly cancel,
+which the ear hears as a metallic, phasey smear. Voices suffer most, because
+their pitch and the vowels that make words recognizable live in exactly these
+harmonics, and sharp onsets such as drum hits spread into a faint pre-echo.
+
+The cost is measurable. Even on a perfect spectrogram, Griffin-Lim adds an
+average error of 0.19 log units per band, and the audible damage is larger
+than that number suggests, because the measure compares magnitudes only and
+cannot see the phase errors that cause the smear. This is why the generated
+voices sound blurred even when the model predicts the right tokens.
+
+The remedy is a **neural vocoder**: a network that learns, from real
+recordings, how to turn a spectrogram into a waveform, phase included (Kong et
+al., 2020; Siuzdak, 2023). StaleyNET's vocoder is being built on the design of
+Vocos. For every frame it predicts the magnitude and the phase of each
+frequency from the mel spectrogram, and an inverse Fourier transform turns
+these into sound. It is trained on spectrograms decoded from StaleyNET's own
+tokens, with the original recordings as targets, so that it learns not only
+the phase but also part of the detail that the tokens lose.
