@@ -1,0 +1,42 @@
+StaleyNET
+Copyright 2026 Arpan Pathak
+
+This is a research archive. The material in it is licensed as follows.
+
+  Source code, build scripts, and configuration files
+    Apache License, Version 2.0. See LICENSE.
+
+  Paper and book text, figures, and compiled PDFs
+    Creative Commons Attribution 4.0 International. See
+    LICENSE-CC-BY-4.0.txt.
+
+  Model checkpoints, data caches, and generated audio, published separately on
+  Hugging Face and referenced from artifacts/
+    Creative Commons Attribution-ShareAlike 4.0 International. See
+    LICENSE-CC-BY-SA-4.0.txt.
+
+Third-party material and provenance
+
+  Song Describer Dataset (SDD)
+    Captions are licensed CC BY-SA 4.0. The recordings carry the per-track
+    Creative Commons licences listed in
+    data/raw/song-describer/audio_licenses.txt. Those licences include
+    CC BY-NC-ND and CC BY-NC-SA, so the trained checkpoints are research
+    artifacts: do not use them commercially where the upstream recording
+    licences forbid it. https://zenodo.org/records/10072001
+
+  JamendoLyrics MultiLang
+    The repository code and metadata are MIT licensed. The songs and lyrics
+    carry the per-song Creative Commons licences listed in
+    JamendoLyrics.csv. https://github.com/f90/jamendolyrics
+
+  Rust logo artwork
+    CC BY 4.0, Rust Foundation, modified in the book figures. See README.md.
+
+  cuda-oxide
+    External GPU compiler and runtime dependency, not vendored here.
+    https://github.com/NVlabs/cuda-oxide
+
+The private Hugging Face repositories hold the checkpoints and derived data
+caches. The raw third-party audio is not redistributed here; artifacts/README.md
+records how to obtain it.
