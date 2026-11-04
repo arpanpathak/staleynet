@@ -19,7 +19,7 @@
   \node[block, fill=blockgreen, minimum width=38mm, above=of norm2] (ffn) {feed-forward $256 \to 1024 \to 256$};
   \node[circle, draw=inkline, fill=white, inner sep=0pt, minimum size=3.6mm, above=3mm of ffn] (add2) {\scriptsize$+$};
   \draw[dashed, draw=muted!70, rounded corners=7pt] ($(norm1.south west)+(-11mm,-5.5mm)$) rectangle ($(add2.north -| ffn.east)+(5mm,2.5mm)$);
-  \node[font=\sffamily\small\bfseries, text=muted, anchor=west] at ($(attn.east)!0.5!(norm2.east)+(6mm,0)$) {$\times 6$};
+  \node[font=\sffamily\small\bfseries, text=muted, anchor=east] at ($(norm1.south west)!0.5!(add2.north -| norm1.west)+(-12.5mm,0)$) {$6\times$};
   \node[block, fill=blockblue, minimum width=38mm, above=7mm of add2] (normf) {RMSNorm};
   \node[block, fill=blockamber, minimum width=50mm, above=of normf] (heads) {4 output heads of 1\,024 scores};
   \coordinate (fork1) at ($(norm1.south)+(0,-2.5mm)$);

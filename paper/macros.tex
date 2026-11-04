@@ -58,14 +58,17 @@
   }
 }
 \ExplSyntaxOff
-\newenvironment{procedure}[1]{%
+% Arguments: the procedure's signature, a description of its inputs, and a
+% description of what it returns or computes.
+\newenvironment{procedure}[3]{%
   \setcounter{codeline}{0}%
   \begin{tcolorbox}[enhanced,colback=codefill,colframe=codefill,boxrule=0pt,arc=4pt,left=10pt,right=8pt,top=6pt,bottom=4pt]%
-  \small\linespread{1.18}\selectfont\noindent#1\par\vspace{4pt}%
+  \small\linespread{1.18}\selectfont\noindent#1\par\vspace{3pt}%
+  {\footnotesize\color{muted}\noindent\textit{Input:} #2\par\noindent\textit{Output:} #3\par}\vspace{4pt}%
   \begin{tabbing}%
   \hspace*{1.6em}\=\hspace{1.2em}\=\hspace{1.2em}\=\hspace{1.2em}\=\hspace{1.2em}\=\kill}{%
   \end{tabbing}\end{tcolorbox}}
-\newcommand{\li}{\refstepcounter{codeline}\llap{\scriptsize\color{muted}\thecodeline\hspace{0.7em}}\>}
+\newcommand{\li}{\stepcounter{codeline}\llap{\scriptsize\color{muted}\thecodeline\hspace{0.7em}}\>}
 \newcommand{\groupend}{\\[0.55em]}
 \newcommand{\kw}[1]{\textbf{#1}}
 \newcommand{\cmt}[1]{\hfill{\color{muted}\itshape // #1}}
@@ -88,9 +91,9 @@
 \definecolor{inkline}{HTML}{4A5068}
 \tikzset{
   figure/.style={font=\sffamily\small, >={Stealth[length=2.2mm]}, line width=0.6pt},
-  block/.style={rounded corners=5pt, draw=none, align=center, inner sep=5pt,
-    minimum height=2.1em, blur shadow={shadow blur steps=6, shadow xshift=0.3pt,
-    shadow yshift=-0.9pt, shadow opacity=22}},
+  block/.style={rounded corners=6pt, draw=inkline!28, line width=0.45pt, align=center,
+    inner sep=5pt, minimum height=2.2em, blur shadow={shadow blur steps=5,
+    shadow xshift=0pt, shadow yshift=-0.6pt, shadow opacity=12}},
   caption text/.style={font=\sffamily\scriptsize, text=muted, align=center},
   flow/.style={->, draw=inkline},
 }

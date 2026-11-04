@@ -1,112 +1,126 @@
 \begin{abstract}
-Text-to-music generators are assembled from large pretrained parts: a neural
-codec, a text encoder and a language model trained on tens of thousands of
-hours of audio. We ask what can be learned when no such part is available.
-StaleyNET is written entirely in Rust, GPU kernels included, and trained from
-random initialisation on embedded GPUs with 23 hours of public music. It
-describes sound as residual $k$-means tokens of the log-mel spectrogram and
-predicts them with a Transformer conditioned on the bytes of a caption and,
-optionally, of lyrics. Because every stage is our own, every stage can be
-measured alone. Rendering audio through each stage shows that the tokenizer,
-not the language model, decides how the output sounds: the tokenizer causes
-3.6 times the spectral error of the vocoder, while a model that memorises an
-excerpt reproduces it token for token. We use this measurement to guide the
-design of finer tokens and larger models, and we introduce a paired test that
-determines whether a model actually reads the lyrics it is given.
+This paper describes StaleyNET, a small system that generates music from a
+short text description. We built it from first principles, mainly as a way of
+understanding what each part of such a system contributes. All components,
+including the GPU kernels, are written in Rust, and the models are trained
+from random initialisation on two NVIDIA Jetson devices with about 23 hours of
+Creative Commons music. Sound is represented by quantised log-mel
+spectrograms, and a decoder-only Transformer learns to predict these tokens
+from a caption and, optionally, from lyrics. Because every stage is our own,
+we could examine the stages one at a time. These measurements suggest that the
+quality of the generated audio is limited mainly by the tokenizer rather than
+by the language model: a model trained on a single excerpt reproduces it
+exactly, while the tokenizer on its own loses much of the spectral detail.
+Guided by this observation, we revised the tokenizer and roughly halved its
+reconstruction error. We also describe a simple paired test for whether a
+model makes use of the lyrics it is given; our first lyrics-conditioned models
+do not yet pass it. Each algorithm is presented with a small worked example,
+in the hope that the paper is useful to readers who would like to build a
+similar system.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:introduction}
 
-Music generation from text has improved rapidly
-\cite{agostinelli2023musiclm,copet2023musicgen}. The leading systems share a
-recipe: a pretrained neural codec turns audio into tokens, a pretrained text
-encoder turns the prompt into vectors, and a large Transformer connects the
-two. Each part is trained separately on large data, and the finished system
-reveals little about which part is responsible for what one hears.
+Generating music from a sentence of text has made remarkable progress in
+recent years \cite{agostinelli2023musiclm,copet2023musicgen}. Most current
+systems combine several large components that are trained separately: a
+neural codec that turns audio into tokens, a text encoder that turns the
+prompt into vectors, and a Transformer that relates the two. This division of
+labour works very well, although it can make it difficult to tell which
+component is responsible for a particular quality, or a particular flaw, in
+what one hears.
 
-We build every part ourselves. StaleyNET (\cref{fig:overview}) computes its
-own spectrograms, learns its own tokenizer, trains its own Transformer and
-reconstructs its own waveforms, all in Rust, with the GPU kernels compiled
-from Rust by cuda-oxide \cite{cudaoxide}. It trains on NVIDIA Jetson devices,
-GPUs built for robots and cars. Because each stage is our own, each can be
-measured in isolation, and the stage that limits the result can be found and
-improved.
+In this work we approached the problem from the other direction and built a
+complete, if modest, system ourselves (\cref{fig:overview}). StaleyNET
+computes its spectrograms, learns its tokenizer, trains its Transformer and
+reconstructs its waveforms without any pretrained component. It is written in
+Rust, and its GPU kernels are compiled from Rust by cuda-oxide \cite{cudaoxide}.
+We trained it on an NVIDIA Jetson Orin NX with 16\,GB of memory and on an
+NVIDIA Jetson AGX Thor with 128\,GB, two embedded computers designed for
+robotics. Owning every stage gave us the opportunity to study each one in
+isolation, and much of the paper is about what that study revealed.
 
 \begin{widefigure}
-\resizebox{\linewidth}{!}{%
-\input{figures/overview}}
-\caption{StaleyNET. In training (top row), a recording becomes a staircase of
-discrete tokens that the Transformer learns to predict from the caption and
-lyrics. In generation (bottom row), the Transformer produces tokens one step at
-a time, and the tokens are turned back into sound.}
+\resizebox{\linewidth}{!}{\input{figures/overview}}
+\caption{An overview of StaleyNET. During training (top row), a recording is
+converted into a staircase of discrete tokens, which the Transformer learns
+to predict from the caption and the lyrics. During generation (bottom row),
+the Transformer produces tokens one step at a time, and the tokens are turned
+back into sound.}
 \label{fig:overview}
 \end{widefigure}
 
-The measurements lead to a clear diagnosis. The model learns text-conditioned
-structure well above chance, yet the voices it produces are blurred. Two
-experiments locate the cause. We pass held-out recordings through the
-tokenizer and vocoder without any model, and find that the tokenizer alone
-removes most of the spectral detail. We then train the model to memorise a
-single excerpt, and find that it reproduces the excerpt exactly. The model is
-capable; the tokens are too coarse.
+Our first models learned text-conditioned structure well above chance, yet the
+voices they produced sounded blurred. Two experiments helped us locate the
+cause. When we passed held-out recordings through the tokenizer and the
+vocoder alone, without any model, most of the spectral detail was already
+lost. When we trained the model on a single excerpt, it reproduced that
+excerpt token for token. Together these results suggested that the tokenizer
+was the main limitation, and a revised tokenizer that quantises groups of
+frequency bands separately reduced the reconstruction error by about half.
 
-The paper makes 4 contributions.
+The contributions of this paper are as follows.
 \begin{itemize}[leftmargin=1.4em, itemsep=1pt]
-\item A text-to-music pipeline written entirely in Rust, GPU kernels included,
-  and trained from scratch on edge GPUs.
-\item A presentation of each algorithm with a worked example and, where an
-  algorithm is easy to get wrong, a proof of correctness.
-\item A position map that adds a lyrics input to a trained model without
-  discarding what it learned, and a paired test of whether the input is used.
-\item A stage-by-stage analysis that separates the error of the tokenizer, the
-  vocoder and the language model.
+\item A complete text-to-music pipeline written in Rust, including its GPU
+  kernels, and trained from scratch on embedded GPUs.
+\item A description of each algorithm with a worked example and, where an
+  algorithm is easy to get wrong, an argument for its correctness.
+\item A way of adding a lyrics input to a trained model without discarding
+  what it has learned, together with a paired test of whether the input is
+  used.
+\item A stage-by-stage analysis that separates the errors of the tokenizer,
+  the vocoder and the language model, and a tokenizer study guided by it.
 \end{itemize}
 
 We write algorithms in the style of Cormen et al.\
-\cite{cormen2022introduction}, as in our tutorial on tiled matrix
-multiplication \cite{pathak2026tiled}: procedure names in capitals, numbered
-lines, and mathematical notation inside the pseudocode. The range $[a, b)$
-denotes the integers $a, \dots, b-1$, indices start at 0, and losses are in
-nats.
+\cite{cormen2022introduction}, as in our earlier tutorial on tiled matrix
+multiplication \cite{pathak2026tiled}. Each procedure first states its inputs
+and its output in words; its lines are numbered, and the text refers to them.
+The range $[a, b)$ denotes the integers $a, \dots, b-1$, indices start at 0, and
+losses are measured in nats.
 
 \section{Related work}
 \label{sec:related}
 
 AudioLM \cite{borsos2023audiolm} showed that audio can be generated by a
 language model over discrete tokens. MusicLM \cite{agostinelli2023musiclm}
-conditioned this on text, and MusicGen \cite{copet2023musicgen} reduced the
-design to one Transformer over the codebooks of a neural codec, arranged by a
-delay pattern. We keep MusicGen's delay pattern, top-$k$ sampling
-\cite{fan2018hierarchical} and classifier-free guidance \cite{ho2022cfg}, and
-replace its pretrained parts with $k$-means over log-mel frames and with raw
-text bytes \cite{xue2022byt5}.
+conditioned this approach on text, and MusicGen \cite{copet2023musicgen}
+simplified it to a single Transformer over the codebooks of a neural codec,
+interleaved by a delay pattern. We follow MusicGen in using the delay
+pattern, top-$k$ sampling \cite{fan2018hierarchical} and classifier-free
+guidance \cite{ho2022cfg}, and we replace its pretrained components with
+$k$-means quantisation of log-mel frames and with raw text bytes, as studied
+for text by ByT5 \cite{xue2022byt5}.
 
 Jukebox \cite{dhariwal2020jukebox} generated singing from lyrics and learned
-the alignment of words and sound from 1.2 million songs, while singing
-synthesis systems such as DiffSinger \cite{liu2022diffsinger} require a score
-with phoneme durations. Our lyrics experiments use the line-level timings of
-JamendoLyrics \cite{stoller2019lyrics,durand2023lyrics}. Neural codecs
+the correspondence between words and sound from 1.2 million songs. Singing
+synthesis systems such as DiffSinger \cite{liu2022diffsinger} instead work from
+a musical score with phoneme durations. Our lyrics experiments rely on the
+line-level timings of the JamendoLyrics benchmark
+\cite{stoller2019lyrics,durand2023lyrics}. Neural codecs
 \cite{zeghidour2021soundstream,defossez2023encodec,kumar2023dac} and neural
-vocoders \cite{kong2020hifigan,siuzdak2023vocos} reach far higher fidelity than
-$k$-means tokens and Griffin-Lim \cite{griffin1984signal,perraudin2013fast},
-at a training cost far beyond our setting; \cref{sec:pipeline} measures what
-our choice costs.
+vocoders \cite{kong2020hifigan,siuzdak2023vocos} achieve far higher fidelity
+than $k$-means tokens and the Griffin-Lim algorithm
+\cite{griffin1984signal,perraudin2013fast}, at a training cost beyond our
+setting; \cref{sec:pipeline} measures what our simpler choices cost.
 
 \section{From sound to spectrogram and back}
 \label{sec:representation}
 
-A waveform at 24\,kHz holds 24\,000 numbers per second, most of which describe
-the phase of each vibration, which the ear barely hears. We describe sound
-instead by its log-mel spectrogram: the energy in 128 bands of perceptual
-frequency, measured 94 times per second, on a logarithmic scale.
+A waveform sampled at 24\,kHz contains 24\,000 numbers per second, and much of
+that information describes the phase of each vibration, to which the ear is
+not very sensitive. We therefore describe sound by its log-mel spectrogram:
+the energy in 128 frequency bands spaced according to human pitch
+perception, measured about 94 times per second and compressed
+logarithmically.
 
 \subsection{Resampling}
 
-Recordings arrive at various rates, mostly 44.1\,kHz, and are brought to
-24\,kHz. Lowering the rate requires removing all content above the new
-Nyquist frequency of 12\,kHz first, or it folds back into the audible range as
-aliasing.
+The training recordings arrive at several sample rates, most often 44.1\,kHz,
+and we convert them all to 24\,kHz. Lowering the rate requires first removing
+all content above the new Nyquist frequency of 12\,kHz; otherwise that content
+folds back into the audible range, an effect known as aliasing.
 
 \begin{definition}[Bandlimited resampling]
 Given samples $x_m$ at rate $f_\text{in}$, the resampled signal at rate
@@ -114,27 +128,32 @@ $f_\text{out}$ is
 \[
 y_n \;=\; \sum_{m} x_m \, h\!\left(t_n - m\right), \qquad t_n = n\,\frac{f_\text{in}}{f_\text{out}},
 \]
-where $h$ is a low-pass filter. Output sample $n$ is a weighted sum of the
+where $h$ is a low-pass filter. Each output sample is a weighted sum of the
 input samples near the fractional position $t_n$.
 \end{definition}
 
-We use a windowed sinc, $h(t) = c\,\operatorname{sinc}(ct)\,w(ct/Z)$, with
-cutoff $c$ relative to the input rate, $Z = 24$ zero crossings on each side and
-a Kaiser window $w$ with $\beta = 8.6$ \cite{smith2002resample}. Evaluating $h$
-anew for every output sample would be slow, but the fractional part of $t_n$
-takes few values.
+We use a windowed sinc filter, $h(t) = c\,\operatorname{sinc}(ct)\,w(ct/Z)$, in
+which $c$ is the cutoff relative to the input rate, $Z = 24$ is the number of
+zero crossings kept on each side, and $w$ is a Kaiser window with $\beta = 8.6$
+\cite{smith2002resample}. Evaluating $h$ anew for every output sample would be
+slow, but fortunately the fractional part of $t_n$ takes only a few values.
 
-\paragraph{Worked example.} For 44\,100\,Hz to 24\,000\,Hz the rates share
-the factor 300, so $t_n = 147n/80$. For $n = 1$, $t_1 = 1 + 67/80$. Every $t_n$
-has a fraction $p/80$ with $p \in [0, 80)$, so exactly 80 sets of weights, the
-\emph{phases} of a polyphase filter, occur. We compute them once.
+\paragraph{A worked example.} For a conversion from 44\,100\,Hz to 24\,000\,Hz
+the two rates share the factor 300, so $t_n = 147n/80$. For $n = 1$ we obtain
+$t_1 = 1 + 67/80$. Every $t_n$ has a fraction of the form $p/80$ with
+$p \in [0, 80)$, so exactly 80 sets of filter weights are needed. These sets
+are called the \emph{phases} of a polyphase filter, and they are computed
+once.
 
 \begin{procedure}{\proc{Resample}$(x, f_\text{in}, f_\text{out})$}
+{the samples $x_0, x_1, \dots$ of a recording, its sample rate $f_\text{in}$,
+and the desired rate $f_\text{out}$, both in Hz.}
+{the samples $y_0, y_1, \dots$ of the same sound at rate $f_\text{out}$.}
 \li $g = \gcd(f_\text{in}, f_\text{out})$ \\
 \li $L = f_\text{out} / g$ \cmt{number of phases} \\
-\li $M = f_\text{in} / g$ \cmt{input step per output sample} \\
-\li $c = 0.97 \cdot \min(1,\, f_\text{out}/f_\text{in})$ \\
-\li $R = \lceil Z / c \rceil$ \groupend
+\li $M = f_\text{in} / g$ \cmt{input step per output sample, in $L$-ths} \\
+\li $c = 0.97 \cdot \min(1,\, f_\text{out}/f_\text{in})$ \cmt{cutoff} \\
+\li $R = \lceil Z / c \rceil$ \cmt{filter half-width} \groupend
 \li \kw{for} $p \in [0, L)$ \{ \\
 \li \> \kw{for} $j \in [-R, R]$ \{ \\
 \li \> \> $h_p[j] = c\,\operatorname{sinc}\!\big(c\,(j - p/L)\big)\; w\big(c\,(j - p/L)/Z\big)$ \\
@@ -142,120 +161,134 @@ has a fraction $p/80$ with $p \in [0, 80)$, so exactly 80 sets of weights, the
 \li \} \groupend
 \li \kw{for} each output index $n$ \{ \\
 \li \> $m = \lfloor nM / L \rfloor$ \cmt{whole part of $t_n$} \\
-\li \> $p = nM \bmod L$ \cmt{fraction of $t_n$, in $L$-ths} \\
+\li \> $p = nM \bmod L$ \cmt{fraction of $t_n$} \\
 \li \> $y_n = \sum_{j \in [-R, R]} h_p[j] \; x_{m+j}$ \\
 \li \}
 \end{procedure}
 
-Lines 1--5 fix the geometry, lines 6--10 build the $L$ phases once, and line
-14 is the single dot product per output sample. The factor 0.97 in line 4
-keeps the transition band of the filter below the new Nyquist frequency. A
-test confirms the effect: a 15\,kHz tone is suppressed by more than 80\,dB when
-48\,kHz audio is converted to 24\,kHz.
+Lines 1--5 determine the geometry of the filter, lines 6--10 compute the $L$
+phases once, and line 14 is the single dot product needed for each output
+sample. The factor 0.97 in line 4 keeps the transition band of the filter
+just below the new Nyquist frequency. A test confirms that the filter does
+its job: a 15\,kHz tone is attenuated by more than 80\,dB when 48\,kHz audio is
+converted to 24\,kHz.
 
 \subsection{The spectrogram as a matrix product}
 
-The signal is cut into frames of $N = 1024$ samples, $H = 256$ apart, and each
-frame is multiplied by a Hann window. The strength of every frequency in every
-frame is usually computed with the fast Fourier transform. We compute it with
-a matrix product, so that the spectrogram runs on the same GPU kernel as the
-Transformer and inherits its tests (\cref{sec:gpu}).
+The signal is divided into frames of $N = 1024$ samples, taken every $H = 256$
+samples, and each frame is multiplied by a Hann window. The strength of each
+frequency in each frame is usually computed with the fast Fourier transform.
+We computed it instead with a matrix product, so that the spectrogram runs on
+the same GPU kernel as the Transformer and benefits from the same tests
+(\cref{sec:gpu}).
 
-\begin{definition}[Spectrogram]
-Let row $f$ of $F$ hold frame $f$, and let $W$ have entries
-$W_{nk} = w[n]\,e^{-2\pi i kn/N}$ for $k \in [0, N/2]$. The log-mel spectrogram is
+\begin{definition}[Log-mel spectrogram]
+Let row $f$ of the matrix $F$ hold frame $f$ of the signal, and let $W$ have
+entries $W_{nk} = w[n]\,e^{-2\pi i kn/N}$ for $k \in [0, N/2]$, where $w$ is the Hann
+window. The log-mel spectrogram is
 \[
 S \;=\; \ln \max\!\big(|FW|^2 B,\; 10^{-5}\big),
 \]
-where the square is taken entry by entry and $B$ holds 128 triangular mel
-filters \cite{slaney1998auditory}.
+where the square is taken entry by entry and the columns of $B$ are 128
+triangular mel filters \cite{slaney1998auditory}.
 \end{definition}
 
-Column $k$ of $W$ is a windowed sine and cosine at $k \cdot 23.4$\,Hz, so row
+Column $k$ of $W$ holds a windowed sine and cosine at $k \cdot 23.4$\,Hz, so row
 $f$ of $FW$ measures how much of each frequency frame $f$ contains. The real
-and imaginary parts of $W$ are 2 real matrices, and $B$ adds a third product.
-The method needs about $N/\log_2 N \approx 100$ times the arithmetic of an FFT,
-yet on the Orin NX it analyses 60\,s of audio in 78\,ms, against 98\,ms for a
-multithreaded CPU FFT, and agrees with it within $10^{-2}$ log units.
+and imaginary parts of $W$ are two real matrices, and $B$ adds a third
+product. This formulation needs about $N/\log_2 N \approx 100$ times the
+arithmetic of an FFT. Even so, on the Orin NX it analyses 60\,s of audio in
+47\,ms, against 73\,ms for a multithreaded CPU FFT (\cref{tab:bench-other}),
+and it agrees with the FFT to within $10^{-2}$ log units.
 
 \subsection{Estimating the phase}
 
-A generated spectrogram holds the strength of every frequency but not its
-phase. Griffin-Lim \cite{griffin1984signal} recovers a phase by alternating
-between 2 requirements: the magnitudes must match the target, and the
-spectrogram must belong to an actual waveform.
+A generated spectrogram tells us how strong each frequency is, but not its
+phase. The Griffin-Lim algorithm \cite{griffin1984signal} estimates a phase by
+alternating between two requirements: the magnitudes should match the target,
+and the spectrogram should be that of an actual waveform.
 
 \begin{procedure}{\proc{Griffin-Lim}$(\,|S|, T\,)$}
+{the target magnitudes $|S|$, one row per frame and one column per frequency,
+and the number of rounds $T$.}
+{a waveform $x$ whose spectrogram approximates $|S|$.}
 \li $X = |S| \cdot e^{i\phi}$ with random phases $\phi$ \\
 \li $x = \operatorname{ISTFT}(X)$ \\
 \li $P_\text{prev} = \operatorname{STFT}(x)$ \groupend
 \li \kw{for} $t \in [0, T)$ \{ \\
 \li \> $P = \operatorname{STFT}(x)$ \cmt{nearest consistent spectrogram} \\
 \li \> $A = P + \alpha\,(P - P_\text{prev})$ \cmt{momentum} \\
-\li \> $X = |S| \cdot A / |A|$ \cmt{keep phase, restore magnitude} \\
+\li \> $X = |S| \cdot A / |A|$ \cmt{keep the phase, restore the magnitude} \\
 \li \> $P_\text{prev} = P$ \\
 \li \> $x = \operatorname{ISTFT}(X)$ \\
 \li \} \groupend
 \li \kw{return} $x$
 \end{procedure}
 
-Line 5 replaces the estimate by the spectrogram of a real waveform, and line 7
-restores the target magnitudes. Line 6 is the acceleration of Perraudin et
-al.\ \cite{perraudin2013fast}, which extrapolates the last change with
-$\alpha = 0.99$; in the first round it has no effect, since $P = P_\text{prev}$.
-We use $T = 64$, after mapping the 128 mel bands back to 513 frequencies with a
-regularised least-squares inverse of $B$.
+Here STFT and ISTFT denote the short-time Fourier transform and its inverse.
+Line 5 replaces the current estimate by the spectrogram of a real waveform,
+and line 7 restores the target magnitudes. Line 6 is the acceleration
+proposed by Perraudin et al.\ \cite{perraudin2013fast}, which extrapolates
+along the last change with momentum $\alpha = 0.99$; in the first round it has
+no effect, because $P = P_\text{prev}$. We use $T = 64$ rounds, after mapping
+the 128 mel bands back to 513 frequencies with a regularised least-squares
+inverse of $B$.
 
 \section{From spectrogram to tokens}
 \label{sec:tokenizer}
 
-A language model chooses each next symbol from a finite vocabulary, but a
-spectrogram is made of real numbers. The tokenizer bridges the two. After each
-band is standardised with its training-set mean and deviation, 2 consecutive
-frames form a \emph{step}: 256 numbers covering 21.3\,ms.
+A language model chooses each next symbol from a finite vocabulary, whereas a
+spectrogram consists of real numbers. The tokenizer bridges this gap. Each
+band of the spectrogram is first standardised with its mean and standard
+deviation over the training set, so that quiet and loud bands carry similar
+weight. A \emph{step} is then formed from consecutive frames; in our first
+tokenizer a step joins 2 frames, giving 256 numbers that cover 21.3\,ms.
 
 \subsection{Residual quantisation}
 
-The idea is that of describing a colour first by its family, then by its
-shade within the family, then by finer and finer corrections. Each level
-names the nearest of 1\,024 prototypes to what the previous levels left
-unexplained.
+One can think of residual quantisation as describing a colour first by its
+family, then by its shade within the family, and then by finer and finer
+corrections. Each level names the closest of $K$ prototypes to whatever the
+previous levels have left unexplained.
 
 \begin{definition}[Residual vector quantisation]
-Given $C$ codebooks $E_0, \dots, E_{C-1}$ of $K$ prototypes each, a step $x$ is
-encoded as indices $c_0, \dots, c_{C-1}$ by
+Let $E_0, \dots, E_{C-1}$ be codebooks, each a list of $K$ prototype vectors.
+A step $x$ is encoded as the indices $c_0, \dots, c_{C-1}$ defined by
 \begin{gather*}
 r_0 = x, \qquad c_\ell = \argmin_{k \in [0, K)} \lVert r_\ell - E_\ell[k] \rVert^2, \\
 r_{\ell+1} = r_\ell - E_\ell[c_\ell],
 \end{gather*}
-and decoded as $\hat x = \sum_\ell E_\ell[c_\ell]$. We use $C = 4$ and $K = 1024$.
+and it is decoded as $\hat x = \sum_\ell E_\ell[c_\ell]$. The vector $r_\ell$ is the
+\emph{residual}: the part of $x$ that levels $0, \dots, \ell - 1$ have not yet
+described.
 \end{definition}
 
 \begin{figure}[htbp]
 \centering
 \input{figures/rvq}
-\caption{Residual quantisation of $x = (3,1)$ in 2 levels. Level 0 (blue)
-chooses the prototype $(4,0)$; level 1 (green) adds the correction
+\caption{Residual quantisation of $x = (3,1)$ in two levels. Level 0 (blue)
+chooses the prototype $(4,0)$, and level 1 (green) adds the correction
 $(-0.8, 0.8)$.}
 \label{fig:rvq}
 \end{figure}
 
-\paragraph{Worked example.} In 2 dimensions, take the codebooks
+\paragraph{A worked example.} In two dimensions, consider the codebooks
 \begin{align*}
 E_0 &= \{(0,0),\ (4,0),\ (0,4),\ (4,4)\},\\
 E_1 &= \{(0.8,0.8),\ (-0.8,0.8),\ (-0.8,-0.8),\ (0.8,-0.8)\},
 \end{align*}
-and encode $x = (3,1)$ (\cref{fig:rvq}). The squared distances to $E_0$ are $10, 2, 18, 10$,
-so $c_0 = 1$ and $r_1 = (-1, 1)$. The nearest entry of $E_1$ is $(-0.8, 0.8)$, so
-$c_1 = 1$ and $r_2 = (-0.2, 0.2)$. The error falls from $\sqrt 2 \approx 1.41$ after
-1 level to $\sqrt{0.08} \approx 0.28$ after 2.
-
-Each step thus becomes 4 integers in $[0, 1024)$, ordered from coarse to fine:
-40 bits per 21.3\,ms, or 1.9\,kbit/s.
+and the point $x = (3,1)$ (\cref{fig:rvq}). The squared distances from $x$ to
+the prototypes of $E_0$ are $10, 2, 18, 10$, so $c_0 = 1$ and $r_1 = (-1, 1)$.
+The closest entry of $E_1$ to $(-1, 1)$ is $(-0.8, 0.8)$, so $c_1 = 1$ and
+$r_2 = (-0.2, 0.2)$. The error falls from $\sqrt 2 \approx 1.41$ after one level to
+$\sqrt{0.08} \approx 0.28$ after two.
 
 \subsection{Training the codebooks}
 
 \begin{procedure}{\proc{Train-Codebooks}$(X, C, K, I)$}
+{a matrix $X$ whose rows are training steps, the number of levels $C$, the
+number of prototypes per level $K$, and the number of rounds $I$.}
+{the codebooks $E_0, \dots, E_{C-1}$.}
 \li $R = X$ \cmt{what remains to be described} \groupend
 \li \kw{for} $\ell \in [0, C)$ \{ \\
 \li \> $E_\ell = K$ rows of $R$, chosen at random \groupend
@@ -269,156 +302,189 @@ Each step thus becomes 4 integers in $[0, 1024)$, ordered from coarse to fine:
 \li \}
 \end{procedure}
 
-Lines 5--6 are Lloyd's 2 moves \cite{lloyd1982least}: assign, then average.
-Lines 7--8 revive a prototype that attracted nothing, so that none of the
-1\,024 entries is wasted, and line 10 hands the residuals to the next level. We
-run $I = 20$ rounds on 200\,000 steps drawn from the training set.
+\proc{Nearest}$(r, E)$ returns the index of the prototype in $E$ closest to
+$r$. Lines 5--6 are the two moves of Lloyd's algorithm \cite{lloyd1982least}:
+each row is assigned to its nearest prototype, and each prototype then moves
+to the mean of its rows. Lines 7--8 restart a prototype to which no row was
+assigned, so that none of the $K$ entries goes unused, and line 10 passes the
+residuals on to the next level. We use $I = 20$ rounds on 200\,000 steps drawn
+from the training set.
 
 \subsection{The nearest prototype as a matrix product}
 
 \begin{lemma}
+For a vector $x$ and prototypes $e_0, \dots, e_{K-1}$,
 $\argmin_k \lVert x - e_k \rVert^2 = \argmin_k \big(\lVert e_k \rVert^2 - 2\,x \cdot e_k\big)$.
 \end{lemma}
 \begin{proof}
-Expand $\lVert x - e_k \rVert^2 = \lVert x \rVert^2 - 2\,x \cdot e_k + \lVert e_k \rVert^2$;
-the first term does not depend on $k$.
+Expanding gives $\lVert x - e_k \rVert^2 = \lVert x \rVert^2 - 2\,x \cdot e_k + \lVert e_k \rVert^2$,
+and the first term does not depend on $k$.
 \end{proof}
 
-In the example, the norms $\lVert e_k \rVert^2$ are $0, 16, 16, 32$ and the dot
-products $x \cdot e_k$ are $0, 12, 4, 16$, giving scores $0, -8, 8, 0$; the minimum
-again picks $(4, 0)$. On the GPU, the dot products of 8\,192 steps with 1\,024
-prototypes form one $8192 \times 256$ by $256 \times 1024$ matrix product, and a
-small kernel takes the minimum of each row.
+In the example above, the squared norms $\lVert e_k \rVert^2$ are $0, 16, 16, 32$
+and the dot products $x \cdot e_k$ are $0, 12, 4, 16$, so the scores are
+$0, -8, 8, 0$, and the smallest again selects $(4, 0)$. On the GPU the dot
+products of 8\,192 steps with 1\,024 prototypes form a single matrix product,
+after which a small kernel finds the smallest score in each row.
+
+\subsection{Quantising groups of bands}
+\label{sec:band-groups}
+
+The analysis of \cref{sec:pipeline} led us to a refinement. Instead of
+quantising a whole step at once, we divide its 128 bands into $G$ equal
+groups and give each group its own residual codebooks. With one frame per
+step and $G = 4$, each group is a vector of 32 numbers, which 1\,024 prototypes
+can describe more finely than a whole step. In our experiments the grouping
+helped somewhat less than we expected, and the additional codes helped more
+(\cref{sec:appendix-tokenizer}). The codes of a
+step are ordered level by level: first the coarse codes of all $G$ groups, then
+their first corrections, and so on, so that the coarse-to-fine order relied on
+by the delay pattern (\cref{sec:model}) is preserved. With $G = 4$ groups and 4
+levels each, a step is described by 16 codes. \Cref{tab:tokenizer-study} in
+the appendix compares this and other configurations.
 
 \section{The model}
 \label{sec:model}
 
 The model (\cref{fig:model}) is a decoder-only Transformer
-\cite{vaswani2017attention,radford2019language} that reads text and audio as
-one sequence and predicts, at each position, what comes next, in the way a
+\cite{vaswani2017attention,radford2019language}. It reads text and audio as a
+single sequence and predicts, at each position, what comes next, much as a
 text model predicts the next word.
 
 \begin{figure}[htbp]
 \centering
 \input{figures/model}
-\caption{The model. Text bytes and audio tokens share one sequence; each audio
-position carries the 4 levels of one step. Six pre-normalised blocks, each
-adding its result to its input, end in 4 output heads, one per level.}
+\caption{The model. Text bytes and audio tokens share one sequence, and each
+audio position carries all the codes of one step. A stack of pre-normalised
+blocks, each adding its result to its input, ends in one output head per
+code.}
 \label{fig:model}
 \end{figure}
 
 \subsection{One sequence for text and audio}
 
-The vocabulary holds the 256 byte values \cite{xue2022byt5}, 3 marks
-(\code{BEGIN}, \code{SEPARATOR}, \code{PADDING}) and $C \cdot K = 4096$ audio
-symbols. The text fills a fixed 128 positions, \code{BEGIN}, 126 caption bytes
-and \code{SEPARATOR}, so that audio always begins at the same position. An
-audio position carries all 4 integers of a step, and its input vector is the
-sum of their embeddings and the embedding of the position.
+The vocabulary contains the 256 possible byte values \cite{xue2022byt5}, three
+markers (\code{BEGIN}, \code{SEPARATOR} and \code{PADDING}) and $C \cdot K$ audio
+symbols, one for each prototype of each codebook. The text occupies a fixed 128
+positions, namely \code{BEGIN}, 126 caption bytes and \code{SEPARATOR}, so that
+the audio always begins at the same position. An audio position carries all
+$C$ codes of a step, and its input vector is the sum of their embeddings and
+the embedding of the position.
 
 \subsection{The delay pattern}
 
-The 4 integers of a step are predicted from one position, yet a fine level
-corrects a coarse one and is best predicted once the coarse one is known.
+At each position the model predicts all $C$ codes of a step. A finer code,
+however, corrects a coarser one and is easier to predict once the coarser one
+is known.
 
 \begin{definition}[Delay pattern \cite{copet2023musicgen}]
-Position $t$ of the delayed sequence holds, in slot $\ell$, the integer
-$a_{t-\ell}^{\ell}$ of level $\ell$ for frame $t - \ell$, and an empty mark where
-$t - \ell$ is not a frame. $F$ frames become $F + C - 1$ positions.
+Position $t$ of the delayed sequence holds, in slot $\ell$, the code
+$a_{t-\ell}^{\ell}$ of codebook $\ell$ for frame $t - \ell$, and an empty marker
+when $t - \ell$ is not a frame. A piece of $F$ frames becomes $F + C - 1$
+positions.
 \end{definition}
 
 \begin{figure}[htbp]
 \centering
 \input{figures/delay}
-\caption{The delay pattern for 3 levels and 4 frames. At position 2 the model
-predicts $a_2$, $b_1$ and $c_0$; the coarser integers they refine are already
-in its input.}
+\caption{The delay pattern for three codebooks and four frames. At position 2
+the model predicts $a_2$, $b_1$ and $c_0$, and the coarser codes that they refine
+are already part of its input.}
 \label{fig:delay}
 \end{figure}
 
-In \cref{fig:delay}, position 2 predicts $a_2$, $b_1$ and $c_0$ together, while
-$a_1$, which $b_1$ refines, and $a_0, b_0$, which $c_0$ refines, are already
-known. The cost is $C - 1 = 3$ extra positions, against a fourfold longer
-sequence if each level had its own positions.
+In \cref{fig:delay}, position 2 predicts $a_2$, $b_1$ and $c_0$ together. By then
+$a_1$, which $b_1$ refines, and $a_0$ and $b_0$, which $c_0$ refines, are already
+known. The price is $C - 1$ additional positions, whereas giving each codebook
+its own positions would multiply the length of the sequence by $C$.
 
 \subsection{The network and its objective}
 
-Each of the 6 blocks lets every position gather information from itself and
-earlier positions through attention, then transforms each position with a
-small feed-forward network; both parts normalise their input
-\cite{zhang2019rmsnorm,xiong2020layernorm} and add their output to it:
+In each block, attention lets every position gather information from itself
+and from earlier positions, and a small feed-forward network then transforms
+each position on its own. Both parts normalise their input
+\cite{zhang2019rmsnorm,xiong2020layernorm} and add their result to it:
 \begin{align*}
 h &= x + \operatorname{Attention}(\operatorname{Norm}(x)), \\
-y &= h + \operatorname{FeedForward}(\operatorname{Norm}(h)).
+y &= h + \operatorname{FeedForward}(\operatorname{Norm}(h)),
 \end{align*}
-The width is 256, the 8 heads have width 32, and the feed-forward network uses
-GELU \cite{hendrycks2016gelu}. The model has 7.1 million parameters.
+where $x$ is the sequence entering the block and $y$ the sequence leaving it.
+The feed-forward network uses the GELU activation \cite{hendrycks2016gelu}. Our
+first model has 6 blocks of width 256 with 8 attention heads (7.1 million
+parameters); the larger model of \cref{sec:large} has 8 blocks of width 512
+(42.9 million parameters).
 
-At position $p$ the model outputs, for each level $\ell$, a distribution over
-the integer $y_{p,\ell}$ that appears at position $p+1$. The loss is the
-cross-entropy averaged over the positions $V_\ell$ that have such a target, and
-then over the levels:
+At position $p$ the model outputs, for each codebook $\ell$, a probability
+distribution over the code $y_{p,\ell}$ that appears at position $p + 1$. The
+loss is the cross-entropy, averaged first over the set $V_\ell$ of positions
+that have a target in codebook $\ell$ and then over the codebooks:
 \[
 \mathcal{L} = \frac{1}{C} \sum_{\ell=0}^{C-1} \frac{1}{|V_\ell|} \sum_{p \in V_\ell} -\ln P_\theta\big(y_{p,\ell} \mid z_0, \dots, z_p\big),
 \]
-where $z_p$ is the input at position $p$. A uniform guess scores
+where $z_p$ is the input at position $p$ and $\theta$ denotes the parameters. A
+model that assigns equal probability to all 1\,024 codes has a loss of
 $\ln 1024 \approx 6.93$.
 
 \subsection{Gradients by hand}
 
-No automatic differentiation exists for Rust on the GPU, so each layer
-implements its own gradient. Attention is the least obvious case. For one head
-with queries $Q$, keys $K$, values $V$ and width $d = 32$,
+As far as we know, no automatic differentiation is available for Rust on the
+GPU, so each layer implements its own gradient. Attention is the least
+obvious case. For one head, let the rows of $Q$, $K$ and $V$ be the queries,
+keys and values of the positions, and let $d$ be the width of the head. Then
 \[
 S = QK^\top/\sqrt d + M, \qquad P = \softmax(S), \qquad O = PV,
 \]
-where $M$ is $-\infty$ above the diagonal and the softmax acts on rows.
+where the mask $M$ is $-\infty$ above the diagonal, so that no position attends
+to a later one, and the softmax normalises each row.
 
 \begin{proposition}
-Given $\partial O$, the gradients are $\partial V = P^\top \partial O$,
+Let $\partial O$ be the gradient of the loss with respect to $O$, and similarly
+for the other matrices. Then $\partial V = P^\top \partial O$,
 $\partial P = \partial O\, V^\top$, $\partial S_{ik} = P_{ik}(\partial P_{ik} - \rho_i)$
 with $\rho_i = \sum_j \partial P_{ij} P_{ij}$, $\partial Q = \partial S\, K/\sqrt d$ and
 $\partial K = \partial S^\top Q/\sqrt d$.
 \end{proposition}
 \begin{proof}
-The first 2 follow from $O = PV$. Within a row,
+The first two identities follow from $O = PV$. Within a row,
 $\partial P_{ij}/\partial S_{ik} = P_{ij}(\delta_{jk} - P_{ik})$, so
 $\partial S_{ik} = \sum_j \partial P_{ij} P_{ij} (\delta_{jk} - P_{ik}) = P_{ik}(\partial P_{ik} - \rho_i)$.
-The last 2 follow from $S = QK^\top/\sqrt d$; where $M = -\infty$, $P_{ik} = 0$ and so
-$\partial S_{ik} = 0$.
+The last two follow from $S = QK^\top/\sqrt d$. Where $M = -\infty$ we have
+$P_{ik} = 0$ and therefore $\partial S_{ik} = 0$.
 \end{proof}
 
 Apart from $\partial S$, every gradient is a matrix product and runs on the same
-kernel as the forward pass. A test perturbs 3 random entries of every
-parameter tensor by $\pm 10^{-2}$ and requires the measured change of the loss
-to agree with the computed gradient within 5\,\%.
+kernel as the forward pass. Because hand-written gradients are easy to get
+wrong, a test perturbs three random entries of every parameter tensor by
+$\pm 10^{-2}$ and checks that the resulting change of the loss agrees with the
+computed gradient to within 5\,\%.
 
 \section{Lyrics}
 \label{sec:lyrics}
 
-A caption says how a piece should sound, not which words to sing. Lyrics
-need their own input, and training examples in which the model can hear which
-words are sung where.
+A caption describes how a piece should sound, but not which words should be
+sung. To make the words controllable, the model needs a second text input,
+and it needs training examples in which it can hear which words are sung
+where.
 
 \subsection{A position map that preserves a trained model}
 
-The lyrics take $L = 256$ byte positions between the caption and the
-separator. Each position $p$ reads its position embedding from row $\pi(p)$ of a
-table, and the choice of $\pi$ decides whether a model trained without lyrics
-can be extended (\cref{fig:lyrics}).
+The lyrics occupy $L = 256$ byte positions between the caption and the
+separator. Each position $p$ takes its position embedding from row $\pi(p)$ of
+a table, and the choice of $\pi$ determines whether a model trained without
+lyrics can later be extended (\cref{fig:lyrics}).
 
 \begin{figure}[htbp]
 \centering
-\resizebox{\linewidth}{!}{%
-\input{figures/lyrics}}
-\caption{The position map $\pi$. Positions outside the lyrics keep the rows they
-used before lyrics were added; the lyrics use new rows appended to the table.}
+\resizebox{\linewidth}{!}{\input{figures/lyrics}}
+\caption{The position map $\pi$. Positions outside the lyrics keep the rows
+that they used before the lyrics were added, and the lyrics use new rows
+appended to the table.}
 \label{fig:lyrics}
 \end{figure}
 
 \begin{definition}[Position map]
-With the caption at positions $[1, 1{+}P)$, the lyrics at $[1{+}P, 1{+}P{+}L)$, and
-$T$ rows in the model without lyrics,
+Suppose the caption occupies positions $[1, 1{+}P)$, the lyrics occupy
+$[1{+}P, 1{+}P{+}L)$, and the model without lyrics has $T$ rows. Then
 \[
 \pi(p) =
 \begin{cases}
@@ -431,40 +497,49 @@ p - L & \text{otherwise}.
 
 \begin{lemma}
 Every position outside the lyrics uses the row that the same part of the
-sequence used without lyrics, and the lyrics use only the new rows $[T, T + L)$.
+sequence used without lyrics, and the lyrics use only the new rows
+$[T, T + L)$.
 \end{lemma}
 \begin{proof}
-Caption positions are unchanged. The separator and the audio move right by
-$L$, which $\pi$ subtracts. The lyrics map onto $T + [0, L)$.
+Caption positions are unchanged. The separator and the audio are shifted right
+by $L$ positions, and $\pi$ subtracts $L$. The lyrics are mapped onto
+$T + [0, L)$.
 \end{proof}
 
-With $P = 2$, $L = 3$ and $T = 16$, positions $0, \dots, 8$ use rows
-$0, 1, 2, 16, 17, 18, 3, 4, 5$. A trained model is therefore extended by
-appending $L$ new rows to its table; every learned parameter keeps its meaning,
-and training continues from there.
+For example, with $P = 2$, $L = 3$ and $T = 16$, positions $0$ to $8$ use the rows
+\[
+0,\ 1,\ 2,\ 16,\ 17,\ 18,\ 3,\ 4,\ 5.
+\] A trained model can therefore be extended by
+appending $L$ new rows to its table. All learned parameters keep their
+meaning, and training simply continues.
 
 \subsection{Pairing audio with the words sung in it}
 
-A training example covers 13.6\,s of a song and must carry the lines sung in
-that window. JamendoLyrics \cite{durand2023lyrics} gives the start and end of
-every line of 78 songs in English, French, German and Spanish; a window
-receives each line that overlaps it. Takes recorded with our studio carry the
-text without timings, and their lines are assumed to divide the take evenly,
-a fair approximation for short takes of continuous singing. Since the lyrics
-corpus is small (4.7\,h against 23\,h), each dataset has a sampling weight:
-weight $w$ makes each of its songs $w$ times as likely to be drawn.
+A training example covers a window of a song, and it should carry the lines
+sung in that window. JamendoLyrics \cite{durand2023lyrics} gives the start and
+end time of every line of 78 songs in English, French, German and Spanish, and
+a window receives each line that overlaps it. Takes recorded with our studio
+come with their text but without timings, so we assume that their lines are
+spread evenly over the take; this is a fair approximation for short takes of
+continuous singing. Because the lyrics corpus is small (4.7 hours, against 23
+hours of captioned music), each dataset receives a sampling weight: a weight of
+$w$ makes each of its songs $w$ times as likely to be drawn.
 
-\subsection{Does the model read the lyrics?}
+\subsection{Testing whether the lyrics are used}
 \label{sec:lyrics-test}
 
-A model can lower its loss on the lyrics corpus by learning how those songs
-sound, without reading their words. We therefore test the use of the lyrics
-directly, by giving the model the same audio with the right words, with no
-words and with someone else's words.
+A model can lower its loss on the lyrics corpus simply by learning how those
+particular songs sound, without reading their words. We therefore test the use
+of the lyrics directly, by giving the model the same audio with the correct
+words, with no words, and with words from another song.
 
 \begin{procedure}{\proc{Lyrics-Test}$(\theta, \mathcal{D}, B)$}
+{a trained model with parameters $\theta$, a set $\mathcal{D}$ of held-out songs
+with lyrics, and a number of batches $B$.}
+{the mean paired difference $\bar\Delta$, its standard error $s$, and whether
+the difference is clearly positive.}
 \li \kw{for} $b \in [0, B)$ \{ \\
-\li \> draw a batch of windows from held-out songs $\mathcal{D}$ \groupend
+\li \> draw a batch of windows from the songs in $\mathcal{D}$ \groupend
 \li \> $\mathcal{L}^\text{right}_b = $ loss of $\theta$ with each window's own lyrics \\
 \li \> $\mathcal{L}^\text{none}_b = $ loss of $\theta$ with empty lyrics \\
 \li \> $\mathcal{L}^\text{wrong}_b = $ loss of $\theta$ with lines from another song \\
@@ -475,100 +550,114 @@ words and with someone else's words.
 \li \kw{return} $\bar\Delta$, $s$, and whether $\bar\Delta > 2s$
 \end{procedure}
 
-Lines 3--5 score the same windows, so line 7 compares like with like and
-removes the variation between windows. A model that ignores the words gives
-$\bar\Delta \approx 0$; one that reads them predicts the audio better with the right
-words, so $\bar\Delta > 0$. The wrong lines in line 5 always begin at a sung
-line, never at silence, and comparing lines 4 and 5 separates a reaction to
-the presence of text from a reaction to its content.
+Lines 3--5 score the same windows, so the differences in line 7 compare like
+with like, and most of the variation between windows cancels. A model that
+ignores the words gives $\bar\Delta \approx 0$. A model that reads them should
+predict the audio better with the right words than with the wrong ones, giving
+$\bar\Delta > 0$, measured in nats per code. The wrong lines in line 5 always
+begin at a sung line rather than at silence, and comparing lines 4 and 5 helps
+distinguish a reaction to the presence of text from a reaction to its
+content.
 
 \section{Generation}
 \label{sec:generation}
 
-Generation repeats one step: predict a distribution for each level at the
-next position, draw an integer from each, and append them.
+Generation repeats a single step: the model predicts a distribution for each
+codebook at the next position, one code is drawn from each, and the drawn codes
+are appended to the sequence.
 
 \subsection{The key/value cache}
 
-Position $p$ attends to the keys and values of positions $0, \dots, p$. These
-never change once computed, because no position attends forward, so a cache
-keeps them \cite{pope2023inference}.
+Position $p$ attends to the keys and values of positions $0, \dots, p$. These do
+not change once they have been computed, because no position attends forward,
+so a cache can keep them \cite{pope2023inference}.
 
 \begin{procedure}{\proc{Decode-Step}$(z, p, \mathit{cache})$}
+{the codes $z$ to place at position $p$, the position $p$ itself, and the keys
+and values of positions $0, \dots, p - 1$ for every block.}
+{the scores of every codebook for position $p + 1$; the cache is extended by
+position $p$.}
 \li $h = \operatorname{embed}(z) + \operatorname{position}(\pi(p))$ \groupend
 \li \kw{for} each block $j$ \{ \\
-\li \> $q, k, v = $ projections of $\operatorname{Norm}(h)$ \\
+\li \> $q, k, v = $ query, key and value projections of $\operatorname{Norm}(h)$ \\
 \li \> $\mathit{cache}_j[p] = (k, v)$ \\
 \li \> $h = h + \operatorname{Attend}(q,\, \mathit{cache}_j[0 \,..\, p])$ \\
 \li \> $h = h + \operatorname{FeedForward}(\operatorname{Norm}(h))$ \\
 \li \} \groupend
-\li \kw{return} the 4 groups of scores of $\operatorname{Norm}(h)$
+\li \kw{return} the output-head scores of $\operatorname{Norm}(h)$
 \end{procedure}
 
 \begin{theorem}
-Feeding a sequence position by position through \proc{Decode-Step} gives, at
-every position, the scores of a single forward pass over the whole sequence.
+Feeding a sequence position by position through \proc{Decode-Step} yields, at
+every position, the same scores as a single forward pass over the whole
+sequence.
 \end{theorem}
 \begin{proof}
-By induction over the blocks. At block 0 the input at $p$ depends only on the
-token and position of $p$. Suppose the inputs of block $j$ agree up to position
-$p$. Then the keys and values of line 3 agree, and when $p$ is processed the
-cache holds exactly those of positions $0, \dots, p$. In the full pass the mask
-gives zero weight to later positions, so attention at $p$ combines the same
-keys and values with the same weights, and the feed-forward network acts on
-each position alone. The outputs of block $j$ therefore agree up to $p$.
+We argue by induction over the blocks. At block 0, the input at position $p$
+depends only on the token and the position of $p$. Suppose that the inputs of
+block $j$ agree at all positions up to $p$. Then the keys and values computed in
+line 3 agree, and when position $p$ is processed the cache holds exactly those
+of positions $0, \dots, p$. In the full pass the mask gives zero weight to later
+positions, so attention at $p$ combines the same keys and values with the same
+weights, and the feed-forward network acts on each position separately. The
+outputs of block $j$, which are the inputs of block $j + 1$, therefore agree up
+to position $p$.
 \end{proof}
 
-A test confirms the theorem within $10^{-4}$ at every position, for models with
-and without lyrics, which also checks $\pi$. The cache has a fixed capacity, so
-a step allocates no memory and costs 3.2\,ms instead of 23.4\,ms for
-recomputing the context.
+A test checks the theorem numerically, to within $10^{-4}$ at every position,
+for models with and without lyrics; the second case also checks the position
+map $\pi$. Because the cache has a fixed capacity, a step allocates no memory.
 
 \subsection{Sampling and guidance}
 
-We keep the $k = 250$ most probable integers of each level and draw among them
-\cite{fan2018hierarchical}. Because the text was removed from 10\,\% of the
-training examples, the model predicts both with the text, $z^\text{text}$, and
-without it, $z^\text{none}$. Classifier-free guidance \cite{ho2022cfg}
-amplifies their difference:
+For each codebook we keep the $k = 250$ most probable codes and draw among
+them \cite{fan2018hierarchical}. Because the text was removed from 10\,\% of the
+training examples, the same model can predict both with the text, giving
+scores $z^\text{text}$, and without it, giving $z^\text{none}$. Classifier-free
+guidance \cite{ho2022cfg} amplifies their difference:
 \[
-z = z^\text{none} + s \,\big(z^\text{text} - z^\text{none}\big).
+z = z^\text{none} + s \,\big(z^\text{text} - z^\text{none}\big),
 \]
-If 2 integers score $(2, 1)$ with the text and $(1, 1)$ without, the first has
-probability 0.73; with $s = 3$ the scores become $(4, 1)$ and its probability
-0.95. We use $s = 3$. Lyrics longer than $L$ bytes are cut at line breaks into
-windows that are fed in turn, each over an equal share of the output, with the
-recent audio kept as context.
+where $s$ is the guidance scale. For instance, if two codes score $(2, 1)$ with
+the text and $(1, 1)$ without it, the first has probability 0.73; with $s = 3$
+the scores become $(4, 1)$, and its probability rises to 0.95. We use $s = 3$,
+which doubles the computation per step. Lyrics longer than $L$ bytes are cut
+at line breaks into windows that are presented in turn, each over an equal
+share of the output, while the most recent audio is kept as context.
 
 \section{GPU kernels}
 \label{sec:gpu}
 
-Matrix products carry nearly all of the arithmetic: the spectrogram, the
-nearest-prototype search, the projections of the Transformer and both
-products of attention. Our tutorial \cite{pathak2026tiled} derives the
-shared-memory tiled product; here we take it one step further and show how one
-gradient is made repeatable.
+Matrix products account for almost all of the arithmetic: the spectrogram,
+the nearest-prototype search, the projections of the Transformer and both
+products inside attention. Our tutorial \cite{pathak2026tiled} derives the
+shared-memory tiled product in detail; here we describe one further step,
+register blocking, and the way we made one gradient repeatable.
 
 \subsection{Register blocking}
 
-In the tiled kernel a block of $16 \times 16$ threads copies tiles of $A$ and $B$
-into shared memory, which cuts global traffic 16-fold
-\cite{pathak2026tiled,kirk2022programming}. Each multiply-add still reads 2
-values from shared memory, which is slower than a thread's registers.
-Register blocking \cite{volkov2008benchmarking} lets each thread compute an
-$r \times r$ group of outputs and reuse every value it reads $r$ times
-(\cref{fig:blocking}).
+In the tiled kernel, a block of $16 \times 16$ threads copies tiles of $A$ and
+$B$ into shared memory, which reduces traffic to global memory sixteenfold
+\cite{pathak2026tiled,kirk2022programming}. Every multiply-add still reads two
+values from shared memory, however, and shared memory is slower than a
+thread's registers. Register blocking \cite{volkov2008benchmarking} lets each
+thread compute an $r \times r$ group of outputs, so that every value it reads is
+used $r$ times (\cref{fig:blocking}).
 
 \begin{figure}[htbp]
 \centering
 \input{figures/blocking}
 \caption{Register blocking with $4 \times 4$ threads and $r = 2$. Each thread
-computes $r^2$ outputs spread over the tile, rows $t_y + 4i$ and columns
-$t_x + 4j$. Our kernel uses $16 \times 16$ threads, $r = 4$ and a $64 \times 64$ tile.}
+computes $r^2$ outputs spread over the tile, in rows $t_y + 4i$ and columns
+$t_x + 4j$. Our kernel uses $16 \times 16$ threads, $r = 4$ and a $64 \times 64$
+tile.}
 \label{fig:blocking}
 \end{figure}
 
-\begin{procedure}{\proc{Blocked-Thread}$(t_x, t_y)$ \quad tile $64 \times 64$, depth 16, $r = 4$}
+\begin{procedure}{\proc{Blocked-Thread}$(t_x, t_y)$}
+{the coordinates $(t_x, t_y)$ of a thread within a block of $16 \times 16$
+threads; the block computes a $64 \times 64$ tile of $C = AB$, with $r = 4$.}
+{the 16 entries of the tile owned by the thread, written to $C$.}
 \li $\mathit{sum}[i][j] = 0$ for $i, j \in [0, r)$ \groupend
 \li \kw{for} each phase $t$ \{ \\
 \li \> copy a $64 \times 16$ tile of $A$ into \textit{tileA} \\
@@ -581,97 +670,93 @@ $t_x + 4j$. Our kernel uses $16 \times 16$ threads, $r = 4$ and a $64 \times 64$
 \li \> \} \groupend
 \li \> \proc{Barrier}() \\
 \li \} \groupend
-\li store $\mathit{sum}[i][j]$ at row $t_y + 16i$, column $t_x + 16j$ of $C$
+\li store $\mathit{sum}[i][j]$ at row $t_y + 16i$, column $t_x + 16j$ of the tile
 \end{procedure}
 
-Lines 7--8 read $2r = 8$ values and line 9 performs $r^2 = 16$ multiply-adds, so
-each multiply-add costs $2/r = 0.5$ shared-memory reads instead of 2. Global
-traffic also falls: each phase copies $2 \cdot 64 \cdot 16$ values for
-$64 \cdot 64 \cdot 16$ multiply-adds, so a product of an $M \times K$ and a
+\proc{Barrier}() waits until every thread of the block has reached it. Lines 7
+and 8 read $2r = 8$ values from shared memory, and line 9 performs $r^2 = 16$
+multiply-adds, so each multiply-add costs $2/r = 0.5$ reads instead of 2.
+Global traffic falls as well: each phase copies $2 \cdot 64 \cdot 16$ values for
+$64 \cdot 64 \cdot 16$ multiply-adds, so the product of an $M \times K$ and a
 $K \times N$ matrix fetches
 \[
 \frac{M}{64} \cdot \frac{N}{64} \cdot \frac{K}{16} \cdot 2 \cdot 64 \cdot 16 = \frac{2MNK}{64}
 \]
-values, a quarter of the $2MNK/16$ of $16 \times 16$ tiles. The 2 barriers
-play the roles proved correct for the tiled kernel \cite{pathak2026tiled}. On
-the Thor, the blocked kernel cut a training step on $4 \times 768$ positions from
-238\,ms to 147\,ms.
+values, a quarter of the $2MNK/16$ needed with $16 \times 16$ tiles. The two
+barriers play the same roles as in the tiled kernel, whose correctness is
+proved in \cite{pathak2026tiled}. On the Orin NX the blocked kernel is 1.8 to
+2.3 times faster than the tiled one (\cref{tab:bench-gemm}).
 
 \subsection{A repeatable embedding gradient}
 
-The embedding gradient adds the gradient $g_p$ of each position into the row of
-its token $z_p$. Atomic additions would let threads add into a shared row in a
-varying order, and floating-point addition is not associative, so the result
-would vary between runs. We fix the order with a counting sort.
+The gradient of the embedding table adds the gradient $g_p$ of each position $p$
+into the row of its token $z_p$. Many positions share a token. With atomic
+additions, threads would add into a shared row in an order that varies from
+run to run, and because floating-point addition is not associative, the result
+would vary as well. We fix the order with a counting sort.
 
 \begin{procedure}{\proc{Embedding-Gradient}$(z, g, V)$}
-\li $\mathit{count}[v] = |\{p : z_p = v\}|$ for $v \in [0, V)$ \cmt{CPU} \\
+{the token $z_p$ and the gradient vector $g_p$ of every position $p$, and the
+number of rows $V$ of the embedding table.}
+{the gradient $G$ of the embedding table, one row per token.}
+\li $\mathit{count}[v] = |\{p : z_p = v\}|$ for $v \in [0, V)$ \cmt{on the CPU} \\
 \li $\mathit{start}[v] = \sum_{u < v} \mathit{count}[u]$ \\
 \li $\mathit{list} = $ positions sorted by token, then by position \groupend
-\li \kw{for} each token $v$ and column $c$, in parallel \{ \cmt{GPU} \\
+\li \kw{for} each token $v$ and column $c$, in parallel \{ \cmt{on the GPU} \\
 \li \> $G[v][c] = \sum g_p[c]$ over $p$ in $\mathit{list}[\mathit{start}[v] \,..\, \mathit{start}[v+1])$, in order \\
 \li \}
 \end{procedure}
 
-For tokens $z = (2, 0, 2, 1)$, the counts are $(1, 1, 2)$, the starts
-$(0, 1, 2, 4)$ and the list $(1, 3, 0, 2)$, so token 2 receives $g_0 + g_2$ in that
-order. Each entry is summed by 1 thread in a fixed order, so the result is the
-same on every run, and a whole training run repeats bit for bit.
+For the tokens $z = (2, 0, 2, 1)$, the counts are $(1, 1, 2)$, the starts are
+$(0, 1, 2, 4)$ and the list is $(1, 3, 0, 2)$, so token 2 receives $g_0 + g_2$ in
+that order. Each entry is summed by one thread in a fixed order, so the result
+is the same on every run, and a whole training run can be repeated bit for
+bit on the same device.
 
 \section{Experiments}
 \label{sec:experiments}
 
-We used a Jetson Orin NX 16\,GB with CUDA 12.6 and a Jetson AGX Thor. The main
+The hardware is described in \cref{tab:hardware} in the appendix. The main
 corpus is the Song Describer Dataset \cite{manco2023songdescriber}, 706
 two-minute Creative Commons excerpts with 1\,106 captions written by
-listeners. Songs are divided by artist, so that no voice appears on both
-sides: 667 for training and 39 held out. Spectral errors are mean absolute
-differences of natural-log mel energies, 1 unit being about 8.7\,dB.
+listeners. Songs are divided between training and evaluation by artist, so
+that no voice appears on both sides, which leaves 667 songs for training and 39
+for evaluation. We report spectral errors as mean absolute differences of
+natural-log mel energies; one unit corresponds to about 8.7\,dB.
 
-\paragraph{Correctness and speed.} The 38 tests pass on the Orin NX, and the
-kernel tests also on the Thor. They compare every kernel with a CPU
-implementation at awkward sizes, check every gradient numerically, verify the
-cache theorem, and confirm that a small network memorises a fixed batch.
-\Cref{tab:gemm} shows that tiling speeds up the matrix product 5.8 to 8.2
-times on the Orin NX; a training step on $4 \times 512$ positions falls from
-2\,919\,ms to 537\,ms.
+\paragraph{Correctness and speed.} All 38 tests pass on the Orin NX, and the
+kernel tests also pass on the Thor. They compare every kernel with a CPU
+implementation at deliberately awkward sizes, check every gradient
+numerically, verify the cache theorem, and confirm that a small network can
+memorise a fixed batch. On the Orin NX, register blocking makes a training
+step of the first model 1.8 times faster than tiling and 9.3 times faster than
+the direct kernel (\cref{tab:bench-train}).
 
-\begin{widetable}
-\caption{Matrix products on the Orin NX, in GFLOP/s.}
-\label{tab:gemm}
-\small
-\begin{tabular}{lrrr}
-\toprule
-product ($M \times N \times K$) & direct & tiled & speed-up \\
-\midrule
-attention projections ($2048 \times 768 \times 256$) & 32.2 & 263.4 & 8.2 \\
-feed-forward ($2048 \times 1024 \times 256$) & 42.0 & 264.2 & 6.3 \\
-output heads ($2048 \times 4096 \times 256$) & 30.5 & 217.4 & 7.1 \\
-spectrogram ($4096 \times 513 \times 1024$) & 38.6 & 224.0 & 5.8 \\
-\bottomrule
-\end{tabular}
-\end{widetable}
-
-\paragraph{Training.} A first run of 1\,500 steps reached a held-out loss of
-4.93, and a run of 15\,000 steps on the Thor 4.02 (\cref{tab:training}).
-Restricted to the 281 songs whose captions mention a voice, a model fine-tuned
-from the long run peaked after 250 steps at 4.23, after which its held-out loss
-rose while its training loss fell; a model trained from scratch on the same
-songs reached 4.72. The vocal subset is too small to train on for long.
+\paragraph{First training runs.} \Cref{tab:training} summarises the runs with
+the first tokenizer. A run of 1\,500 steps reached a held-out loss of 4.93, and
+a run of 15\,000 steps on the Thor reached 4.02. When we restricted the data to
+the 281 songs whose captions mention a voice, a model fine-tuned from the
+longer run reached its best held-out loss of 4.23 after only 250 steps, after
+which its held-out loss rose while its training loss continued to fall; a
+model trained from scratch on the same songs reached 4.72. The vocal subset
+appears to be too small for long training.
 
 \begin{table}[htbp]
 \centering
-\caption{Best held-out loss, in nats per token (uniform guess 6.93).}
+\caption{Best held-out loss with the first tokenizer, in nats per code
+(uniform guess: 6.93).}
 \label{tab:training}
 \small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{llrr}
 \toprule
 run & data & steps & loss \\
+ & & & (nats per code) \\
 \midrule
-first run, Orin & all songs & 1\,500 & 4.93 \\
-long run, Thor & all songs & 15\,000 & 4.02 \\
+first run, Orin NX & all songs & 1\,500 & 4.93 \\
+longer run, Thor & all songs & 15\,000 & 4.02 \\
 fine-tuned, Thor & vocal songs & 250 & 4.23 \\
-from scratch, Orin & vocal songs & 5\,500 & 4.72 \\
+from scratch, Orin NX & vocal songs & 5\,500 & 4.72 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -679,86 +764,121 @@ from scratch, Orin & vocal songs & 5\,500 & 4.72 \\
 \subsection{What limits the sound}
 \label{sec:pipeline}
 
-Generated voices sound pitched but blurred. To find the cause without
-involving the model, we rendered 12\,s excerpts of 4 held-out vocal songs
-through each stage and measured the error against their exact spectrograms
-(\cref{fig:errors,tab:reconstruction}).
+The generated voices sounded pitched but blurred. To find out why, without
+involving the model, we rendered 12-second excerpts of four held-out vocal
+songs through each stage of the pipeline and compared the results with their
+exact spectrograms (\cref{fig:errors,tab:reconstruction}).
 
 \begin{figure}[htbp]
 \centering
 \resizebox{\linewidth}{!}{\input{figures/errors}}
-\caption{Where the spectral detail is lost. The tokenizer causes 3.6 times the
-error of the vocoder, and a perfect model (bottom bar) is limited almost
-entirely by the tokenizer.}
+\caption{Mean spectral error of each stage on four held-out vocal excerpts,
+for the first tokenizer (grey) and the final one (blue). The bottom pair is
+the best that any model trained on these tokens could achieve.}
 \label{fig:errors}
 \end{figure}
 
 \begin{widetable}
-\caption{Spectral error of each stage on 4 held-out vocal excerpts.}
+\caption{Spectral error of each stage on four held-out vocal excerpts, in log
+units per mel band, for the first tokenizer and the final one.}
 \label{tab:reconstruction}
 \small
-\begin{tabular}{lrrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-excerpt & vocoder & 1 level & 4 levels & end to end \\
+ & & \multicolumn{2}{c}{first tokenizer} & \multicolumn{2}{c}{final tokenizer} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+excerpt & vocoder & tokens & end to end & tokens & end to end \\
 \midrule
-guitar, brass, female voice & 0.230 & 1.055 & 0.807 & 0.821 \\
-folk metal, male voice & 0.152 & 0.973 & 0.707 & 0.703 \\
-electronic, vocal sample & 0.170 & 0.801 & 0.569 & 0.554 \\
-bass, piano, wordless voice & 0.222 & 0.984 & 0.732 & 0.763 \\
+guitar, brass, female voice & 0.230 & 0.807 & 0.821 & 0.425 & 0.480 \\
+folk metal, male voice & 0.152 & 0.707 & 0.703 & 0.353 & 0.378 \\
+electronic, vocal sample & 0.170 & 0.569 & 0.554 & 0.268 & 0.338 \\
+bass, piano, wordless voice & 0.222 & 0.732 & 0.763 & 0.390 & 0.460 \\
 \midrule
-mean & 0.194 & 0.953 & 0.704 & 0.710 \\
+mean & 0.194 & 0.704 & 0.710 & 0.359 & 0.414 \\
 \bottomrule
 \end{tabular}
 \end{widetable}
 
-An error of 0.7 log units, about 6\,dB per band, erases the harmonic and
-formant detail that makes a voice intelligible. The measure ignores the phase
-artefacts of Griffin-Lim, which remain audible; the tokenizer is the main
-spectral limit, not the only audible one.
+With the first tokenizer, the tokens alone caused 3.6 times the error of the
+vocoder, and the end-to-end error of a perfect model, 0.71, was almost entirely
+due to the tokenizer. An error of about 0.7 log units, or roughly 6\,dB per band,
+is enough to blur the harmonic and formant detail on which an intelligible
+voice depends. This measure does not capture the phase artefacts of
+Griffin-Lim, which remain audible, so the tokenizer is the main spectral
+limitation rather than the only audible one.
 
-To test the model alone, we trained it on a single 12\,s excerpt of 562 frames.
-Its loss fell to 0.054 after 100 steps and 0.002 after 200. Generating 12\,s
-from the caption and comparing the integers with the excerpt's
-(\cref{tab:memorisation}), greedy decoding reproduces all 562 frames, and
-top-$k$ sampling departs only at isolated integers without drifting.
+To examine the model on its own, we trained it on a single 12-second excerpt of
+562 frames. Its training loss fell to 0.054 after 100 steps and to 0.002 after
+200. We then generated 12 seconds from the excerpt's caption and compared the
+generated codes with the excerpt's own (\cref{tab:memorisation}). Greedy
+decoding reproduced all 562 frames, and top-$k$ sampling departed from the
+excerpt only at isolated codes, without drifting away.
 
 \begin{table}[htbp]
 \centering
-\caption{Generated integers against the memorised excerpt.}
+\caption{Generated codes compared with a memorised excerpt.}
 \label{tab:memorisation}
 \small
 \begin{tabular}{lcc}
 \toprule
-decoding & agreement per level & identical prefix \\
+decoding & agreement per codebook & identical prefix \\
+ & (\%) & (frames) \\
 \midrule
-greedy & 1.000, 1.000, 1.000, 1.000 & 562 of 562 \\
-top-$k$, seed 1 & 0.996, 1.000, 1.000, 0.996 & 26 \\
-top-$k$, seed 2 & 1.000, 0.998, 0.993, 0.998 & 26 \\
+greedy & 100.0, 100.0, 100.0, 100.0 & 562 of 562 \\
+top-$k$, seed 1 & 99.6, 100.0, 100.0, 99.6 & 26 \\
+top-$k$, seed 2 & 100.0, 99.8, 99.3, 99.8 & 26 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{observation}
-The model can reproduce audio exactly, and when it does, it sounds exactly
-like the tokenizer's reconstruction. Better sound requires finer tokens, and
-finer tokens are where our next experiments go.
+The model can reproduce audio exactly, and when it does, the result sounds
+like the tokenizer's reconstruction. These two observations led us to
+improve the tokens before training larger models.
 \end{observation}
+
+\subsection{A finer tokenizer}
+
+Guided by this analysis, we compared tokenizers that differ in the number of
+frames per step, the number of band groups and the number of levels
+(\cref{tab:tokenizer-study}). Quantising one frame per step in 4 band groups
+with 4 levels each lowered the mean error on the held-out songs from 0.776 to
+0.401. A control without band groups suggests that most of this gain comes from
+the larger number of codes per step, and a smaller part from the grouping. On the four vocal excerpts of \cref{fig:errors}, the error of the
+tokens fell from 0.70 to 0.36, and the end-to-end error from 0.71 to 0.41. The
+price is a vocabulary of 16 codebooks instead of 4.
+
+\subsection{A larger model on the finer tokens}
+\label{sec:large}
+
+With the finer tokens we began training a larger model on the Thor: 8 blocks
+of width 512, 42.9 million parameters, with the lyrics input enabled from the
+start. It is trained on all 742 training songs of the combined corpora, with
+the lyrics corpus weighted 4-fold and two takes recorded by the first author
+weighted 10-fold, in batches of 8 sequences of 1\,408 positions. A step takes
+2.0 seconds and about 11\,GB of memory. Training is still in progress; after
+4\,500 of 20\,000 steps the held-out loss is 5.19 nats per code, averaged over
+16 codebooks, and still falling. Because the vocabulary differs, this figure
+is not comparable with those of \cref{tab:training}.
 
 \subsection{Lyrics}
 
-We extended both vocal models with a lyrics field and trained them on vocal
-songs, JamendoLyrics and songs whose captions mention rock or a related style.
-\Cref{tab:lyrics} gives \proc{Lyrics-Test} for a model trained on the Thor
-with the lyrics corpus weighted 8-fold, over 48 batches of 4 windows.
+We extended both vocal models of \cref{tab:training} with a lyrics field and
+trained them further on vocal songs, JamendoLyrics, and songs whose captions
+mention rock or a related style. \Cref{tab:lyrics} gives the result of
+\proc{Lyrics-Test} for a model trained on the Thor with the lyrics corpus
+weighted 8-fold, over 48 batches of 4 windows.
 
 \begin{table}[htbp]
 \centering
-\caption{Loss with the right, no and wrong lyrics, and $\bar\Delta \pm s$.}
+\caption{Loss with the right lyrics, no lyrics and the wrong lyrics, and the
+paired difference $\bar\Delta \pm s$.}
 \label{tab:lyrics}
 \small
 \begin{tabular}{lrrrr}
 \toprule
-songs & right & none & wrong & $\bar\Delta$ \\
+songs & right & none & wrong & $\bar\Delta \pm s$ \\
+ & \multicolumn{4}{c}{(nats per code)} \\
 \midrule
 held out (6) & 4.3345 & 4.3409 & 4.3345 & $+0.0000 \pm 0.0004$ \\
 training (73) & 4.0337 & 4.0395 & 4.0378 & $+0.0042 \pm 0.0006$ \\
@@ -766,32 +886,36 @@ training (73) & 4.0337 & 4.0395 & 4.0378 & $+0.0042 \pm 0.0006$ \\
 \end{tabular}
 \end{table}
 
-On held-out songs, right and wrong lyrics give the same loss: this model does
-not yet use the words. On training songs the difference is significant but
-small, a sign of memorised songs rather than a learned relation between words
-and sound. The test thus gives a sharp, falsifiable criterion that a future
-lyrics model must pass.
+On the held-out songs, the right and the wrong lyrics give the same loss, so
+this model does not yet use the words. On the training songs the difference is
+statistically clear but small, which we take to indicate memorisation of those
+songs rather than a learned relation between words and sound. We hope that the
+paired test will be useful as a clear criterion for future attempts.
 
 \section{Limitations}
 \label{sec:limitations}
 
-The tokenizer limits fidelity, and \cref{fig:errors} is the yardstick for any
-replacement. Griffin-Lim adds phase artefacts that a learned vocoder would
-remove. The data contain little singing (298 of 706 songs mention a voice) and
-almost nothing of some styles (2 songs are described as grunge). The model is
-far smaller than published systems \cite{copet2023musicgen}, no formal
-listening test has been carried out, the kernels use 32-bit floats without
-tensor cores, and attention stores its full score matrix
-\cite{dao2022flashattention}.
+The tokenizer, although improved, still limits the fidelity of the output,
+and Griffin-Lim adds phase artefacts that a learned vocoder would remove. The
+data contain comparatively little singing (298 of the 706 songs mention a
+voice) and very little of some styles (two songs are described as grunge).
+Our models are much smaller than published systems \cite{copet2023musicgen},
+and we have not yet carried out a formal listening test, so we make no claims
+about perceived quality. On the implementation side, all arithmetic uses
+32-bit floating point without tensor cores, and attention stores its full
+matrix of scores \cite{dao2022flashattention}.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-StaleyNET is a complete text-to-music system, from resampling to GPU kernels,
-written in one language and trained from scratch on edge devices. Owning every
-stage turned the vague complaint that the output sounds blurred into a precise
-measurement: the language model reproduces memorised audio exactly, and the
-tokenizer is the stage that discards the detail a voice needs. The
-stage-by-stage reconstruction and the paired lyrics test give the project
-exact targets, and they generalise to any system that pairs a tokenizer with
-a language model.
+We have described StaleyNET, a complete text-to-music system written in Rust
+and trained from scratch on embedded GPUs. Building every stage ourselves
+allowed us to measure each one separately, and these measurements pointed to
+the tokenizer, rather than the language model, as the main limitation on
+sound quality. A revised tokenizer that quantises groups of frequency bands
+roughly halved the reconstruction error, and a larger model is now being
+trained on it. We hope that the worked examples, the stage-by-stage analysis
+and the paired lyrics test will be of use to others who build similar systems
+on modest hardware.
+
+\FloatBarrier

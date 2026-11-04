@@ -1,16 +1,22 @@
 % Figure "errors", shared by the paper and (as SVG) the book.
 \begin{tikzpicture}
 \begin{axis}[
-  xbar, bar width=9pt, width=72mm, height=46mm, scale only axis,
-  xmin=0, xmax=1.1, xlabel={\sffamily\small mean error, log units per mel band},
-  symbolic y coords={tokens to Griffin-Lim, tokenizer 4 levels, tokenizer 1 level, Griffin-Lim on exact mel},
+  xbar, area legend, bar width=7pt, width=70mm, height=52mm, scale only axis,
+  xmin=0, xmax=1.12, xlabel={\sffamily\small mean error, log units per mel band},
+  symbolic y coords={Griffin-Lim on the exact spectrogram, tokens after 1 level, tokens after all levels, tokens through Griffin-Lim},
   ytick=data, y dir=reverse, axis line style={draw=none}, tick style={draw=none},
-  yticklabel style={font=\sffamily\small}, xticklabel style={font=\sffamily\scriptsize},
-  xmajorgrids, grid style={white!85!black}, enlarge y limits=0.2,
-  nodes near coords, nodes near coords style={font=\sffamily\scriptsize},
-  every node near coord/.append style={xshift=1pt}]
-\addplot[fill=accent!55, draw=none] coordinates {
-  (0.194,Griffin-Lim on exact mel) (0.953,tokenizer 1 level)
-  (0.704,tokenizer 4 levels) (0.710,tokens to Griffin-Lim)};
+  yticklabel style={font=\sffamily\small, align=right},
+  xticklabel style={font=\sffamily\scriptsize, /pgf/number format/fixed},
+  xmajorgrids, grid style={white!85!black}, enlarge y limits=0.18,
+  nodes near coords, nodes near coords style={font=\sffamily\scriptsize, /pgf/number format/.cd, fixed, fixed zerofill, precision=2},
+  legend style={font=\sffamily\scriptsize, draw=none, fill=none, at={(0.5,1.03)}, anchor=south},
+  legend cell align=left]
+\addplot[fill=muted!45, draw=none] coordinates {
+  (0.194,Griffin-Lim on the exact spectrogram) (0.953,tokens after 1 level)
+  (0.704,tokens after all levels) (0.710,tokens through Griffin-Lim)};
+\addplot[fill=accent!70, draw=none] coordinates {
+  (0.194,Griffin-Lim on the exact spectrogram) (0.696,tokens after 1 level)
+  (0.359,tokens after all levels) (0.414,tokens through Griffin-Lim)};
+\legend{4 levels over 2 frames (first tokenizer), 4 levels in 4 band groups (final)}
 \end{axis}
 \end{tikzpicture}

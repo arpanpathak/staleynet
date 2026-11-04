@@ -1,21 +1,23 @@
 % Figure "lyrics", shared by the paper and (as SVG) the book.
 \begin{tikzpicture}[figure, x=1mm, y=1mm]
-  \node[block, fill=blockgray, minimum width=8mm] (b) at (0,0) {B};
-  \node[block, fill=blockamber, minimum width=20mm, right=1.5mm of b] (c) {caption};
-  \node[block, fill=blockrose, minimum width=24mm, right=1.5mm of c] (l) {lyrics};
-  \node[block, fill=blockgray, minimum width=8mm, right=1.5mm of l] (s) {S};
-  \node[block, fill=blockblue, minimum width=16mm, right=1.5mm of s] (a) {audio \dots};
-  \node[block, fill=blockgray, minimum width=8mm, below=10mm of b] (rb) {0};
-  \node[block, fill=blockamber, minimum width=20mm, right=1.5mm of rb] (rc) {1--126};
-  \node[block, fill=blockgray, minimum width=8mm, right=1.5mm of rc] (rs) {127};
-  \node[block, fill=blockblue, minimum width=16mm, right=1.5mm of rs] (ra) {128 \dots};
-  \node[block, fill=blockrose, minimum width=24mm, right=5mm of ra] (rl) {768--1023};
-  \draw[flow] (b) -- (rb);
-  \draw[flow] (c) -- (rc);
-  \draw[flow] (s) -- (rs);
-  \draw[flow] (a) -- (ra);
-  \draw[flow] (l.south) -- (rl.north);
-  \node[caption text, anchor=east] at ($(b.west)+(-1,0)$) {sequence};
-  \node[caption text, anchor=east] at ($(rb.west)+(-1,0)$) {table row};
-  \node[caption text, anchor=north] at (rl.south) {new rows};
+  % The sequence, in the order the model reads it.
+  \node[block, fill=blockgray,  minimum width=9mm]  (b) at (0,0)  {B};
+  \node[block, fill=blockamber, minimum width=21mm, right=1.6mm of b] (c) {caption};
+  \node[block, fill=blockrose,  minimum width=21mm, right=1.6mm of c] (l) {lyrics};
+  \node[block, fill=blockgray,  minimum width=9mm,  right=1.6mm of l] (s) {S};
+  \node[block, fill=blockblue,  minimum width=19mm, right=1.6mm of s] (a) {audio};
+  % The position table, in row order.
+  \node[block, fill=blockgray,  minimum width=9mm,  below=13mm of b] (rb) {0};
+  \node[block, fill=blockamber, minimum width=21mm, right=1.6mm of rb] (rc) {1 to 126};
+  \node[block, fill=blockgray,  minimum width=9mm,  right=1.6mm of rc] (rs) {127};
+  \node[block, fill=blockblue,  minimum width=19mm, right=1.6mm of rs] (ra) {128 to 767};
+  \node[block, fill=blockrose,  minimum width=21mm, right=1.6mm of ra] (rl) {768 to 1023};
+  \draw[flow, draw=muted] (b) -- (rb);
+  \draw[flow, draw=muted] (c) -- (rc);
+  \draw[flow, draw=muted] (s.south) to[out=-90, in=90] (rs.north);
+  \draw[flow, draw=muted] (a.south) to[out=-90, in=90] (ra.north);
+  \draw[flow, draw=accent, line width=0.9pt] (l.south) to[out=-90, in=90] (rl.north);
+  \node[caption text, anchor=east] at ($(b.west)+(-1.5,0)$) {sequence};
+  \node[caption text, anchor=east] at ($(rb.west)+(-1.5,0)$) {table row};
+  \node[caption text, text=accent, anchor=north] at ($(rl.south)+(0,-1)$) {rows added for lyrics};
 \end{tikzpicture}

@@ -6,7 +6,12 @@ backend from NVIDIA that translates Rust functions marked `#[kernel]` into PTX,
 the GPU's instruction format. Host code (running on the CPU) and kernels
 (running on the GPU) live in the same crate, and cuda-oxide generates a typed
 Rust function for launching each kernel. The roughly twenty kernels of the
-project are collected in `crates/staleynet-cuda/src/kernels.rs`. This chapter
+project live in `crates/staleynet-cuda/src/kernels/`, one file per topic: matrix
+products, attention, the loss, the optimizer, element-wise operations,
+normalization, embeddings, and signal processing. A kernel that needs more than
+a few numbers receives them as one small structure, such as `Product` for a
+matrix product or `AdamWStep` for one optimizer step, so that each value
+arrives with its name and its documentation. This chapter
 explains how the kernels divide their work among GPU threads, describes the
 matrix product in detail, and explains how the code is kept safe and correct.
 
@@ -43,9 +48,13 @@ computes, for a batch of matrix pairs,
 C \leftarrow \alpha \cdot A \cdot B \quad (\text{optionally } + \; C),
 \\]
 
-where either input can be read as stored or as transposed. The batch allows
-the attention of all heads and all sequences to be computed in one launch, and
-reading an input transposed avoids creating transposed copies in memory.
+where either input can be read as stored or as transposed. The kernel does not
+need a separate flag for this: each input is described by the distance in
+memory between neighbouring rows and between neighbouring columns (its
+strides), and a transposed matrix is the same memory read with the two
+distances exchanged. The batch allows the attention of all heads and all
+sequences to be computed in one launch, and reading an input transposed avoids
+creating transposed copies in memory.
 
 ![Shared-memory tiling](figures/tiled-matmul.svg)
 
@@ -102,8 +111,9 @@ in Rust's sense, meaning the programmer must guarantee their validity. In
 StaleyNET every launch is wrapped in a small, safe function in
 `staleynet-cuda/src/ops/`. The function first checks each size the kernel
 depends on and only then launches it, with a comment stating why the launch is
-valid. Inside the kernels, unchecked memory access appears only after an
-explicit bounds check or under a size the wrapper has verified. The model and
+valid. Inside the kernels, writes go through two small helpers in
+`kernels/device.rs` that check the index against the length of the output
+before writing, so the kernels themselves contain no unchecked memory access. The model and
 its layers call only the safe wrappers.
 
 ## Testing the kernels

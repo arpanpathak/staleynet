@@ -1,0 +1,135 @@
+\appendix
+
+\section{Hardware and software}
+\label{sec:appendix-hardware}
+
+\begin{widetable}
+\caption{The two devices. Core counts and memory bandwidth are the
+manufacturer's specifications; memory capacity, compute capability and
+software versions were read from the devices.}
+\label{tab:hardware}
+\footnotesize
+\begin{tabular}{p{0.2\linewidth}p{0.36\linewidth}p{0.36\linewidth}}
+\toprule
+ & Jetson Orin NX 16\,GB & Jetson AGX Thor \\
+\midrule
+GPU & NVIDIA Ampere, 1\,024 CUDA cores, 32 tensor cores & NVIDIA Blackwell, 2\,560 CUDA cores, 96 tensor cores \\
+compute capability & 8.7 & 11.0 \\
+CPU & 8-core Arm Cortex-A78AE & 14-core Arm Neoverse-V3AE \\
+memory & 16\,GB LPDDR5, shared by CPU and GPU & 128\,GB LPDDR5X, shared by CPU and GPU \\
+memory bandwidth & 102\,GB/s & 273\,GB/s \\
+system software & L4T R36.4.3, CUDA 12.6 & L4T R39.2.1, CUDA 13.2 \\
+Rust toolchain & nightly-2026-04-03 & nightly-2026-10-11 \\
+cuda-oxide & revision b7fe543 & revision e027ac3 \\
+\bottomrule
+\end{tabular}
+\end{widetable}
+
+Both devices were shared with other work during our experiments. In
+particular, language-model services occupied most of the Thor's memory until
+the larger training run began, at which point they were stopped.
+
+\FloatBarrier
+\section{Benchmarks}
+\label{sec:appendix-bench}
+
+All figures in this appendix were measured on the Orin NX with
+\code{staleynet bench}. Each timing is the mean of five runs after one
+warm-up run, and each table entry is the median of three such measurements,
+because the clock frequency of the device varies noticeably from run to run.
+
+\begin{widetable}
+\caption{Matrix products at the sizes used by the first model, in GFLOP/s.}
+\label{tab:bench-gemm}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+product ($M \times N \times K$) & direct & tiled & register-blocked & blocked / tiled \\
+\midrule
+attention projections ($2048 \times 768 \times 256$) & 46.8 & 258.6 & 579.0 & 2.2 \\
+feed-forward ($2048 \times 1024 \times 256$) & 55.3 & 255.5 & 450.6 & 1.8 \\
+output heads ($2048 \times 4096 \times 256$) & 31.2 & 222.1 & 458.5 & 2.1 \\
+spectrogram ($4096 \times 513 \times 1024$) & 47.7 & 236.1 & 541.7 & 2.3 \\
+\bottomrule
+\end{tabular}
+\end{widetable}
+
+\begin{table}[htbp]
+\centering
+\caption{One training step of the first model on $4 \times 512$ positions,
+forward and backward.}
+\label{tab:bench-train}
+\small
+\begin{tabular}{lr}
+\toprule
+matrix-product kernel & time per step (ms) \\
+\midrule
+direct & 2\,930 \\
+tiled & 576 \\
+register-blocked & 315 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Other measurements on the Orin NX.}
+\label{tab:bench-other}
+\small
+\begin{tabular}{lr}
+\toprule
+measurement & result \\
+\midrule
+log-mel spectrogram of 60\,s, GPU & 47\,ms \\
+log-mel spectrogram of 60\,s, CPU (rustfft, 8 threads) & 73\,ms \\
+decoding step, key/value cache & 6.2\,ms \\
+decoding step, recomputing the context & 17.1\,ms \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On the Thor, measured during training runs of identical shape, register
+blocking reduced a training step of the first model on $4 \times 768$ positions
+from 238\,ms to 147\,ms, and a step of the larger model on $8 \times 1\,408$
+positions takes about 2.0 seconds.
+
+\FloatBarrier
+\section{Tokenizer study}
+\label{sec:appendix-tokenizer}
+
+\Cref{tab:tokenizer-study} lists the mean reconstruction error over all 39
+held-out songs for the tokenizers we compared, each trained on the same
+training songs with 1\,024 prototypes per codebook. The columns give the
+number of frames per step, the number of band groups, the number of residual
+levels in each group, and the resulting number of codes per step.
+
+\begin{table}[htbp]
+\centering
+\caption{Held-out reconstruction error of different tokenizers, in log units
+per mel band.}
+\label{tab:tokenizer-study}
+\small
+\begin{tabular}{rrrrr}
+\toprule
+frames & groups & levels & codes & error (log units per band) \\
+\midrule
+2 & 1 & 4 & 4 & 0.776 \\
+2 & 1 & 8 & 8 & 0.643 \\
+1 & 1 & 4 & 4 & 0.745 \\
+1 & 1 & 8 & 8 & 0.588 \\
+1 & 4 & 2 & 8 & 0.597 \\
+1 & 8 & 1 & 8 & 0.612 \\
+1 & 1 & 16 & 16 & 0.427 \\
+1 & 8 & 2 & 16 & 0.403 \\
+1 & 4 & 4 & 16 & 0.401 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At 8 codes per step, dividing the bands into groups did not help. With 16
+codes per step it helped a little: 16 levels without groups reached 0.427,
+and 4 groups of 4 levels reached 0.401. Most of the improvement over the first
+tokenizer therefore comes from describing each step with more codes, and a
+smaller part, about 6\,\%, from quantising the band groups separately.
+
+\FloatBarrier
