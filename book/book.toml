@@ -1,0 +1,12 @@
+[book]
+title = "StaleyNET: A Text-Prompted Audio Language Model in Rust and cuda-oxide"
+authors = ["Arpan Pathak"]
+language = "en"
+src = "src"
+
+[output.html]
+additional-css = ["theme/custom.css"]
+mathjax-support = true
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = ""

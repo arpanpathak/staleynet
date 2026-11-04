@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <title>Shared-memory tiling of matrix multiplication</title>
+  <style>
+    .label { fill: #1f1f1f; text-anchor: middle; }
+    .small { font-size: 12px; fill: #555; text-anchor: middle; }
+    .matrix { fill: #ffffff; stroke: #3b3b3b; stroke-width: 1.2; }
+    .gridline { stroke: #e2e2e2; }
+  </style>
+  <rect x="0" y="0" width="960" height="320" fill="#fbfaf7" rx="12"/>
+
+  <!-- A: 160 x 160 at (40,60); tiles of 40 -->
+  <rect class="matrix" x="40" y="60" width="160" height="160"/>
+  <g class="gridline">
+    <line x1="80" y1="60" x2="80" y2="220"/><line x1="120" y1="60" x2="120" y2="220"/><line x1="160" y1="60" x2="160" y2="220"/>
+    <line x1="40" y1="100" x2="200" y2="100"/><line x1="40" y1="140" x2="200" y2="140"/><line x1="40" y1="180" x2="200" y2="180"/>
+  </g>
+  <rect x="40" y="100" width="40" height="40" fill="#d9822b" fill-opacity="0.55">
+    <animate attributeName="x" values="40;80;120;160" dur="6s" calcMode="discrete" repeatCount="indefinite"/>
+  </rect>
+  <text class="label" x="120" y="245">A (rows × inner)</text>
+
+  <text class="label" x="230" y="146" font-size="22">·</text>
+
+  <!-- B at (260,60) -->
+  <rect class="matrix" x="260" y="60" width="160" height="160"/>
+  <g class="gridline">
+    <line x1="300" y1="60" x2="300" y2="220"/><line x1="340" y1="60" x2="340" y2="220"/><line x1="380" y1="60" x2="380" y2="220"/>
+    <line x1="260" y1="100" x2="420" y2="100"/><line x1="260" y1="140" x2="420" y2="140"/><line x1="260" y1="180" x2="420" y2="180"/>
+  </g>
+  <rect x="340" y="60" width="40" height="40" fill="#2f6fb0" fill-opacity="0.55">
+    <animate attributeName="y" values="60;100;140;180" dur="6s" calcMode="discrete" repeatCount="indefinite"/>
+  </rect>
+  <text class="label" x="340" y="245">B (inner × cols)</text>
+
+  <text class="label" x="450" y="146" font-size="22">=</text>
+
+  <!-- C at (480,60) -->
+  <rect class="matrix" x="480" y="60" width="160" height="160"/>
+  <g class="gridline">
+    <line x1="520" y1="60" x2="520" y2="220"/><line x1="560" y1="60" x2="560" y2="220"/><line x1="600" y1="60" x2="600" y2="220"/>
+    <line x1="480" y1="100" x2="640" y2="100"/><line x1="480" y1="140" x2="640" y2="140"/><line x1="480" y1="180" x2="640" y2="180"/>
+  </g>
+  <rect x="560" y="100" width="40" height="40" fill="#3a9a5b">
+    <animate attributeName="fill-opacity" values="0.25;0.45;0.65;0.9" dur="6s" calcMode="discrete" repeatCount="indefinite"/>
+  </rect>
+  <text class="label" x="560" y="245">C: one 16×16 block owns this tile</text>
+
+  <!-- shared memory -->
+  <rect x="690" y="70" width="240" height="140" fill="#eef3ea" stroke="#3a9a5b" rx="8"/>
+  <text class="label" x="810" y="95">shared memory (per block)</text>
+  <rect x="715" y="115" width="60" height="60" fill="#d9822b" fill-opacity="0.55"/>
+  <rect x="845" y="115" width="60" height="60" fill="#2f6fb0" fill-opacity="0.55"/>
+  <text class="small" x="745" y="195">A tile</text>
+  <text class="small" x="875" y="195">B tile</text>
+  <text class="label" x="810" y="150" font-size="18">×</text>
+
+  <text x="40" y="282" font-size="13" fill="#333">Each block loads one tile of A and one of B into shared memory, synchronises, multiplies them, and slides along the</text>
+  <text x="40" y="300" font-size="13" fill="#333">inner dimension. Every global value is read once per tile instead of once per multiply: 16× less global traffic.</text>
+</svg>
