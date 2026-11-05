@@ -29,7 +29,7 @@ if [ "$status" != "0" ]; then
 fi
 
 log "transcribed $(wc -l < "$transcripts") clips"
-python3 deploy/lyrics/merge.py "$cache" "$transcripts"
+target/release/staleynet data merge-lyrics --cache "$cache" --transcripts "$transcripts"
 
 # Stop the run by its exact arguments, then resume it from its latest checkpoint.
 pattern="target/release/staleynet train --cache $primary --run runs/$run "
