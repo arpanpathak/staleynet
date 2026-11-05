@@ -13,10 +13,17 @@
 //! 4. its tokens decoded with all codebooks, through Griffin-Lim (the best a
 //!    perfect language model could sound);
 //!
+//! and, when a trained neural vocoder run is given with `--vocoder`,
+//!
+//! 5. its exact log-mel spectrogram through the neural vocoder;
+//! 6. its tokens decoded with all codebooks, through the neural vocoder (the
+//!    best a perfect language model could sound in the studio);
+//!
 //! and measures, in mean absolute log-mel difference, the error the
-//! tokenizer adds and how consistently Griffin-Lim reproduces the spectrogram
-//! it was given.
+//! tokenizer adds and how consistently each vocoder reproduces the
+//! spectrogram it was given.
 
+use super::open_gpu;
 use anyhow::{Result, ensure};
 use clap::Args;
 use serde::Serialize;
@@ -24,11 +31,14 @@ use staleynet_audio::griffin_lim::{GriffinLimConfig, griffin_lim};
 use staleynet_audio::resample::resample;
 use staleynet_audio::wav::write_mono_pcm16;
 use staleynet_audio::{MelAnalyzer, MelConfig, decode_mono};
+use staleynet_cuda::Gpu;
 use staleynet_data::catalog::Split;
 use staleynet_data::corpus::TrackFilter;
 use staleynet_data::prepare::normalize_level;
 use staleynet_data::store::{CacheLayout, DatasetManifest, PreparedTrack, read_codes, read_f16};
 use staleynet_data::tokenizer::AudioTokenizer;
+use staleynet_model::vocoder::{self, Vocoder};
+use staleynet_train::vocoder::preferred_checkpoint;
 use std::path::{Path, PathBuf};
 
 /// Arguments of `staleynet reconstruct`.
@@ -61,6 +71,11 @@ pub struct Arguments {
     /// Griffin-Lim iterations, as used by `sing`.
     #[arg(long, default_value_t = 64)]
     griffin_lim_iterations: usize,
+
+    /// A trained neural vocoder run (`staleynet vocoder train`) to render
+    /// through as well as Griffin-Lim.
+    #[arg(long)]
+    vocoder: Option<PathBuf>,
 }
 
 /// Measurements for one excerpt. All errors are mean absolute differences
@@ -85,6 +100,16 @@ struct ExcerptReport {
     /// Log-mel of the Griffin-Lim waveform made from tokens against the
     /// track's exact log-mel: everything lost after a perfect language model.
     end_to_end_error_from_tokens: f32,
+
+    /// Log-mel of the neural vocoder's waveform against the exact log-mel it
+    /// was given, when a vocoder run was given.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    neural_vocoder_error_from_exact_mel: Option<f32>,
+
+    /// Log-mel of the neural vocoder's waveform made from tokens against the
+    /// track's exact log-mel, when a vocoder run was given.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    neural_end_to_end_error_from_tokens: Option<f32>,
 }
 
 /// Mean absolute difference over the shorter of two log-mels.
@@ -111,6 +136,11 @@ pub fn run(arguments: Arguments) -> Result<()> {
         tokenizer: AudioTokenizer::load(&layout.tokenizer())?,
         analyzer: MelAnalyzer::new(MelConfig::from(manifest.mel)),
         griffin: GriffinLimConfig { iterations: arguments.griffin_lim_iterations, seed: 0 },
+        neural: arguments
+            .vocoder
+            .as_deref()
+            .map(NeuralVocoder::load)
+            .transpose()?,
         layout,
     };
 
@@ -124,6 +154,10 @@ pub fn run(arguments: Arguments) -> Result<()> {
             "{}: tokenizer {:.3?}, Griffin-Lim on exact mel {:.3}, tokens end to end {:.3}",
             report.id, report.tokenizer_error_by_levels, report.vocoder_error_from_exact_mel, report.end_to_end_error_from_tokens
         );
+
+        if let (Some(exact), Some(tokens)) = (report.neural_vocoder_error_from_exact_mel, report.neural_end_to_end_error_from_tokens) {
+            eprintln!("{}: neural vocoder on exact mel {exact:.3}, tokens end to end {tokens:.3}", report.id);
+        }
         reports.push(report);
     }
 
@@ -187,6 +221,15 @@ impl Excerpt {
     }
 }
 
+/// An excerpt rendered through the neural vocoder.
+struct NeuralRenders {
+    /// From its exact log-mel spectrogram.
+    from_mel: Vec<f32>,
+
+    /// From its tokens decoded with all codebooks.
+    from_tokens: Vec<f32>,
+}
+
 /// The lossy stages that follow the language model, and where their inputs live.
 struct Pipeline {
     /// The cache's tokenised spectrograms.
@@ -200,10 +243,43 @@ struct Pipeline {
 
     /// Log-mel to waveform.
     griffin: GriffinLimConfig,
+
+    /// Log-mel to waveform with a trained network, when one was given.
+    neural: Option<NeuralVocoder>,
+}
+
+/// A trained neural vocoder and the device it runs on.
+struct NeuralVocoder {
+    /// The CUDA device holding its weights.
+    gpu: Gpu,
+
+    /// The network.
+    vocoder: Vocoder,
+}
+
+impl NeuralVocoder {
+    /// Loads the preferred checkpoint (`best`, else `latest`) of a vocoder run.
+    fn load(run: &Path) -> Result<Self> {
+        let gpu = open_gpu()?;
+        let checkpoint = preferred_checkpoint(run);
+        let restored = vocoder::checkpoint::load(&gpu, &checkpoint)?;
+        eprintln!("neural vocoder: {} (step {})", checkpoint.display(), restored.step);
+
+        Ok(Self { gpu, vocoder: restored.vocoder })
+    }
+
+    /// Renders an excerpt's exact log-mel and its decoded tokens.
+    fn render(&self, exact: &[f32], from_tokens: &[f32]) -> Result<NeuralRenders> {
+        let from_mel = self.vocoder.synthesize(&self.gpu, exact)?;
+        let from_tokens = self.vocoder.synthesize(&self.gpu, from_tokens)?;
+
+        Ok(NeuralRenders { from_mel, from_tokens })
+    }
 }
 
 impl Pipeline {
-    /// Renders the four versions of one excerpt and measures their errors.
+    /// Renders the four versions of one excerpt, six with a neural vocoder,
+    /// and measures their errors.
     fn reconstruct(&self, entry: &PreparedTrack, arguments: &Arguments) -> Result<ExcerptReport> {
         let id = &entry.track.id;
         let bands = self.analyzer.config.mel_bands;
@@ -223,14 +299,27 @@ impl Pipeline {
         let from_coarse_tokens = griffin_lim(&self.analyzer, &decoded[0], self.griffin);
         let from_tokens = griffin_lim(&self.analyzer, &decoded[decoded.len() - 1], self.griffin);
 
+        let all_codebooks = &decoded[decoded.len() - 1];
+        let neural = self
+            .neural
+            .as_ref()
+            .map(|network| network.render(exact, all_codebooks))
+            .transpose()?;
+
         let original = self.original_excerpt(entry, &excerpt)?;
-        let renders = [
+        let mut renders = vec![
             ("1-original", original.as_slice()),
             ("2-exact-mel-griffin-lim", &from_mel),
             ("3-tokens-1-codebook", &from_coarse_tokens),
             ("4-tokens-all-codebooks", &from_tokens),
         ];
+        if let Some(neural) = &neural {
+            renders.push(("5-exact-mel-vocoder", &neural.from_mel));
+            renders.push(("6-tokens-all-codebooks-vocoder", &neural.from_tokens));
+        }
         self.write_renders(&arguments.out, id, &renders)?;
+
+        let error_against_exact = |waveform: &[f32]| mean_absolute_error(exact, &self.analyzer.log_mel(waveform));
 
         Ok(ExcerptReport {
             id: id.clone(),
@@ -245,8 +334,14 @@ impl Pipeline {
                 .iter()
                 .map(|estimate| mean_absolute_error(exact, estimate))
                 .collect(),
-            vocoder_error_from_exact_mel: mean_absolute_error(exact, &self.analyzer.log_mel(&from_mel)),
-            end_to_end_error_from_tokens: mean_absolute_error(exact, &self.analyzer.log_mel(&from_tokens)),
+            vocoder_error_from_exact_mel: error_against_exact(&from_mel),
+            end_to_end_error_from_tokens: error_against_exact(&from_tokens),
+            neural_vocoder_error_from_exact_mel: neural
+                .as_ref()
+                .map(|renders| error_against_exact(&renders.from_mel)),
+            neural_end_to_end_error_from_tokens: neural
+                .as_ref()
+                .map(|renders| error_against_exact(&renders.from_tokens)),
         })
     }
 
