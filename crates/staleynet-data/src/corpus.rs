@@ -10,6 +10,10 @@ use staleynet_model::vocabulary::Conditioning;
 use staleynet_model::{DelayPattern, Random, TrainingBatch, Vocabulary};
 use std::ops::Range;
 
+/// Seconds of music kept before a lyric line when a crop starts at one, so
+/// the model hears the lead-in to the singing.
+const LYRIC_LEAD_SECONDS: f32 = 1.0;
+
 /// A lyric line with a time span, measured or estimated.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TimedLine {
@@ -76,6 +80,14 @@ impl TokenTrack {
 
         let first_step = (line.timing.start / self.seconds_per_step) as usize;
         self.lyrics_between(first_step, steps)
+    }
+
+    /// The code step shortly before a randomly chosen line begins. Makes one
+    /// draw; the track must have lyrics.
+    fn step_before_random_line(&self, random: &mut Random) -> usize {
+        let line = &self.lyrics[random.below(self.lyrics.len())];
+        let start = (line.timing.start - LYRIC_LEAD_SECONDS).max(0.0);
+        (start / self.seconds_per_step) as usize
     }
 }
 
@@ -203,6 +215,21 @@ impl TokenCorpus {
         &self.tracks[self.pick_index(random)]
     }
 
+    /// Multiplies the weight of every track that has lyrics by `factor`, so
+    /// sung tracks are drawn more often than instrumental ones.
+    pub fn weight_sung_tracks(&mut self, factor: f64) {
+        let mut previous = 0.0;
+        let mut total = 0.0;
+
+        for (track, cumulative) in self.tracks.iter().zip(&mut self.cumulative_weight) {
+            let weight = *cumulative - previous;
+            previous = *cumulative;
+
+            total += if track.lyrics.is_empty() { weight } else { weight * factor };
+            *cumulative = total;
+        }
+    }
+
     /// Index of a track drawn in proportion to its weight.
     fn pick_index(&self, random: &mut Random) -> usize {
         let total = self.cumulative_weight.last().copied().unwrap_or(0.0);
@@ -274,14 +301,21 @@ pub struct SamplerOptions {
 
     /// Which lyrics accompany the crop.
     pub lyrics: LyricsCondition,
+
+    /// Probability that a crop of a track with lyrics starts just before one
+    /// of its lines instead of at a random step, so the crop contains singing
+    /// and its prompt contains the words sung.
+    pub sung_crop_probability: f32,
 }
 
 impl SamplerOptions {
     /// Settings for training.
-    pub const TRAINING: Self = Self { prompt_dropout: 0.1, start_probability: 0.2, lyrics: LyricsCondition::Aligned };
+    pub const TRAINING: Self =
+        Self { prompt_dropout: 0.1, start_probability: 0.2, lyrics: LyricsCondition::Aligned, sung_crop_probability: 0.0 };
 
     /// Settings for validation: always conditioned.
-    pub const VALIDATION: Self = Self { prompt_dropout: 0.0, start_probability: 0.0, lyrics: LyricsCondition::Aligned };
+    pub const VALIDATION: Self =
+        Self { prompt_dropout: 0.0, start_probability: 0.0, lyrics: LyricsCondition::Aligned, sung_crop_probability: 0.0 };
 }
 
 /// Fills [`TrainingBatch`]es with random crops of a corpus.
@@ -335,7 +369,7 @@ impl BatchSampler {
         let delayed_steps = self
             .pattern
             .delayed_steps(track.codes.len() / rows.codebooks);
-        let first_step = self.crop_start(delayed_steps, audio_positions, random);
+        let first_step = self.crop_start(track, delayed_steps, audio_positions, random);
         let lyrics = self.lyrics_for(track, mismatched, first_step, audio_positions);
         let conditioning = self.conditioning(track, &lyrics, random);
 
@@ -346,10 +380,25 @@ impl BatchSampler {
 
     /// The delayed step at which the crop begins: the start of the track with
     /// probability `start_probability` (and whenever the track is no longer
-    /// than the crop), otherwise a uniformly random step.
-    fn crop_start(&self, delayed_steps: usize, audio_positions: usize, random: &mut Random) -> usize {
+    /// than the crop); for a track with lyrics, just before one of its lines
+    /// with probability `sung_crop_probability`; otherwise a uniformly random
+    /// step. No extra draw is made when `sung_crop_probability` is zero, so
+    /// validation crops are the same as before the option existed.
+    fn crop_start(&self, track: &TokenTrack, delayed_steps: usize, audio_positions: usize, random: &mut Random) -> usize {
         let from_start = random.chance(self.options.start_probability) || delayed_steps <= audio_positions;
-        if from_start { 0 } else { random.below(delayed_steps - audio_positions) }
+        if from_start {
+            return 0;
+        }
+
+        let last_start = delayed_steps - audio_positions;
+        let sung =
+            self.options.sung_crop_probability > 0.0 && !track.lyrics.is_empty() && random.chance(self.options.sung_crop_probability);
+
+        if !sung {
+            return random.below(last_start);
+        }
+
+        track.step_before_random_line(random).min(last_start)
     }
 
     /// The lyrics placed in the prompt under the sampler's lyrics condition.
@@ -474,6 +523,44 @@ mod tests {
             .filter(|_| corpus.pick(&mut random).captions[0] == "heavy")
             .count();
         assert!((2800..3200).contains(&heavy_draws), "{heavy_draws} of 4000");
+    }
+
+    #[test]
+    fn sung_tracks_can_be_drawn_more_often() {
+        let sung_line = LyricLine { text: "la".into(), timing: None };
+        let track = |lyrics: &[LyricLine]| TokenTrack {
+            captions: Vec::new(),
+            lyrics: timed_lines(lyrics, 1.0),
+            codes: vec![0; 4],
+            seconds_per_step: 0.1,
+        };
+
+        let mut corpus = TokenCorpus::default();
+        corpus.push(track(&[]), 1.0);
+        corpus.push(track(&[sung_line]), 1.0);
+        corpus.weight_sung_tracks(3.0);
+
+        let mut random = Random::new(11);
+        let sung_draws = (0..4000)
+            .filter(|_| !corpus.pick(&mut random).lyrics.is_empty())
+            .count();
+        assert!((2800..3200).contains(&sung_draws), "{sung_draws} of 4000");
+    }
+
+    #[test]
+    fn sung_crops_start_just_before_a_line() {
+        let config = ModelConfig { prompt_bytes: 4, codebooks: 1, codebook_size: 10, context_length: 32, ..ModelConfig::default() };
+        let vocabulary = Vocabulary::new(&config);
+        let lyrics = [LyricLine { text: "chorus".into(), timing: Some(LineTiming { start: 6.0, end: 7.0 }) }];
+        let track =
+            TokenTrack { captions: vec!["rock".into()], lyrics: timed_lines(&lyrics, 10.0), codes: vec![0; 100], seconds_per_step: 0.1 };
+        let options = SamplerOptions { start_probability: 0.0, sung_crop_probability: 1.0, ..SamplerOptions::TRAINING };
+        let sampler = BatchSampler::new(vocabulary, options);
+
+        let mut random = Random::new(3);
+        for _ in 0..20 {
+            assert_eq!(sampler.crop_start(&track, 100, 20, &mut random), 50);
+        }
     }
 
     #[test]
