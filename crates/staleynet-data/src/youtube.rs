@@ -1,20 +1,22 @@
 //! A rock corpus built from a list of bands: their studio songs from
-//! MusicBrainz (<https://musicbrainz.org/doc/MusicBrainz_API>), timed lyrics
-//! from LRCLIB (<https://lrclib.net/docs>), and the audio from YouTube through
+//! MusicBrainz (<https://musicbrainz.org/doc/MusicBrainz_API>), lyrics from
+//! LRCLIB (<https://lrclib.net/docs>), and the audio from YouTube through
 //! `yt-dlp` (<https://github.com/yt-dlp/yt-dlp>).
 //!
-//! Every song is matched by duration three times: MusicBrainz gives the album
-//! length, LRCLIB only returns lyrics timed against a recording of about that
-//! length, and only a YouTube upload within [`DURATION_TOLERANCE_SECONDS`] of
-//! it is downloaded. That keeps the lyric timing on the right version of the
-//! song: not a live take, not a video with a spoken intro.
+//! Songs are matched by length where possible, so the lyric timing fits the
+//! version downloaded: MusicBrainz gives the album length, LRCLIB is asked for
+//! lyrics timed against that length, and YouTube uploads within the first of
+//! [`DURATION_TOLERANCES_SECONDS`] are preferred. When that fails the song is
+//! still kept: with a looser length match, lyrics from another version, plain
+//! untimed lyrics, or no lyrics at all.
 //!
 //! The output is the folder layout `staleynet prepare --folder` reads:
 //!
 //! ```text
-//! <out>/artist-<band>/<song>.m4a   audio as uploaded (AAC, not re-encoded)
-//! <out>/artist-<band>/<song>.lrc   timed lyrics
-//! <out>/artist-<band>/<song>.txt   caption from the band's MusicBrainz genres
+//! <out>/artist-<band>/<song>.m4a          audio as uploaded (AAC, not re-encoded)
+//! <out>/artist-<band>/<song>.lrc          timed lyrics, when found
+//! <out>/artist-<band>/<song>.lyrics.txt   untimed lyrics, when no timed ones were found
+//! <out>/artist-<band>/<song>.txt          caption from the band's MusicBrainz genres
 //! ```
 
 use anyhow::{Context, Result, bail};
@@ -61,8 +63,13 @@ const CAPTION_GENRES: usize = 4;
 /// the studio one.
 const OTHER_VERSIONS: [&str; 9] = ["live", "demo", "remix", "acoustic", "instrumental", "edit", "mix", "rehearsal", "karaoke"];
 
-/// How far a YouTube upload's length may be from the album length.
-const DURATION_TOLERANCE_SECONDS: f32 = 3.0;
+/// LRCLIB search address, used when no lyrics match the album length.
+const LRCLIB_SEARCH: &str = "https://lrclib.net/api/search";
+
+/// How far a YouTube upload's length may be from the album length, tried in
+/// order: a close match keeps the lyric timing right; a loose one still gives
+/// the song.
+const DURATION_TOLERANCES_SECONDS: [f32; 2] = [3.0, 20.0];
 
 /// YouTube search results considered per song.
 const SEARCH_RESULTS: usize = 5;
@@ -76,9 +83,12 @@ const MIN_SONG_SECONDS: f32 = 90.0;
 /// Longest song kept, in seconds.
 const MAX_SONG_SECONDS: f32 = 600.0;
 
-/// Marker written when a song has no timed lyrics or no matching audio, so a
-/// rerun does not ask again.
-const MISSING_EXTENSION: &str = "missing";
+/// Marker written when no YouTube upload of a song was found, so a rerun does
+/// not search again.
+const MISSING_EXTENSION: &str = "noaudio";
+
+/// Extension of untimed lyrics, which `prepare --folder` reads.
+const PLAIN_LYRICS_EXTENSION: &str = "lyrics.txt";
 
 /// Spaces MusicBrainz requests at least [`MUSICBRAINZ_INTERVAL`] apart across threads.
 struct RateLimit {
@@ -143,6 +153,35 @@ struct Lyrics {
     #[serde(default)]
     instrumental: bool,
     synced_lyrics: Option<String>,
+    plain_lyrics: Option<String>,
+}
+
+impl Lyrics {
+    /// The timed lyrics, when present and not empty.
+    fn timed(&self) -> Option<&str> {
+        self.synced_lyrics
+            .as_deref()
+            .filter(|text| !text.trim().is_empty())
+    }
+
+    /// The untimed lyrics, when present and not empty.
+    fn plain(&self) -> Option<&str> {
+        self.plain_lyrics
+            .as_deref()
+            .filter(|text| !text.trim().is_empty())
+    }
+}
+
+/// The best lyrics found for a song.
+enum SongLyrics {
+    /// Timed lines in the LRC format.
+    Timed(String),
+
+    /// Lines in order, without timing.
+    Plain(String),
+
+    /// None found, or the song is instrumental.
+    Absent,
 }
 
 /// One studio song of a band.
@@ -296,23 +335,55 @@ fn band(name: &str, limit: &RateLimit) -> Result<Band> {
     Ok(Band { name: name.to_string(), caption, songs })
 }
 
-/// LRCLIB's timed lyrics for a song, or `None` when it has none or is instrumental.
-fn timed_lyrics(band: &str, song: &Song) -> Option<String> {
+/// The best lyrics LRCLIB has for a song: timed against its album length,
+/// else timed against any version, else untimed.
+fn song_lyrics(band: &str, song: &Song) -> SongLyrics {
     let duration = format!("{:.0}", song.seconds);
-    let body = get(LRCLIB_GET, &[("artist_name", band), ("track_name", &song.title), ("duration", &duration)]).ok()?;
-    let lyrics: Lyrics = serde_json::from_str(&body).ok()?;
-    if lyrics.instrumental {
-        return None;
+    let exact = get(LRCLIB_GET, &[("artist_name", band), ("track_name", &song.title), ("duration", &duration)])
+        .ok()
+        .and_then(|body| serde_json::from_str::<Lyrics>(&body).ok());
+
+    if let Some(lyrics) = &exact {
+        if lyrics.instrumental {
+            return SongLyrics::Absent;
+        }
+        if let Some(timed) = lyrics.timed() {
+            return SongLyrics::Timed(timed.to_string());
+        }
     }
 
-    lyrics.synced_lyrics.filter(|text| !text.trim().is_empty())
+    // No timed lyrics for the album length: any version's, timed if possible.
+    let candidates: Vec<Lyrics> = get(LRCLIB_SEARCH, &[("artist_name", band), ("track_name", &song.title)])
+        .ok()
+        .and_then(|body| serde_json::from_str(&body).ok())
+        .unwrap_or_default();
+
+    if let Some(timed) = candidates.iter().find_map(Lyrics::timed) {
+        return SongLyrics::Timed(timed.to_string());
+    }
+
+    let plain = exact.iter().chain(&candidates).find_map(Lyrics::plain);
+    plain.map_or(SongLyrics::Absent, |text| SongLyrics::Plain(text.to_string()))
 }
 
-/// Downloads the first YouTube upload of the song within the duration
-/// tolerance into `target` (an `.m4a` path); returns whether one was found.
+/// Downloads the first YouTube upload of the song within the closest duration
+/// tolerance that has one, into `target` (an `.m4a` path); returns whether one
+/// was found.
 fn youtube_audio(yt_dlp: &Path, band: &str, song: &Song, target: &Path) -> Result<bool> {
-    let shortest = song.seconds - DURATION_TOLERANCE_SECONDS;
-    let longest = song.seconds + DURATION_TOLERANCE_SECONDS;
+    for tolerance in DURATION_TOLERANCES_SECONDS {
+        if youtube_audio_within(yt_dlp, band, song, target, tolerance)? {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Downloads the first YouTube upload of the song within `tolerance` seconds
+/// of its album length; returns whether one was found.
+fn youtube_audio_within(yt_dlp: &Path, band: &str, song: &Song, target: &Path, tolerance: f32) -> Result<bool> {
+    let shortest = song.seconds - tolerance;
+    let longest = song.seconds + tolerance;
     let filter = format!("duration>{shortest:.0} & duration<{longest:.0}");
     let search = format!("ytsearch{SEARCH_RESULTS}:{band} {} audio", song.title);
 
@@ -350,19 +421,18 @@ fn fetch_band(band: &Band, out: &Path, yt_dlp: &Path) -> Result<BandTally> {
             continue;
         }
 
-        let Some(lyrics) = timed_lyrics(&band.name, song) else {
-            fs::write(&missing, "no timed lyrics\n")?;
-            tally.missing += 1;
-            continue;
-        };
-
         if !youtube_audio(yt_dlp, &band.name, song, &audio)? {
-            fs::write(&missing, "no upload of matching length\n")?;
+            fs::write(&missing, "no upload of a similar length\n")?;
             tally.missing += 1;
             continue;
         }
 
-        fs::write(stem.with_extension("lrc"), lyrics)?;
+        match song_lyrics(&band.name, song) {
+            SongLyrics::Timed(text) => fs::write(stem.with_extension("lrc"), text)?,
+            SongLyrics::Plain(text) => fs::write(stem.with_extension(PLAIN_LYRICS_EXTENSION), text)?,
+            SongLyrics::Absent => {}
+        }
+
         fs::write(stem.with_extension("txt"), format!("{}\n", band.caption))?;
         tally.ready += 1;
     }
