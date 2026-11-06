@@ -107,6 +107,28 @@ pub struct TrainingConfig {
     /// Further datasets mixed in.
     #[serde(default)]
     pub extra_sources: Vec<DataSource>,
+
+    /// How much more often a training track with lyrics is drawn than one
+    /// without. Validation keeps the natural mix.
+    #[serde(default = "TrainingConfig::default_sung_track_weight")]
+    pub sung_track_weight: f64,
+
+    /// Probability that a training crop of a track with lyrics starts just
+    /// before one of its lines, so it contains singing and the words sung.
+    #[serde(default)]
+    pub sung_crop_probability: f32,
+}
+
+impl TrainingConfig {
+    /// Tracks with and without lyrics are drawn equally often.
+    fn default_sung_track_weight() -> f64 {
+        1.0
+    }
+
+    /// The sampler settings of training batches.
+    fn training_sampler(&self) -> SamplerOptions {
+        SamplerOptions { sung_crop_probability: self.sung_crop_probability, ..SamplerOptions::TRAINING }
+    }
 }
 
 impl Default for TrainingConfig {
@@ -124,6 +146,8 @@ impl Default for TrainingConfig {
             seed: 1234,
             track_filter: TrackFilter::default(),
             extra_sources: Vec::new(),
+            sung_track_weight: Self::default_sung_track_weight(),
+            sung_crop_probability: 0.0,
         }
     }
 }
@@ -246,6 +270,8 @@ fn load_corpora(cache: &CacheLayout, config: &TrainingConfig) -> Result<(TokenCo
         train.absorb(TokenCorpus::load(&layout, &manifest, Split::Train, &source.track_filter, codebooks)?, source.weight);
         validation.absorb(TokenCorpus::load(&layout, &manifest, Split::Validation, &source.track_filter, codebooks)?, source.weight);
     }
+
+    train.weight_sung_tracks(config.sung_track_weight);
 
     Ok((train, validation))
 }
@@ -436,7 +462,7 @@ impl Session<'_> {
         let started = self.started_event();
         self.emit(report, started)?;
 
-        let sampler = BatchSampler::new(self.model.vocabulary(), SamplerOptions::TRAINING);
+        let sampler = BatchSampler::new(self.model.vocabulary(), self.config.training_sampler());
         let mut window = ProgressWindow::new();
 
         for step in self.optimizer.steps_taken..self.config.steps {
