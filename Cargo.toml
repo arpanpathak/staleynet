@@ -34,6 +34,7 @@ rayon = "1"
 rustfft = "6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+ureq = "3"
 symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "flac", "ogg", "vorbis", "wav", "pcm"] }
 
 [profile.release]
