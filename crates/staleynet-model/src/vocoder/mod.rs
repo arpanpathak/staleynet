@@ -21,13 +21,17 @@
 //! * [`model`]: the vocoder as a whole, mel spectrogram in, waveform out.
 //! * [`training_pass`]: one forward and backward pass over a batch.
 //! * [`checkpoint`]: saving and loading weights and optimizer state.
+//! * [`discriminator`]: HiFi-GAN's multi-period discriminator.
+//! * [`adversarial`]: the least-squares and feature-matching objective.
 //!
 //! The training loop and its data live in `staleynet-train`, as the language
 //! model's do; the GPU kernels live in `staleynet-cuda`.
 
+pub mod adversarial;
 pub mod block;
 pub mod checkpoint;
 pub mod config;
+pub mod discriminator;
 pub mod istft;
 pub mod loss;
 pub mod model;
@@ -35,7 +39,9 @@ pub mod network;
 pub mod synthesis;
 pub mod training_pass;
 
+pub use adversarial::{AdversarialLosses, AdversarialWeights, Verdicts};
 pub use config::VocoderConfig;
+pub use discriminator::{DiscriminatorConfig, LayerSize, MultiPeriodDiscriminator};
 pub use loss::{Resolution, TRAINING_RESOLUTIONS};
 pub use model::Vocoder;
 pub use training_pass::{LossBreakdown, TrainingPass};
