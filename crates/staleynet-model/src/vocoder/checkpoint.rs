@@ -4,9 +4,12 @@
 //! standardization, the tensor manifest and the training step), `tensors.bin`
 //! (every parameter, little-endian `f32`, in visitor order) and, for a
 //! resumable checkpoint, `optimizer.bin` (each parameter's first AdamW moment
-//! followed by its second, in the same order).
+//! followed by its second, in the same order). After adversarial training it
+//! also holds `discriminator.bin` and `discriminator-optimizer.bin`, laid out
+//! the same way.
 
 use super::config::VocoderConfig;
+use super::discriminator::MultiPeriodDiscriminator;
 use super::model::Vocoder;
 use crate::checkpoint::{TensorEntry, read_f32_file, try_for_each_parameter, upload_next, write_atomically};
 use crate::optimizer::AdamW;
@@ -25,6 +28,12 @@ const TENSOR_FILE: &str = "tensors.bin";
 
 /// Name of the optimizer-state file inside a resumable checkpoint directory.
 const OPTIMIZER_FILE: &str = "optimizer.bin";
+
+/// Name of the discriminator's parameter file, present after adversarial training.
+const DISCRIMINATOR_FILE: &str = "discriminator.bin";
+
+/// Name of the discriminator optimizer's moments.
+const DISCRIMINATOR_OPTIMIZER_FILE: &str = "discriminator-optimizer.bin";
 
 /// Contents of `vocoder.json`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -114,8 +123,46 @@ pub fn load(gpu: &Gpu, directory: &Path) -> Result<Restored> {
 
 /// Restores the optimizer's moments saved in `directory` by [`save`].
 pub fn load_moments(gpu: &Gpu, directory: &Path, optimizer: &mut AdamW) -> Result<()> {
-    let path = directory.join(OPTIMIZER_FILE);
+    read_moments(gpu, &directory.join(OPTIMIZER_FILE), optimizer)
+}
+
+/// Whether `directory` holds a discriminator saved by [`save_discriminator`].
+pub fn has_discriminator(directory: &Path) -> bool {
+    directory.join(DISCRIMINATOR_FILE).is_file()
+}
+
+/// Saves the discriminator's weights and its optimizer's moments into
+/// `directory`, next to the vocoder's. Its sizes are not stored: they come
+/// from the run's configuration.
+pub fn save_discriminator(gpu: &Gpu, directory: &Path, discriminator: &mut MultiPeriodDiscriminator, optimizer: &AdamW) -> Result<()> {
+    fs::create_dir_all(directory)?;
+
+    let mut values = Vec::new();
+    try_for_each_parameter(discriminator, |parameter| {
+        values.push(gpu.download(&parameter.value)?);
+        Ok(())
+    })?;
+
+    write_atomically(&directory.join(DISCRIMINATOR_FILE), |writer| write_values(writer, &values))?;
+    write_moments(gpu, &directory.join(DISCRIMINATOR_OPTIMIZER_FILE), optimizer)
+}
+
+/// Restores into `discriminator`, which must have the saved sizes, and its
+/// `optimizer` what [`save_discriminator`] wrote into `directory`.
+pub fn load_discriminator(gpu: &Gpu, directory: &Path, discriminator: &mut MultiPeriodDiscriminator, optimizer: &mut AdamW) -> Result<()> {
+    let path = directory.join(DISCRIMINATOR_FILE);
     let values = read_f32_file(&path)?;
+    let mut remaining = values.as_slice();
+
+    try_for_each_parameter(discriminator, |parameter| upload_next(gpu, &mut remaining, &mut parameter.value))?;
+    ensure!(remaining.is_empty(), "{} has more values than the discriminator", path.display());
+
+    read_moments(gpu, &directory.join(DISCRIMINATOR_OPTIMIZER_FILE), optimizer)
+}
+
+/// Restores an optimizer's moments from the file at `path`.
+fn read_moments(gpu: &Gpu, path: &Path, optimizer: &mut AdamW) -> Result<()> {
+    let values = read_f32_file(path)?;
     let mut remaining = values.as_slice();
 
     for moment in &mut optimizer.moments {
@@ -127,15 +174,20 @@ pub fn load_moments(gpu: &Gpu, directory: &Path, optimizer: &mut AdamW) -> Resul
     Ok(())
 }
 
-/// Writes each parameter's first moment followed by its second.
+/// Writes the vocoder optimizer's moments into `directory`.
 fn save_moments(gpu: &Gpu, directory: &Path, optimizer: &AdamW) -> Result<()> {
+    write_moments(gpu, &directory.join(OPTIMIZER_FILE), optimizer)
+}
+
+/// Writes each parameter's first moment followed by its second to `path`.
+fn write_moments(gpu: &Gpu, path: &Path, optimizer: &AdamW) -> Result<()> {
     let mut values = Vec::with_capacity(2 * optimizer.moments.len());
     for moment in &optimizer.moments {
         values.push(gpu.download(&moment.first)?);
         values.push(gpu.download(&moment.second)?);
     }
 
-    write_atomically(&directory.join(OPTIMIZER_FILE), |writer| write_values(writer, &values))
+    write_atomically(path, |writer| write_values(writer, &values))
 }
 
 /// Writes every value of `tensors`, in order, as little-endian `f32`.
