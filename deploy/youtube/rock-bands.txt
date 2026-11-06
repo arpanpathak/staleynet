@@ -1,0 +1,271 @@
+# Bands for `staleynet data youtube-rock`, one per line. English-language rock
+# with prominent lead vocals, across its main styles.
+
+# Grunge and alternative metal
+Alice in Chains
+Soundgarden
+Pearl Jam
+Nirvana
+Stone Temple Pilots
+Screaming Trees
+Mudhoney
+Temple of the Dog
+Mad Season
+Audioslave
+Chris Cornell
+Layne Staley
+Silverchair
+Bush
+Candlebox
+Tool
+A Perfect Circle
+Deftones
+Faith No More
+Helmet
+Jane's Addiction
+Smashing Pumpkins
+Hole
+L7
+Melvins
+
+# Post-grunge and 2000s rock
+Foo Fighters
+Creed
+Nickelback
+3 Doors Down
+Staind
+Godsmack
+Seether
+Breaking Benjamin
+Three Days Grace
+Shinedown
+Chevelle
+Puddle of Mudd
+Default
+Theory of a Deadman
+Daughtry
+Hoobastank
+Lifehouse
+Matchbox Twenty
+Collective Soul
+Live
+Fuel
+Third Eye Blind
+Everclear
+Vertical Horizon
+Sevendust
+Trapt
+Alter Bridge
+Velvet Revolver
+Royal Blood
+Highly Suspect
+
+# Nu metal and alternative metal
+Linkin Park
+Korn
+System of a Down
+Disturbed
+Papa Roach
+Evanescence
+Limp Bizkit
+Incubus
+P.O.D.
+Mudvayne
+Slipknot
+Stone Sour
+Rage Against the Machine
+Avenged Sevenfold
+Bullet for My Valentine
+Trivium
+Killswitch Engage
+Bring Me the Horizon
+Muse
+Placebo
+Thirty Seconds to Mars
+Skillet
+Hinder
+Five Finger Death Punch
+In This Moment
+Halestorm
+Ghost
+Volbeat
+Mastodon
+Gojira
+Baroness
+Queens of the Stone Age
+Kyuss
+
+# Classic rock and hard rock
+Led Zeppelin
+The Rolling Stones
+The Who
+The Doors
+Deep Purple
+Black Sabbath
+AC/DC
+Aerosmith
+Queen
+Pink Floyd
+Lynyrd Skynyrd
+The Beatles
+Creedence Clearwater Revival
+Eagles
+Fleetwood Mac
+Boston
+Kansas
+Journey
+Foreigner
+Heart
+Thin Lizzy
+Rush
+Van Halen
+Guns N' Roses
+Def Leppard
+Bon Jovi
+Scorpions
+Whitesnake
+Kiss
+Ozzy Osbourne
+Dio
+Rainbow
+Motörhead
+Alice Cooper
+ZZ Top
+Bad Company
+Free
+Cream
+Jimi Hendrix
+The Black Crowes
+Tom Petty and the Heartbreakers
+Bruce Springsteen
+Bryan Adams
+Survivor
+Styx
+REO Speedwagon
+Cheap Trick
+Skid Row
+Mötley Crüe
+Poison
+Cinderella
+Ratt
+Warrant
+Extreme
+Mr. Big
+Europe
+Tesla
+Great White
+Night Ranger
+
+# Heavy metal
+Metallica
+Iron Maiden
+Judas Priest
+Megadeth
+Slayer
+Anthrax
+Pantera
+Testament
+Dream Theater
+Queensrÿche
+Savatage
+Opeth
+Lamb of God
+Machine Head
+Sepultura
+Children of Bodom
+Nightwish
+Within Temptation
+
+# Punk and pop punk
+Green Day
+The Offspring
+Blink-182
+Bad Religion
+NOFX
+Rancid
+The Clash
+Ramones
+Sex Pistols
+Social Distortion
+Sum 41
+Rise Against
+Good Charlotte
+Simple Plan
+Fall Out Boy
+My Chemical Romance
+Paramore
+Jimmy Eat World
+Taking Back Sunday
+Thrice
+Alkaline Trio
+Billy Talent
+Weezer
+Yellowcard
+All Time Low
+The Used
+Story of the Year
+Brand New
+Thursday
+Senses Fail
+
+# Alternative and indie rock
+Radiohead
+R.E.M.
+Red Hot Chili Peppers
+The Cure
+U2
+Oasis
+Blur
+Arctic Monkeys
+The Strokes
+The White Stripes
+The Killers
+Kings of Leon
+Franz Ferdinand
+Interpol
+The Black Keys
+Jack White
+Cage the Elephant
+Modest Mouse
+Pixies
+Sonic Youth
+Dinosaur Jr.
+Pavement
+The Smiths
+Joy Division
+The Verve
+Stereophonics
+Manic Street Preachers
+Snow Patrol
+Editors
+Kasabian
+Foals
+Bloc Party
+The Hives
+Wolfmother
+Spoon
+Silversun Pickups
+Band of Horses
+The National
+Arcade Fire
+Biffy Clyro
+Nothing But Thieves
+Greta Van Fleet
+Rival Sons
+Wolf Alice
+Idles
+Fontaines D.C.
+The War on Drugs
+Vampire Weekend
+Imagine Dragons
+Twenty One Pilots
+The Pretty Reckless
+Beartooth
+Bad Omens
+Sleep Token
+Spiritbox
+Architects
+While She Sleeps
+Of Mice & Men
+Pierce the Veil
+Sleeping with Sirens

@@ -7,6 +7,7 @@
 //! * [`corpus`]: tokenised tracks and the batch sampler.
 //! * [`jamendo`]: the MTG-Jamendo rock songs: selection, download, folder layout.
 //! * [`transcripts`]: machine-transcribed lyrics merged into a manifest.
+//! * [`youtube`]: a rock corpus from a band list: MusicBrainz songs, LRCLIB lyrics, YouTube audio.
 
 pub mod catalog;
 pub mod corpus;
@@ -16,3 +17,4 @@ pub mod prepare;
 pub mod store;
 pub mod tokenizer;
 pub mod transcripts;
+pub mod youtube;
