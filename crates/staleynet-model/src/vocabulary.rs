@@ -43,6 +43,23 @@ pub const PADDING: u32 = BYTE_VALUES + 2;
 /// Number of text token ids (bytes + the three specials).
 pub const TEXT_VOCABULARY: usize = BYTE_VALUES as usize + 3;
 
+/// Longest time one lyrics byte is assumed to be sung. A line's cursor moves
+/// across its bytes at the line's own pace, but never slower than this, so a
+/// line followed by a long instrumental stretch does not stretch across it.
+pub const MAX_SECONDS_PER_LYRIC_BYTE: f32 = 0.25;
+
+/// Which byte of a `bytes`-long line is being sung `elapsed` seconds into a
+/// line that lasts `duration` seconds, or `None` before it and once it is over.
+pub fn sung_byte(elapsed: f32, duration: f32, bytes: usize) -> Option<usize> {
+    let sweep = duration.min(bytes as f32 * MAX_SECONDS_PER_LYRIC_BYTE);
+    if bytes == 0 || elapsed < 0.0 || elapsed >= sweep {
+        return None;
+    }
+
+    let byte = (elapsed / sweep * bytes as f32) as usize;
+    Some(byte.min(bytes - 1))
+}
+
 /// What a sequence is conditioned on.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Conditioning<'a> {
@@ -147,6 +164,26 @@ impl Vocabulary {
     pub fn position_ids(&self, first: usize, count: usize) -> Vec<u32> {
         (first..first + count)
             .map(|position| self.position_id(position))
+            .collect()
+    }
+
+    /// The lyric cursor for lyrics byte `byte`: the position row that byte
+    /// occupies in the prompt, or [`EMPTY_TOKEN`] (no cursor) past the field.
+    pub fn cursor_row(&self, byte: usize) -> u32 {
+        if byte >= self.lyrics_bytes {
+            return EMPTY_TOKEN;
+        }
+        (self.context_length + byte) as u32
+    }
+
+    /// Position slots of physical positions `first .. first + cursors.len()`
+    /// for a model with a lyric cursor: each position's own row, then its
+    /// cursor row ([`EMPTY_TOKEN`] where nothing is sung).
+    pub fn cursor_position_slots(&self, first: usize, cursors: &[u32]) -> Vec<u32> {
+        cursors
+            .iter()
+            .enumerate()
+            .flat_map(|(offset, &cursor)| [self.position_id(first + offset), cursor])
             .collect()
     }
 
@@ -284,5 +321,28 @@ mod tests {
 
         assert_eq!(with_lyrics.position_ids(0, 9), vec![0, 1, 2, 16, 17, 18, 3, 4, 5]);
         assert_eq!(without_lyrics.position_ids(0, 6), vec![0, 1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn the_cursor_points_at_the_lyrics_rows() {
+        let vocabulary = Vocabulary { codebooks: 1, codebook_size: 8, prompt_bytes: 2, lyrics_bytes: 3, context_length: 16 };
+
+        assert_eq!(vocabulary.cursor_row(0), 16);
+        assert_eq!(vocabulary.cursor_row(2), 18);
+        assert_eq!(vocabulary.cursor_row(3), EMPTY_TOKEN);
+        assert_eq!(vocabulary.cursor_position_slots(6, &[17, EMPTY_TOKEN]), vec![3, 17, 4, EMPTY_TOKEN]);
+    }
+
+    #[test]
+    fn a_line_is_swept_at_its_pace_but_not_slower_than_the_cap() {
+        assert_eq!(sung_byte(0.0, 2.0, 4), Some(0));
+        assert_eq!(sung_byte(0.6, 2.0, 4), Some(2));
+        assert_eq!(sung_byte(-0.1, 2.0, 4), None);
+        assert_eq!(sung_byte(2.0, 2.0, 4), None);
+
+        let capped = 4.0 * MAX_SECONDS_PER_LYRIC_BYTE;
+        assert_eq!(sung_byte(capped - 0.01, 30.0, 4), Some(3));
+        assert_eq!(sung_byte(capped, 30.0, 4), None);
+        assert_eq!(sung_byte(0.0, 2.0, 0), None);
     }
 }

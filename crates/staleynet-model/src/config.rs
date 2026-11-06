@@ -2,6 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Position slots of a model with a lyric cursor: its own row and the cursor.
+const CURSOR_POSITION_SLOTS: usize = 2;
+
 /// Architecture of the Transformer. Everything else (vocabulary layout, tensor
 /// shapes) is derived from these numbers.
 ///
@@ -34,6 +37,13 @@ pub struct ModelConfig {
     #[serde(default)]
     pub lyrics_bytes: usize,
 
+    /// Whether every position also reads a *lyric cursor*: the position-table
+    /// row of the lyrics byte sung during the step it predicts, so attention
+    /// can line the audio up with the words. Adds no parameters. Absent from
+    /// older checkpoints, hence the default.
+    #[serde(default)]
+    pub lyric_cursor: bool,
+
     /// Residual codebooks per audio step (tokens per position).
     pub codebooks: usize,
 
@@ -51,6 +61,7 @@ impl Default for ModelConfig {
             context_length: 768,
             prompt_bytes: 126,
             lyrics_bytes: 0,
+            lyric_cursor: false,
             codebooks: 4,
             codebook_size: 1024,
         }
@@ -72,6 +83,12 @@ impl ModelConfig {
     /// the position table and the KV caches.
     pub fn sequence_capacity(&self) -> usize {
         self.context_length + self.lyrics_bytes
+    }
+
+    /// Position-table slots per position: its own row, plus the lyric cursor
+    /// when the model has one.
+    pub fn position_slots(&self) -> usize {
+        if self.lyric_cursor { CURSOR_POSITION_SLOTS } else { 1 }
     }
 
     /// Output logits per position: one block of `codebook_size` per codebook.

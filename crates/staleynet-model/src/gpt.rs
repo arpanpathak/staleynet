@@ -79,10 +79,11 @@ impl Gpt {
         Vocabulary::new(&self.config)
     }
 
-    /// `output = Σ_slots token_embedding[tokens] + position_embedding[positions]`.
+    /// `output = Σ_slots token_embedding[tokens] + Σ_slots position_embedding[positions]`;
+    /// `positions` holds [`ModelConfig::position_slots`] rows per position.
     pub fn embed(&self, gpu: &Gpu, tokens: &TokenBuffer, positions: &TokenBuffer, output: &mut Tensor) -> GpuResult {
         gpu.embedding_forward(&self.token_embedding.value, tokens, self.config.codebooks, output, WriteMode::Overwrite)?;
-        gpu.embedding_forward(&self.position_embedding.value, positions, 1, output, WriteMode::Accumulate)
+        gpu.embedding_forward(&self.position_embedding.value, positions, self.config.position_slots(), output, WriteMode::Accumulate)
     }
 }
 

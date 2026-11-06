@@ -31,6 +31,7 @@ fn tiny_config() -> ModelConfig {
         context_length: 16,
         prompt_bytes: 3,
         lyrics_bytes: 0,
+        lyric_cursor: false,
         codebooks: 2,
         codebook_size: 7,
     }
@@ -39,6 +40,11 @@ fn tiny_config() -> ModelConfig {
 /// [`tiny_config`] with a four-byte lyrics field.
 fn tiny_lyrics_config() -> ModelConfig {
     ModelConfig { lyrics_bytes: 4, ..tiny_config() }
+}
+
+/// [`tiny_lyrics_config`] with a lyric cursor.
+fn tiny_cursor_config() -> ModelConfig {
+    ModelConfig { lyric_cursor: true, ..tiny_lyrics_config() }
 }
 
 /// A batch whose sequences are a short prompt followed by random audio steps,
@@ -60,6 +66,12 @@ fn random_batch(config: &ModelConfig, shape: SequenceShape, seed: u64) -> Traini
                 batch.tokens[row(position) + codebook] = vocabulary.audio_token(codebook, code);
                 batch.targets[row(position - 1) + codebook] = code;
             }
+        }
+
+        // Random cursors, some empty, from the last prompt position on.
+        for position in prompt_positions - 1..shape.time {
+            let byte = random.below(config.lyrics_bytes + 1);
+            batch.cursors[sequence * shape.time + position] = vocabulary.cursor_row(byte);
         }
     }
 
@@ -94,9 +106,18 @@ fn write_parameter(gpu: &Gpu, model: &mut Gpt, parameter_index: usize, element: 
 
 #[test]
 fn analytic_gradients_match_finite_differences() {
+    assert_gradients_match(tiny_config());
+}
+
+#[test]
+fn analytic_gradients_match_finite_differences_with_a_lyric_cursor() {
+    assert_gradients_match(tiny_cursor_config());
+}
+
+/// Compares backpropagated gradients with central finite differences.
+fn assert_gradients_match(config: ModelConfig) {
     let gpu = gpu();
-    let config = tiny_config();
-    let shape = SequenceShape { batch: 2, time: 12 };
+    let shape = SequenceShape { batch: 2, time: 12 + config.lyrics_bytes };
     let batch = random_batch(&config, shape, 1);
     let mut model = Gpt::new(&gpu, config.clone(), 3).unwrap();
     let mut workspace = TrainingWorkspace::new(&gpu, &config, shape).unwrap();
@@ -147,6 +168,11 @@ fn cached_decoding_reproduces_the_full_forward_pass_with_lyrics() {
     assert_cached_decoding_matches(tiny_lyrics_config());
 }
 
+#[test]
+fn cached_decoding_reproduces_the_full_forward_pass_with_a_lyric_cursor() {
+    assert_cached_decoding_matches(tiny_cursor_config());
+}
+
 /// Feeds a sequence position by position through the KV cache and compares
 /// every step's logits with one full forward pass.
 fn assert_cached_decoding_matches(config: ModelConfig) {
@@ -165,7 +191,7 @@ fn assert_cached_decoding_matches(config: ModelConfig) {
     let prefill = 7;
     let mut fed = prefill;
     let mut logits = decoder
-        .feed(&gpu, &model, &batch.tokens[..prefill * codebooks])
+        .feed_with_cursors(&gpu, &model, &batch.tokens[..prefill * codebooks], &batch.cursors[..prefill])
         .unwrap();
     loop {
         let expected = &full_logits[(fed - 1) * logits_width..fed * logits_width];
@@ -180,7 +206,7 @@ fn assert_cached_decoding_matches(config: ModelConfig) {
             break;
         }
         logits = decoder
-            .feed(&gpu, &model, &batch.tokens[fed * codebooks..(fed + 1) * codebooks])
+            .feed_with_cursors(&gpu, &model, &batch.tokens[fed * codebooks..(fed + 1) * codebooks], &batch.cursors[fed..fed + 1])
             .unwrap();
         fed += 1;
     }
