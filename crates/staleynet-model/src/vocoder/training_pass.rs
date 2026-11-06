@@ -62,11 +62,18 @@ impl TrainingPass {
         self.target.shape().cols
     }
 
-    /// One forward and backward pass: synthesizes the batch from `mel`
-    /// (standardized, `[sequences · time, mel_bands]`), compares it with
-    /// `target` (`[sequences, signal length]`), and adds every parameter's
-    /// gradient into the network. Gradients are not zeroed here.
+    /// One forward and backward pass with the spectral losses alone:
+    /// [`TrainingPass::forward`], [`TrainingPass::spectral_backward`] and
+    /// [`TrainingPass::network_backward`]. Gradients are not zeroed here.
     pub fn run(&mut self, gpu: &Gpu, vocoder: &mut Vocoder, mel: &[f32], target: &[f32]) -> GpuResult {
+        self.forward(gpu, vocoder, mel, target)?;
+        self.spectral_backward(gpu)?;
+        self.network_backward(gpu, vocoder)
+    }
+
+    /// Synthesizes the batch from `mel` (standardized, `[sequences · time,
+    /// mel_bands]`) and keeps `target` (`[sequences, signal length]`).
+    pub fn forward(&mut self, gpu: &Gpu, vocoder: &Vocoder, mel: &[f32], target: &[f32]) -> GpuResult {
         gpu.copy_from_host(&mut self.mel, mel)?;
         gpu.copy_from_host(&mut self.target, target)?;
 
@@ -74,15 +81,43 @@ impl TrainingPass {
             .network
             .forward(gpu, &self.mel, &mut self.activations)?;
         self.synthesis
-            .forward(gpu, &vocoder.istft, &self.activations.head)?;
+            .forward(gpu, &vocoder.istft, &self.activations.head)
+    }
 
+    /// The signals of the last [`TrainingPass::forward`], `[sequences, signal length]`.
+    pub fn synthesized(&self) -> &Tensor {
+        &self.synthesis.signal
+    }
+
+    /// The recordings of the last [`TrainingPass::forward`], `[sequences, signal length]`.
+    pub fn target(&self) -> &Tensor {
+        &self.target
+    }
+
+    /// Writes the spectral losses' gradient with respect to the synthesized
+    /// signals; other objectives may then add theirs through
+    /// [`TrainingPass::signal_grad`].
+    pub fn spectral_backward(&mut self, gpu: &Gpu) -> GpuResult {
         gpu.fill_zero(&mut self.synthesis.signal_grad)?;
+
         for loss in &mut self.losses {
             loss.set_target(gpu, &self.target)?;
             loss.forward(gpu, &self.synthesis.signal)?;
             loss.backward(gpu, &mut self.synthesis.signal_grad)?;
         }
 
+        Ok(())
+    }
+
+    /// The gradient with respect to the synthesized signals, for objectives
+    /// beyond the spectral losses to add into.
+    pub fn signal_grad(&mut self) -> &mut Tensor {
+        &mut self.synthesis.signal_grad
+    }
+
+    /// Carries the gradient of the synthesized signals back through the
+    /// synthesis and the network, adding every parameter's gradient.
+    pub fn network_backward(&mut self, gpu: &Gpu, vocoder: &mut Vocoder) -> GpuResult {
         self.synthesis
             .backward(gpu, &vocoder.istft, &self.activations.head)?;
         vocoder
