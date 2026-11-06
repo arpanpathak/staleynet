@@ -144,11 +144,12 @@ pub fn run(arguments: Arguments) -> Result<()> {
         eprintln!("warning: this model has no lyrics field; the lyrics are ignored");
     }
 
-    let frames = (arguments.seconds * mel.frames_per_second() / tokenizer.config.frames_per_step as f32).ceil() as usize;
+    let seconds_per_step = tokenizer.config.frames_per_step as f32 / mel.frames_per_second();
+    let frames = (arguments.seconds / seconds_per_step).ceil() as usize;
     eprintln!("{} (step {}): generating {frames} frames for {:.1}s", checkpoint_directory.display(), metadata.step, arguments.seconds);
 
     let prompt = Conditioning { caption: &arguments.prompt, lyrics: &lyrics };
-    let generation = generate(&gpu, &model, prompt, &arguments.generation_config(frames))?;
+    let generation = generate(&gpu, &model, prompt, &arguments.generation_config(frames, seconds_per_step))?;
 
     if let Some(path) = &arguments.save_codes {
         write_codes(path, &generation.codes)?;
@@ -214,10 +215,11 @@ impl Arguments {
         std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))
     }
 
-    /// Sampling, guidance and attention settings for `frames` frames.
+    /// Sampling, guidance and attention settings for `frames` frames of
+    /// `seconds_per_step` each.
     /// A temperature of 0 means greedy decoding, and a guidance scale of 1
     /// means no guidance.
-    fn generation_config(&self, frames: usize) -> GenerationConfig {
+    fn generation_config(&self, frames: usize, seconds_per_step: f32) -> GenerationConfig {
         let sampling =
             if self.temperature <= 0.0 { Sampling::Greedy } else { Sampling::TopK { temperature: self.temperature, k: self.top_k } };
         let guidance = if self.guidance == 1.0 { Guidance::Off } else { Guidance::ClassifierFree { scale: self.guidance } };
@@ -226,6 +228,6 @@ impl Arguments {
             AttentionArgument::Recompute => AttentionMode::Recompute,
         };
 
-        GenerationConfig { frames, sampling, guidance, attention, seed: self.seed }
+        GenerationConfig { frames, sampling, guidance, attention, seed: self.seed, seconds_per_step }
     }
 }
