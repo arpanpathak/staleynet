@@ -53,8 +53,8 @@ const BUSY_PAUSE: Duration = Duration::from_secs(2);
 /// Recordings per MusicBrainz page, the service's maximum.
 const PAGE_SIZE: usize = 100;
 
-/// Recordings read per band at most.
-const MAX_RECORDINGS: usize = 1000;
+/// Recordings read per band at most; MusicBrainz search refuses offsets of 500 or more.
+const MAX_RECORDINGS: usize = 500;
 
 /// Genres kept in a band's caption at most.
 const CAPTION_GENRES: usize = 4;
