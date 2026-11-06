@@ -18,6 +18,7 @@
 //! checks the index; the host wrappers in [`crate::ops`] check the sizes that
 //! make each launch valid.
 
+pub mod adversarial;
 pub mod attention;
 pub mod convolution;
 pub mod device;
@@ -47,5 +48,6 @@ pub const EMPTY_TOKEN: u32 = u32::MAX;
 /// Stands in for minus infinity when taking a running maximum.
 pub const NEGATIVE_LARGE: f32 = -3.0e38;
 
+pub use adversarial::{PeriodSplit, StridedConvolution};
 pub use convolution::Convolution;
 pub use matmul::{BLOCKED_THREADS_PER_EDGE, BLOCKED_TILE, MATMUL_TILE, Operand, Product};
