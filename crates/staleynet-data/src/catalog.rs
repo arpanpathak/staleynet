@@ -8,8 +8,8 @@
 //!   <https://arxiv.org/abs/2306.07744>): 78 CC-licensed Jamendo songs in
 //!   four languages whose lyrics are time-aligned line by line;
 //! * **a folder of your own recordings**, each with an optional `.txt` file of
-//!   the same name holding one description per line and an optional
-//!   `.lyrics.txt` file holding the words sung.
+//!   the same name holding one description per line, and the words sung in
+//!   an optional `.lrc` file (timed lines) or `.lyrics.txt` file (untimed).
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,15 @@ const JAMENDO_LYRICS_LINES: &str = "annotations/lines";
 
 /// Suffix of the lyrics sidecar in a folder of recordings.
 const LYRICS_SIDECAR_SUFFIX: &str = "lyrics.txt";
+
+/// Extension of the timed-lyrics sidecar in a folder of recordings.
+const LRC_SIDECAR_EXTENSION: &str = "lrc";
+
+/// How long the last line of an LRC file is assumed to last, in seconds.
+const LRC_LAST_LINE_SECONDS: f32 = 4.0;
+
+/// Seconds in a minute, for LRC time tags.
+const SECONDS_PER_MINUTE: f32 = 60.0;
 
 /// Percentage of split groups held out for validation.
 pub const VALIDATION_PERCENT: u64 = 10;
@@ -264,9 +273,7 @@ pub fn folder(root: &Path) -> Result<Vec<Track>> {
             Err(_) => vec![Caption { text: stem.replace(['_', '-'], " "), source: CaptionSource::FileName }],
         };
 
-        let lyrics = std::fs::read_to_string(audio_path.with_extension(LYRICS_SIDECAR_SUFFIX))
-            .map(|text| untimed_lines(&text))
-            .unwrap_or_default();
+        let lyrics = sidecar_lyrics(&audio_path);
         let split_group = folder_split_group(root, &audio_path).unwrap_or_else(|| id.clone());
         tracks.push(Track { split: split_for(&split_group), split_group, id, audio_path, captions, lyrics });
     }
@@ -283,6 +290,70 @@ fn folder_split_group(root: &Path, audio_path: &Path) -> Option<String> {
     components.next()?;
 
     Some(format!("folder-{}", first.as_os_str().to_string_lossy()))
+}
+
+/// The lyrics beside `audio_path`: timed lines from its `.lrc` file if there
+/// is one, otherwise untimed lines from its `.lyrics.txt`, otherwise none.
+fn sidecar_lyrics(audio_path: &Path) -> Vec<LyricLine> {
+    if let Ok(text) = std::fs::read_to_string(audio_path.with_extension(LRC_SIDECAR_EXTENSION)) {
+        return lrc_lines(&text);
+    }
+
+    std::fs::read_to_string(audio_path.with_extension(LYRICS_SIDECAR_SUFFIX))
+        .map(|text| untimed_lines(&text))
+        .unwrap_or_default()
+}
+
+/// The seconds of a `[mm:ss.xx]` time tag's contents, or `None` for a
+/// metadata tag such as `[ar:Artist]`.
+fn lrc_seconds(tag: &str) -> Option<f32> {
+    let (minutes, seconds) = tag.split_once(':')?;
+    let minutes: f32 = minutes.trim().parse().ok()?;
+    let seconds: f32 = seconds.trim().parse().ok()?;
+
+    Some(minutes * SECONDS_PER_MINUTE + seconds)
+}
+
+/// Lyrics in the LRC format (<https://en.wikipedia.org/wiki/LRC_(file_format)>):
+/// each line starts with one or more `[mm:ss.xx]` time tags. A line lasts
+/// until the next timed line begins, the last one for
+/// [`LRC_LAST_LINE_SECONDS`]. Lines with no words mark instrumental gaps:
+/// they end the line before them and are not kept.
+pub fn lrc_lines(text: &str) -> Vec<LyricLine> {
+    let mut starts: Vec<(f32, String)> = Vec::new();
+
+    for row in text.lines() {
+        let mut rest = row.trim();
+        let mut times = Vec::new();
+
+        while let Some(tagged) = rest.strip_prefix('[') {
+            let Some((tag, after)) = tagged.split_once(']') else { break };
+            let Some(seconds) = lrc_seconds(tag) else { break };
+            times.push(seconds);
+            rest = after.trim_start();
+        }
+
+        starts.extend(
+            times
+                .into_iter()
+                .map(|start| (start, rest.trim().to_string())),
+        );
+    }
+
+    starts.sort_by(|left, right| left.0.total_cmp(&right.0));
+
+    let ends = starts.iter().skip(1).map(|(start, _)| *start).chain(
+        starts
+            .last()
+            .map(|(start, _)| start + LRC_LAST_LINE_SECONDS),
+    );
+
+    starts
+        .iter()
+        .zip(ends)
+        .filter(|((_, words), _)| !words.is_empty())
+        .map(|((start, words), end)| LyricLine { text: words.clone(), timing: Some(LineTiming { start: *start, end }) })
+        .collect()
 }
 
 /// Non-empty lines of `text` as lyrics with unknown timing.
@@ -389,6 +460,22 @@ mod tests {
             .count();
         assert!((800..1200).contains(&validation), "{validation} validation groups");
         assert_eq!(split_for("artist-42"), split_for("artist-42"));
+    }
+
+    #[test]
+    fn lrc_lines_last_until_the_next_line() {
+        let text = "[ar:Band]\n[00:31.20] I'm the man in the box\n[00:35.80][01:10.00] Buried\n[00:40.00]\n[01:20.50] Feed my eyes";
+        let line = |text: &str, start: f32, end: f32| LyricLine { text: text.into(), timing: Some(LineTiming { start, end }) };
+
+        assert_eq!(
+            lrc_lines(text),
+            vec![
+                line("I'm the man in the box", 31.2, 35.8),
+                line("Buried", 35.8, 40.0),
+                line("Buried", 70.0, 80.5),
+                line("Feed my eyes", 80.5, 84.5),
+            ]
+        );
     }
 
     #[test]

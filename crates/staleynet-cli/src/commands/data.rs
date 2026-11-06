@@ -5,16 +5,21 @@
 //! staleynet data jamendo-download --tags data/raw/mtg-jamendo-dataset/data/raw_30s_cleantags.tsv --out data/raw/jamendo-rock
 //! staleynet data jamendo-arrange  --downloads data/raw/jamendo-rock --out data/jamendo-rock
 //! staleynet data merge-lyrics     --cache data/cache-jamendo-rock-full --transcripts data/jamendo-lyrics/transcripts.jsonl --language en
+//! staleynet data youtube-rock     --bands deploy/youtube/rock-bands.txt --out data/youtube-rock
 //! ```
 
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use staleynet_data::jamendo::{arrange, artist_folders, download_tracks, rock_tracks};
 use staleynet_data::transcripts::{TranscriptFilter, merge_lyrics, read_transcripts};
+use staleynet_data::youtube::{default_yt_dlp, fetch_bands};
 use std::path::PathBuf;
 
 /// Parallel downloads; kept low to be polite to Jamendo's servers.
 const DEFAULT_WORKERS: usize = 6;
+
+/// Bands fetched in parallel from YouTube.
+const DEFAULT_BAND_WORKERS: usize = 3;
 
 /// Arguments of `staleynet data`.
 #[derive(Args)]
@@ -53,6 +58,26 @@ enum Task {
         out: PathBuf,
     },
 
+    /// Fetch every studio song of a list of bands: timed lyrics from LRCLIB,
+    /// audio from YouTube (resumable).
+    YoutubeRock {
+        /// Band names, one per line.
+        #[arg(long, default_value = "deploy/youtube/rock-bands.txt")]
+        bands: PathBuf,
+
+        /// Output folder for `staleynet prepare --folder`.
+        #[arg(long, default_value = "data/youtube-rock")]
+        out: PathBuf,
+
+        /// The yt-dlp program; `~/.local/bin/yt-dlp` when absent.
+        #[arg(long)]
+        yt_dlp: Option<PathBuf>,
+
+        /// Bands fetched in parallel.
+        #[arg(long, default_value_t = DEFAULT_BAND_WORKERS)]
+        workers: usize,
+    },
+
     /// Merge transcribed lyrics into a cache's manifest.
     MergeLyrics {
         /// Cache whose manifest receives the lyrics.
@@ -78,6 +103,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
     match arguments.task {
         Task::JamendoDownload { tags, out, workers } => download(tags, out, workers),
         Task::JamendoArrange { downloads, out } => arrange_songs(downloads, out),
+        Task::YoutubeRock { bands, out, yt_dlp, workers } => youtube_rock(bands, out, yt_dlp.unwrap_or_else(default_yt_dlp), workers),
         Task::MergeLyrics { cache, transcripts, min_logprob, languages } => {
             merge(cache, transcripts, TranscriptFilter { min_logprob, languages })
         }
@@ -113,6 +139,14 @@ fn merge(cache: PathBuf, transcripts: PathBuf, filter: TranscriptFilter) -> Resu
         "{} transcripts, {} accepted; added lyrics to {} tracks; {} of {} now have lyrics",
         report.transcripts, report.accepted, report.added, report.with_lyrics, report.tracks,
     );
+
+    Ok(())
+}
+
+/// Fetches the bands' songs from YouTube with their timed lyrics.
+fn youtube_rock(bands: PathBuf, out: PathBuf, yt_dlp: PathBuf, workers: usize) -> Result<()> {
+    let tally = fetch_bands(&bands, &out, &yt_dlp, workers)?;
+    println!("{} songs ready, {} without timed lyrics or matching audio", tally.ready, tally.missing);
 
     Ok(())
 }
