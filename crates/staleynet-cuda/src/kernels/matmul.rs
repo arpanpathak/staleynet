@@ -15,7 +15,14 @@
 //!   `4 × 4` block of outputs in registers (Volkov and Demmel, 2008,
 //!   <https://doi.org/10.1109/SC.2008.5214359>; Boehm,
 //!   <https://siboehm.com/articles/22/CUDA-MMM>).
+//!
+//! A fourth, [`kernels::matmul_tensor_core`], stages the same `64 × 64` tiles
+//! but multiplies them on the tensor cores with `mma.sync` in TF32: inputs
+//! rounded to a 10-bit mantissa, products summed in f32 (NVIDIA, *PTX ISA*,
+//! "Warp-level matrix multiply-accumulate instructions",
+//! <https://docs.nvidia.com/cuda/parallel-thread-execution/#warp-level-matrix-instructions-mma>).
 
+use super::WARP_SIZE;
 use cuda_device::cuda_module;
 
 /// Edge of the square output tile of the naive and tiled kernels: one block of
@@ -39,6 +46,59 @@ const BLOCKED_THREADS: usize = BLOCKED_THREADS_PER_EDGE * BLOCKED_THREADS_PER_ED
 
 /// Values of each operand tile that every thread of the blocked kernel copies per phase.
 const BLOCKED_LOADS_PER_THREAD: usize = BLOCKED_TILE * BLOCKED_DEPTH / BLOCKED_THREADS;
+
+/// Output rows of one tensor-core instruction, `mma.m16n8k8`.
+const MMA_ROWS: usize = 16;
+
+/// Output columns of one tensor-core instruction.
+const MMA_COLS: usize = 8;
+
+/// Depth of the inner dimension one tensor-core instruction consumes.
+const MMA_DEPTH: usize = 8;
+
+/// Lanes that share a row of an `mma` fragment; a lane's `group` is
+/// `lane / 4` and its `member` is `lane % 4` (PTX ISA, "Matrix fragments for
+/// mma.m16n8k8").
+const MMA_LANES_PER_GROUP: usize = 4;
+
+/// Offset between the two halves of a fragment: rows `group` and `group + 8`
+/// of `A` and `C`, columns `member` and `member + 4` of `A` (rows of `B`).
+const MMA_HALF_ROWS: usize = 8;
+
+/// See [`MMA_HALF_ROWS`].
+const MMA_HALF_DEPTH: usize = 4;
+
+/// Accumulator registers per lane: two adjacent columns in each half.
+const MMA_ACCUMULATORS: usize = 4;
+
+/// Adjacent output columns a lane holds in each half of the accumulator.
+const MMA_COLS_PER_LANE: usize = 2;
+
+/// Warps of the tensor-core kernel along the output rows of a tile; each
+/// covers [`MMA_ROWS`] rows.
+const TENSOR_WARP_ROWS: usize = BLOCKED_TILE / MMA_ROWS;
+
+/// Warps of the tensor-core kernel along the output columns of a tile.
+const TENSOR_WARP_COLS: usize = BLOCKED_THREADS / WARP_SIZE / TENSOR_WARP_ROWS;
+
+/// Output columns of the tile that one warp computes.
+const TENSOR_WARP_WIDTH: usize = BLOCKED_TILE / TENSOR_WARP_COLS;
+
+/// Tensor-core instructions per warp side by side along the columns.
+const TENSOR_TILES_PER_WARP: usize = TENSOR_WARP_WIDTH / MMA_COLS;
+
+/// Row length of the shared tile of `A`: the depth plus 4 words, so that the
+/// 8 rows a warp reads at once start in 8 different banks (row `r` begins at
+/// bank `20r mod 32`) instead of 2.
+const TENSOR_LEFT_STRIDE: usize = BLOCKED_DEPTH + 4;
+
+/// Row length of the shared tile of `B`: the tile plus 8 words, so that the
+/// 4 rows a warp reads at once start in banks 0, 8, 16 and 24 instead of all
+/// in bank 0.
+const TENSOR_RIGHT_STRIDE: usize = BLOCKED_TILE + 8;
+
+const _: () = assert!(TENSOR_WARP_ROWS * TENSOR_WARP_COLS * WARP_SIZE == BLOCKED_THREADS, "every warp owns one slice");
+const _: () = assert!(BLOCKED_DEPTH % MMA_DEPTH == 0, "the staged depth is whole instructions");
 
 /// Where the elements of one matrix operand live: element `(row, col)` of
 /// matrix `b` of a batch is `values[b · batch_stride + row · row_stride + col · col_stride]`.
@@ -134,9 +194,13 @@ pub fn tile_position(linear: usize, long: usize, short: usize, short_is_contiguo
 pub mod kernels {
     use super::{
         BLOCKED_DEPTH, BLOCKED_LOADS_PER_THREAD, BLOCKED_PER_THREAD, BLOCKED_THREADS, BLOCKED_THREADS_PER_EDGE, BLOCKED_TILE, MATMUL_TILE,
-        Product, tile_position,
+        MMA_ACCUMULATORS, MMA_COLS, MMA_COLS_PER_LANE, MMA_DEPTH, MMA_HALF_DEPTH, MMA_HALF_ROWS, MMA_LANES_PER_GROUP, MMA_ROWS, Product,
+        TENSOR_LEFT_STRIDE, TENSOR_RIGHT_STRIDE, TENSOR_TILES_PER_WARP, TENSOR_WARP_COLS, TENSOR_WARP_WIDTH, tile_position,
     };
+    use crate::kernels::WARP_SIZE;
     use crate::kernels::device::{load_owned, store};
+    use cuda_device::convert::cvt_rna_tf32_f32;
+    use cuda_device::wmma::mma_m16n8k8_f32_tf32;
     use cuda_device::{DisjointSlice, SharedArray, kernel, thread};
 
     /// The direct product: each thread computes one output from a row of `A`
@@ -285,6 +349,99 @@ pub mod kernels {
                     let index = product.output_index(batch, row, col);
                     let previous = load_owned(&mut output, index);
                     store(&mut output, index, product.combine(previous, sums[i * BLOCKED_PER_THREAD + j]));
+                }
+            }
+        }
+    }
+
+    /// The tensor-core product: the same `64 × 64` output tiles, staged the
+    /// same way as [`matmul_blocked`], multiplied with `mma.m16n8k8` in TF32.
+    ///
+    /// Values are rounded to TF32 (`cvt.rna`) once, as they are written to
+    /// shared memory. The 8 warps of a block split the tile into 4 × 2 slices
+    /// of `16 × 32` outputs; per 8-deep step of the inner dimension, a warp
+    /// loads one fragment of `A` and issues one instruction per `16 × 8` part
+    /// of its slice, accumulating in f32 registers.
+    ///
+    /// Launch: as [`matmul_blocked`]. Arguments: as [`matmul_naive`].
+    #[kernel]
+    pub fn matmul_tensor_core(left: &[f32], right: &[f32], mut output: DisjointSlice<f32>, product: Product) {
+        static mut LEFT_TILE: SharedArray<f32, { BLOCKED_TILE * TENSOR_LEFT_STRIDE }> = SharedArray::UNINIT;
+        static mut RIGHT_TILE: SharedArray<f32, { BLOCKED_DEPTH * TENSOR_RIGHT_STRIDE }> = SharedArray::UNINIT;
+
+        let batch = thread::blockIdx_z() as usize;
+        let tile_row = thread::blockIdx_y() as usize * BLOCKED_TILE;
+        let tile_col = thread::blockIdx_x() as usize * BLOCKED_TILE;
+
+        let thread_index = thread::threadIdx_y() as usize * BLOCKED_THREADS_PER_EDGE + thread::threadIdx_x() as usize;
+        let warp = thread_index / WARP_SIZE;
+        let lane = thread_index % WARP_SIZE;
+        let group = lane / MMA_LANES_PER_GROUP;
+        let member = lane % MMA_LANES_PER_GROUP;
+
+        let warp_row = warp / TENSOR_WARP_COLS * MMA_ROWS;
+        let warp_col = warp % TENSOR_WARP_COLS * TENSOR_WARP_WIDTH;
+
+        let mut sums = [[0.0f32; MMA_ACCUMULATORS]; TENSOR_TILES_PER_WARP];
+        for tile_start in (0..product.inner).step_by(BLOCKED_DEPTH) {
+            for load in 0..BLOCKED_LOADS_PER_THREAD {
+                let linear = thread_index + load * BLOCKED_THREADS;
+                let (left_row, left_k) = tile_position(linear, BLOCKED_TILE, BLOCKED_DEPTH, product.left.col_stride == 1);
+                let (right_col, right_k) = tile_position(linear, BLOCKED_TILE, BLOCKED_DEPTH, product.right.row_stride == 1);
+                let left_value = product.left_or_zero(left, batch, tile_row + left_row, tile_start + left_k);
+                let right_value = product.right_or_zero(right, batch, tile_start + right_k, tile_col + right_col);
+
+                // SAFETY: shared tiles are private to the block; row indices are
+                // below 64 (left) and 16 (right), columns below the padded strides.
+                unsafe {
+                    LEFT_TILE[left_row * TENSOR_LEFT_STRIDE + left_k] = f32::from_bits(cvt_rna_tf32_f32(left_value));
+                    RIGHT_TILE[right_k * TENSOR_RIGHT_STRIDE + right_col] = f32::from_bits(cvt_rna_tf32_f32(right_value));
+                }
+            }
+            thread::sync_threads();
+
+            for step in (0..BLOCKED_DEPTH).step_by(MMA_DEPTH) {
+                let top = (warp_row + group) * TENSOR_LEFT_STRIDE + step + member;
+                let bottom = top + MMA_HALF_ROWS * TENSOR_LEFT_STRIDE;
+
+                // SAFETY: rows below 64 and depths below 16, all written before
+                // the barrier above; every value went through `cvt.rna`.
+                let a = unsafe {
+                    [
+                        LEFT_TILE[top].to_bits(),
+                        LEFT_TILE[bottom].to_bits(),
+                        LEFT_TILE[top + MMA_HALF_DEPTH].to_bits(),
+                        LEFT_TILE[bottom + MMA_HALF_DEPTH].to_bits(),
+                    ]
+                };
+
+                for tile in 0..TENSOR_TILES_PER_WARP {
+                    let near = (step + member) * TENSOR_RIGHT_STRIDE + warp_col + tile * MMA_COLS + group;
+                    let far = near + MMA_HALF_DEPTH * TENSOR_RIGHT_STRIDE;
+
+                    // SAFETY: depths below 16 and columns below 64, written before
+                    // the barrier above. Every lane of the warp reaches this
+                    // instruction: the loops are uniform and nothing returns early.
+                    sums[tile] = unsafe {
+                        let b = [RIGHT_TILE[near].to_bits(), RIGHT_TILE[far].to_bits()];
+                        mma_m16n8k8_f32_tf32(sums[tile], a, b)
+                    };
+                }
+            }
+            thread::sync_threads();
+        }
+
+        // Accumulator register `r` holds row `group` (r < 2) or `group + 8`
+        // (r ≥ 2), column `2 · member + r mod 2` of its 16 × 8 part.
+        for tile in 0..TENSOR_TILES_PER_WARP {
+            for register in 0..MMA_ACCUMULATORS {
+                let half = register / MMA_COLS_PER_LANE;
+                let row = tile_row + warp_row + group + half * MMA_HALF_ROWS;
+                let col = tile_col + warp_col + tile * MMA_COLS + member * MMA_COLS_PER_LANE + register % MMA_COLS_PER_LANE;
+                if row < product.rows && col < product.cols {
+                    let index = product.output_index(batch, row, col);
+                    let previous = load_owned(&mut output, index);
+                    store(&mut output, index, product.combine(previous, sums[tile][register]));
                 }
             }
         }

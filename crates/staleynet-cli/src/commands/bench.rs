@@ -40,8 +40,11 @@ const BENCH_TOP_K: usize = 250;
 /// lyric cursor, which the empty benchmark lyrics never use.
 const BENCH_SECONDS_PER_STEP: f32 = 0.05;
 
+/// Number of GEMM kernels compared.
+const KERNEL_COUNT: usize = 4;
+
 /// The GEMM kernels compared, in the order the results report them.
-const KERNELS: [MatmulKernel; 3] = [MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::Blocked];
+const KERNELS: [MatmulKernel; KERNEL_COUNT] = [MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::Blocked, MatmulKernel::TensorCore];
 
 /// Arguments of `staleynet bench`.
 #[derive(Args)]
@@ -51,7 +54,7 @@ pub struct Arguments {
     out: PathBuf,
 }
 
-/// One GEMM shape measured with both kernels.
+/// One GEMM shape measured with every kernel.
 #[derive(Serialize)]
 struct MatmulResult {
     /// What the shape corresponds to in the model.
@@ -68,6 +71,9 @@ struct MatmulResult {
 
     /// Throughput of the register-blocked kernel, GFLOP/s.
     blocked_gflops: f64,
+
+    /// Throughput of the TF32 tensor-core kernel, GFLOP/s.
+    tensor_core_gflops: f64,
 }
 
 /// Everything `bench` measures.
@@ -93,6 +99,9 @@ struct BenchResults {
 
     /// See `train_step_naive_ms`.
     train_step_blocked_ms: f64,
+
+    /// See `train_step_naive_ms`.
+    train_step_tensor_core_ms: f64,
 
     /// Positions per second with the register-blocked kernel, the default.
     train_positions_per_second: f64,
@@ -163,7 +172,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
     let (log_mel_gpu_ms, log_mel_cpu_ms) = measure_log_mel(&gpu)?;
 
     let mut model = Gpt::new(&gpu, config.clone(), 0)?;
-    let [naive_ms, tiled_ms, blocked_ms] = measure_train_steps(&mut gpu, &mut model, shape)?;
+    let [naive_ms, tiled_ms, blocked_ms, tensor_core_ms] = measure_train_steps(&mut gpu, &mut model, shape)?;
     let [cached_ms, recompute_ms] = measure_decoding(&gpu, &model)?;
 
     let results = BenchResults {
@@ -174,6 +183,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
         train_step_naive_ms: naive_ms,
         train_step_tiled_ms: tiled_ms,
         train_step_blocked_ms: blocked_ms,
+        train_step_tensor_core_ms: tensor_core_ms,
         train_positions_per_second: shape.rows() as f64 / (blocked_ms / 1e3),
         decode_cached_ms_per_step: cached_ms,
         decode_recompute_ms_per_step: recompute_ms,
@@ -181,7 +191,7 @@ pub fn run(arguments: Arguments) -> Result<()> {
     write_results(&arguments.out, &results)
 }
 
-/// The three GEMM kernels on the matrix shapes the model actually uses, for
+/// Every GEMM kernel on the matrix shapes the model actually uses, for
 /// `positions` rows of activations.
 fn measure_matmuls(gpu: &mut Gpu, config: &ModelConfig, positions: usize) -> Result<Vec<MatmulResult>> {
     let mel = MelConfig::default();
@@ -194,16 +204,16 @@ fn measure_matmuls(gpu: &mut Gpu, config: &ModelConfig, positions: usize) -> Res
 
     let mut results = Vec::with_capacity(shapes.len());
     for (role, rows, cols, inner) in shapes {
-        let mut gflops = [0.0; 3];
+        let mut gflops = [0.0; KERNEL_COUNT];
         for (slot, kernel) in gflops.iter_mut().zip(KERNELS) {
             *slot = with_kernel(gpu, kernel, |gpu| matmul_gflops(gpu, rows, cols, inner))?;
         }
-        let [naive_gflops, tiled_gflops, blocked_gflops] = gflops;
+        let [naive_gflops, tiled_gflops, blocked_gflops, tensor_core_gflops] = gflops;
 
         eprintln!(
-            "matmul {role:20} {rows}×{cols}×{inner}: naive {naive_gflops:6.1}, tiled {tiled_gflops:6.1}, blocked {blocked_gflops:6.1} GFLOP/s"
+            "matmul {role:20} {rows}×{cols}×{inner}: naive {naive_gflops:6.1}, tiled {tiled_gflops:6.1}, blocked {blocked_gflops:6.1}, tensor core {tensor_core_gflops:6.1} GFLOP/s"
         );
-        results.push(MatmulResult { role, shape: [rows, cols, inner], naive_gflops, tiled_gflops, blocked_gflops });
+        results.push(MatmulResult { role, shape: [rows, cols, inner], naive_gflops, tiled_gflops, blocked_gflops, tensor_core_gflops });
     }
     Ok(results)
 }
@@ -230,11 +240,11 @@ fn measure_log_mel(gpu: &Gpu) -> Result<(f64, f64)> {
 
 /// Milliseconds of one forward and backward pass with each GEMM kernel, in
 /// the order of [`KERNELS`].
-fn measure_train_steps(gpu: &mut Gpu, model: &mut Gpt, shape: SequenceShape) -> Result<[f64; 3]> {
+fn measure_train_steps(gpu: &mut Gpu, model: &mut Gpt, shape: SequenceShape) -> Result<[f64; KERNEL_COUNT]> {
     let batch = random_batch(&model.config, shape);
     let mut workspace = TrainingWorkspace::new(gpu, &model.config, shape)?;
 
-    let mut milliseconds = [0.0; 3];
+    let mut milliseconds = [0.0; KERNEL_COUNT];
     for (slot, kernel) in milliseconds.iter_mut().zip(KERNELS) {
         let seconds = with_kernel(gpu, kernel, |gpu| {
             time(gpu, || {

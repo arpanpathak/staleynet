@@ -14,6 +14,10 @@ use staleynet_data::store::{CacheLayout, DatasetManifest, read_f16, write_codes}
 use staleynet_data::tokenizer::{AudioTokenizer, TokenizerConfig};
 use std::path::{Path, PathBuf};
 
+/// Steps gathered from the cache for every step the tokenizer finally fits
+/// on, so the random subsample still draws from a wide pool.
+const GATHERED_PER_KEPT_VECTOR: usize = 4;
+
 /// Griffin-Lim iterations for listening examples.
 const LISTENING_ITERATIONS: usize = 64;
 
@@ -98,15 +102,33 @@ fn train_tokenizer(gpu: &Gpu, arguments: &Arguments, layout: &CacheLayout, manif
         ..TokenizerConfig::default()
     };
 
+    // Keep every `stride`-th step of every track, so a large cache never has
+    // to fit in memory whole; the fit subsamples what is gathered further.
+    let train_tracks = || {
+        manifest
+            .tracks
+            .iter()
+            .filter(|entry| entry.track.split == Split::Train)
+    };
+
+    let steps_per_second = manifest.mel.sample_rate as f32 / manifest.mel.hop_size as f32 / config.frames_per_step as f32;
+    let train_steps = train_tracks()
+        .map(|entry| entry.seconds * steps_per_second)
+        .sum::<f32>() as usize;
+    let stride = (train_steps / (GATHERED_PER_KEPT_VECTOR * config.max_training_vectors)).max(1);
+
+    let step_dim = config.frames_per_step * mel_bands;
     let mut vectors = Vec::new();
-    for entry in manifest
-        .tracks
-        .iter()
-        .filter(|entry| entry.track.split == Split::Train)
-    {
+    for entry in train_tracks() {
         let log_mel = read_f16(&layout.mel(&entry.track.id))?;
-        vectors.extend(AudioTokenizer::step_vectors(&log_mel, mel_bands, config.frames_per_step, &manifest.normalization));
+        let track_vectors = AudioTokenizer::step_vectors(&log_mel, mel_bands, config.frames_per_step, &manifest.normalization);
+
+        let kept_steps = track_vectors.chunks_exact(step_dim).step_by(stride);
+        for step in kept_steps {
+            vectors.extend_from_slice(step);
+        }
     }
+
     eprintln!("training tokenizer on {} steps", vectors.len() / (config.frames_per_step * mel_bands));
 
     AudioTokenizer::train(gpu, config, mel_bands, manifest.normalization.clone(), vectors, |progress| {
