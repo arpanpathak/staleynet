@@ -26,6 +26,9 @@ const F16_BYTES: usize = 2;
 /// Bytes of one stored code.
 const U16_BYTES: usize = 2;
 
+/// Extension of a manifest while it is being written.
+const STAGING_EXTENSION: &str = "json.partial";
+
 /// Paths inside a dataset cache directory.
 #[derive(Clone, Debug)]
 pub struct CacheLayout {
@@ -204,9 +207,13 @@ impl DatasetManifest {
         Ok(serde_json::from_str(&text)?)
     }
 
-    /// Writes `manifest.json`.
+    /// Writes `manifest.json` under a temporary name and renames it into
+    /// place, so an interrupted write never leaves a truncated manifest.
     pub fn save(&self, layout: &CacheLayout) -> Result<()> {
-        std::fs::write(layout.manifest(), serde_json::to_string_pretty(self)?)?;
+        let manifest = layout.manifest();
+        let staging = manifest.with_extension(STAGING_EXTENSION);
+        std::fs::write(&staging, serde_json::to_string_pretty(self)?)?;
+        std::fs::rename(&staging, &manifest)?;
         Ok(())
     }
 }

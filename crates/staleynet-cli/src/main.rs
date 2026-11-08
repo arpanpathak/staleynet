@@ -1,6 +1,7 @@
 //! `staleynet`: prompt-to-music with a from-scratch audio language model.
 //!
 //! ```text
+//! staleynet data     jamendo-download --out data/raw/jamendo-rock
 //! staleynet prepare  --song-describer data/raw/song-describer --cache data/cache
 //! staleynet tokenize --cache data/cache
 //! staleynet train    --cache data/cache --run runs/base --config configs/base.json
@@ -28,6 +29,9 @@ struct Cli {
 /// Every task, one module each under `commands/`.
 #[derive(Subcommand)]
 enum Command {
+    /// Download and arrange corpora, and merge transcribed lyrics.
+    Data(commands::data::Arguments),
+
     /// Decode, resample and analyse recordings into the feature cache.
     Prepare(commands::prepare::Arguments),
 
@@ -55,6 +59,7 @@ enum Command {
 
 fn main() -> Result<()> {
     match Cli::parse().command {
+        Command::Data(arguments) => commands::data::run(arguments),
         Command::Prepare(arguments) => commands::prepare::run(arguments),
         Command::Tokenize(arguments) => commands::tokenize::run(arguments),
         Command::Train(arguments) => commands::train::run(arguments),
@@ -97,6 +102,28 @@ mod tests {
 
         assert!(matches!(evaluate.command, Command::Evaluate(_)));
         assert!(matches!(bench.command, Command::Bench(_)));
+    }
+
+    #[test]
+    fn parses_corpus_commands() {
+        let download = Cli::try_parse_from(["staleynet", "data", "jamendo-download"]).unwrap();
+        let merge = Cli::try_parse_from([
+            "staleynet",
+            "data",
+            "merge-lyrics",
+            "--cache",
+            "c",
+            "--transcripts",
+            "t",
+            "--min-logprob",
+            "-0.4",
+            "--language",
+            "en",
+        ])
+        .unwrap();
+
+        assert!(matches!(download.command, Command::Data(_)));
+        assert!(matches!(merge.command, Command::Data(_)));
     }
 
     #[test]

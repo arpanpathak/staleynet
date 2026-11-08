@@ -1,6 +1,7 @@
 //! One module per subcommand. Each exposes `Arguments` and `run`.
 
 pub mod bench;
+pub mod data;
 pub mod evaluate;
 pub mod prepare;
 pub mod reconstruct;
