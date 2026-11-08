@@ -45,6 +45,23 @@ pub enum MatmulKernel {
 
     /// 64×64 shared-memory tiles with a 4×4 register block per thread.
     Blocked,
+
+    /// The tiles of [`MatmulKernel::Blocked`] multiplied on the tensor cores
+    /// in TF32: inputs rounded to a 10-bit mantissa, sums kept in f32.
+    TensorCore,
+}
+
+impl MatmulKernel {
+    /// Largest relative error against an exact f32 product that the kernel's
+    /// arithmetic allows. TF32 rounds each input to 2⁻¹¹ relative precision,
+    /// so its products differ by a few parts in 10⁴; the f32 kernels differ
+    /// only by summation order.
+    pub fn tolerance(self) -> f32 {
+        match self {
+            MatmulKernel::Naive | MatmulKernel::Tiled | MatmulKernel::Blocked => 1e-5,
+            MatmulKernel::TensorCore => 2e-3,
+        }
+    }
 }
 
 /// The loaded kernel modules, one per kind of computation (see [`crate::kernels`]).

@@ -150,7 +150,7 @@ impl Gpu {
 
         let config = match self.matmul_kernel {
             MatmulKernel::Naive | MatmulKernel::Tiled => launch::matmul_tiles(spec.rows, spec.cols, spec.batch.count),
-            MatmulKernel::Blocked => launch::matmul_blocks(spec.rows, spec.cols, spec.batch.count),
+            MatmulKernel::Blocked | MatmulKernel::TensorCore => launch::matmul_blocks(spec.rows, spec.cols, spec.batch.count),
         };
 
         let product = spec.product();
@@ -165,6 +165,7 @@ impl Gpu {
                 MatmulKernel::Naive => kernels.matmul_naive(&self.stream, config, left, right, output, product),
                 MatmulKernel::Tiled => kernels.matmul_tiled(&self.stream, config, left, right, output, product),
                 MatmulKernel::Blocked => kernels.matmul_blocked(&self.stream, config, left, right, output, product),
+                MatmulKernel::TensorCore => kernels.matmul_tensor_core(&self.stream, config, left, right, output, product),
             }
         }
     }

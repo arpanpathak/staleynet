@@ -54,7 +54,7 @@ fn relative_error(expected: &[f32], actual: &[f32]) -> f32 {
 #[test]
 fn matmul_matches_reference_for_every_storage_and_kernel() {
     let mut gpu = gpu();
-    let sizes = [(1, 1, 1), (17, 33, 9), (64, 48, 70), (5, 129, 31)];
+    let sizes = [(1, 1, 1), (17, 33, 9), (64, 48, 70), (5, 129, 31), (130, 197, 100)];
 
     for (rows, cols, inner) in sizes {
         for batch in [1, 3] {
@@ -73,7 +73,7 @@ fn matmul_matches_reference_for_every_storage_and_kernel() {
                 let mut expected = initial.clone();
                 reference::matmul(&spec, &left, &right, &mut expected);
 
-                for kernel in [MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::Blocked] {
+                for kernel in [MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::Blocked, MatmulKernel::TensorCore] {
                     gpu.matmul_kernel = kernel;
                     let left_tensor = gpu.upload(Shape::vector(left.len()), &left).unwrap();
                     let right_tensor = gpu.upload(Shape::vector(right.len()), &right).unwrap();
@@ -83,7 +83,7 @@ fn matmul_matches_reference_for_every_storage_and_kernel() {
                         .unwrap();
 
                     let error = relative_error(&expected, &gpu.download(&output).unwrap());
-                    assert!(error < TOLERANCE, "{kernel:?} {spec:?}: relative error {error}");
+                    assert!(error < kernel.tolerance(), "{kernel:?} {spec:?}: relative error {error}");
                 }
             }
         }
