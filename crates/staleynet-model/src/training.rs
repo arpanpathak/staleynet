@@ -23,13 +23,19 @@ pub struct TrainingBatch {
 
     /// Target codes local to each codebook, `[batch·time, codebooks]`.
     pub targets: Vec<u32>,
+
+    /// Lyric cursor of every position, `[batch·time]`: the position row of the
+    /// lyrics byte sung during the step the position predicts, or
+    /// [`EMPTY_TOKEN`] where nothing is sung. Read only by a model with a
+    /// lyric cursor.
+    pub cursors: Vec<u32>,
 }
 
 impl TrainingBatch {
     /// An all-empty batch, to be filled by a sampler and reused every step.
     pub fn empty(shape: SequenceShape, codebooks: usize) -> Self {
         let slots = shape.rows() * codebooks;
-        Self { shape, tokens: vec![EMPTY_TOKEN; slots], targets: vec![EMPTY_TOKEN; slots] }
+        Self { shape, tokens: vec![EMPTY_TOKEN; slots], targets: vec![EMPTY_TOKEN; slots], cursors: vec![EMPTY_TOKEN; shape.rows()] }
     }
 }
 
@@ -58,10 +64,15 @@ pub struct TrainingWorkspace {
     /// Device copy of [`TrainingBatch::targets`].
     targets: TokenBuffer,
 
-    /// Position-table rows of `0..time`, repeated for every sequence.
+    /// Every position's own position-table row: those of `0..time`, repeated
+    /// for every sequence.
+    position_rows: Vec<u32>,
+
+    /// Position slots on the device: `position_rows`, each followed by the
+    /// batch's lyric cursor when the model has one.
     positions: TokenBuffer,
 
-    /// Inverted index of `positions`; constant, so built once.
+    /// Inverted index of `positions`; built once, or per batch with a cursor.
     position_index: TokenIndex,
 
     /// Residual streams: entry `l` enters block `l`, the last leaves the stack.
@@ -108,9 +119,10 @@ impl TrainingWorkspace {
         let logits = Shape::new(rows, config.logits_width());
         let empty_slots = vec![EMPTY_TOKEN; rows * config.codebooks];
 
-        let positions: Vec<u32> = Vocabulary::new(config)
+        let position_rows: Vec<u32> = Vocabulary::new(config)
             .position_ids(0, shape.time)
             .repeat(shape.batch);
+        let positions = position_slots(config, &position_rows, &vec![EMPTY_TOKEN; rows]);
 
         let mut residuals = Vec::with_capacity(config.layers + 1);
         let mut blocks = Vec::with_capacity(config.layers);
@@ -124,8 +136,9 @@ impl TrainingWorkspace {
             shape,
             tokens: gpu.upload_tokens(&empty_slots)?,
             targets: gpu.upload_tokens(&empty_slots)?,
-            position_index: TokenIndex::build(gpu, &positions, 1, config.sequence_capacity())?,
+            position_index: TokenIndex::build(gpu, &positions, config.position_slots(), config.sequence_capacity())?,
             positions: gpu.upload_tokens(&positions)?,
+            position_rows,
             residuals,
             blocks,
             block_gradients: BlockGradients::new(gpu, config, shape)?,
@@ -148,6 +161,19 @@ impl TrainingWorkspace {
     }
 }
 
+/// Position slots of every row: its own row, followed by its cursor when
+/// `config` has a lyric cursor.
+fn position_slots(config: &ModelConfig, rows: &[u32], cursors: &[u32]) -> Vec<u32> {
+    if !config.lyric_cursor {
+        return rows.to_vec();
+    }
+
+    rows.iter()
+        .zip(cursors)
+        .flat_map(|(&row, &cursor)| [row, cursor])
+        .collect()
+}
+
 impl Gpt {
     /// Forward pass and loss. Leaves activations and `∂loss/∂logits` in
     /// `workspace`, ready for [`Gpt::backward`].
@@ -157,6 +183,11 @@ impl Gpt {
 
         gpu.copy_tokens_from_host(&mut workspace.tokens, &batch.tokens)?;
         gpu.copy_tokens_from_host(&mut workspace.targets, &batch.targets)?;
+        if self.config.lyric_cursor {
+            let positions = position_slots(&self.config, &workspace.position_rows, &batch.cursors);
+            gpu.copy_tokens_from_host(&mut workspace.positions, &positions)?;
+            workspace.position_index = TokenIndex::build(gpu, &positions, self.config.position_slots(), self.config.sequence_capacity())?;
+        }
         self.embed(gpu, &workspace.tokens, &workspace.positions, &mut workspace.residuals[0])?;
 
         for (index, block) in self.blocks.iter().enumerate() {

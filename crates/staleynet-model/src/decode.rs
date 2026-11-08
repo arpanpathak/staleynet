@@ -8,7 +8,7 @@
 use crate::gpt::Gpt;
 use crate::layers::attention::LayerCache;
 use crate::layers::block::CachedBlockTensors;
-use staleynet_cuda::{Gpu, GpuResult, Shape, Tensor, TokenBuffer};
+use staleynet_cuda::{EMPTY_TOKEN, Gpu, GpuResult, Shape, Tensor, TokenBuffer};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
@@ -17,7 +17,8 @@ struct FeedScratch {
     /// Token slots of the new positions.
     tokens: TokenBuffer,
 
-    /// Position-table rows of the new positions.
+    /// Position slots of the new positions (their rows, and their lyric
+    /// cursors when the model has one).
     positions: TokenBuffer,
 
     /// Residual stream entering the current block.
@@ -48,7 +49,7 @@ impl FeedScratch {
 
         Ok(Self {
             tokens: gpu.upload_tokens(&placeholder)?,
-            positions: gpu.upload_tokens(&placeholder[..new_positions])?,
+            positions: gpu.upload_tokens(&vec![0; new_positions * config.position_slots()])?,
             residual: gpu.zeros(stream)?,
             next_residual: gpu.zeros(stream)?,
             block: CachedBlockTensors::new(gpu, config, new_positions, config.sequence_capacity())?,
@@ -109,11 +110,20 @@ impl Decoder {
             .retain(|&positions, _| positions == keep_positions);
     }
 
-    /// Feeds `token_slots` (`[new positions, codebooks]`) and returns the
-    /// logits of the last new position.
+    /// Feeds `token_slots` (`[new positions, codebooks]`) without lyric
+    /// cursors and returns the logits of the last new position.
     pub fn feed(&mut self, gpu: &Gpu, model: &Gpt, token_slots: &[u32]) -> GpuResult<Vec<f32>> {
+        let cursors = vec![EMPTY_TOKEN; token_slots.len() / model.config.codebooks];
+        self.feed_with_cursors(gpu, model, token_slots, &cursors)
+    }
+
+    /// Feeds `token_slots` (`[new positions, codebooks]`) with one lyric
+    /// cursor per new position ([`EMPTY_TOKEN`] for none; ignored by a model
+    /// without a cursor) and returns the logits of the last new position.
+    pub fn feed_with_cursors(&mut self, gpu: &Gpu, model: &Gpt, token_slots: &[u32], cursors: &[u32]) -> GpuResult<Vec<f32>> {
         let codebooks = model.config.codebooks;
         let new_positions = token_slots.len() / codebooks;
+        assert_eq!(cursors.len(), new_positions, "one cursor per new position");
         assert!(new_positions > 0 && new_positions <= self.remaining(), "feed exceeds the context window");
 
         let scratch = match self.scratch.entry(new_positions) {
@@ -121,9 +131,12 @@ impl Decoder {
             Entry::Vacant(entry) => entry.insert(FeedScratch::new(gpu, model, new_positions)?),
         };
 
-        let positions = model
-            .vocabulary()
-            .position_ids(self.cached_positions, new_positions);
+        let vocabulary = model.vocabulary();
+        let positions = if model.config.lyric_cursor {
+            vocabulary.cursor_position_slots(self.cached_positions, cursors)
+        } else {
+            vocabulary.position_ids(self.cached_positions, new_positions)
+        };
         gpu.copy_tokens_from_host(&mut scratch.tokens, token_slots)?;
         gpu.copy_tokens_from_host(&mut scratch.positions, &positions)?;
 

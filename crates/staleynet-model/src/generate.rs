@@ -8,7 +8,7 @@
 use crate::decode::Decoder;
 use crate::gpt::Gpt;
 use crate::random::Random;
-use crate::vocabulary::{Conditioning, DelayPattern, Vocabulary};
+use crate::vocabulary::{Conditioning, DelayPattern, Vocabulary, sung_byte};
 use staleynet_cuda::{EMPTY_TOKEN, Gpu, GpuResult};
 use std::time::Instant;
 
@@ -72,6 +72,9 @@ pub struct GenerationConfig {
 
     /// Seed of the sampling noise.
     pub seed: u64,
+
+    /// Duration of one code step, which sets how fast the lyric cursor moves.
+    pub seconds_per_step: f32,
 }
 
 /// Timing of one generation.
@@ -103,24 +106,45 @@ struct ConditionedStream {
 
     /// KV caches for this conditioning.
     decoder: Decoder,
+
+    /// Lyric cursor of every delayed step; empty for the unprompted stream.
+    cursors: Vec<u32>,
+
+    /// First step whose cursor points into the current prompt; earlier steps,
+    /// sung from a previous window, get no cursor after a prompt swap.
+    cursor_from: usize,
 }
 
 impl ConditionedStream {
-    /// Swaps the prompt. The caches are dropped, so the next call rebuilds
-    /// them from the new prompt and the most recent audio.
-    fn condition_on(&mut self, prompt_slots: Vec<u32>) {
+    /// Swaps the prompt from `step` on. The caches are dropped, so the next
+    /// call rebuilds them from the new prompt and the most recent audio.
+    fn condition_on(&mut self, prompt_slots: Vec<u32>, step: usize) {
         self.prompt_slots = prompt_slots;
+        self.cursor_from = step;
         self.decoder.reset();
     }
 
+    /// The lyric cursor for the position that predicts `step`.
+    fn cursor(&self, step: usize) -> u32 {
+        if step < self.cursor_from {
+            return EMPTY_TOKEN;
+        }
+        self.cursors.get(step).copied().unwrap_or(EMPTY_TOKEN)
+    }
+
     /// Logits for the next step, given every audio step generated so far.
+    /// The position holding step `s` predicts step `s + 1`, so it carries
+    /// that step's cursor; the last prompt position predicts the first kept step.
     fn next_logits(&mut self, gpu: &Gpu, model: &Gpt, history: &[u32], attention: AttentionMode) -> GpuResult<Vec<f32>> {
         let codebooks = model.config.codebooks;
+        let history_steps = history.len() / codebooks;
         let can_extend = matches!(attention, AttentionMode::KvCache) && self.decoder.cached_positions() > 0 && self.decoder.remaining() > 0;
 
         if can_extend {
             let newest_step = &history[history.len() - codebooks..];
-            return self.decoder.feed(gpu, model, newest_step);
+            return self
+                .decoder
+                .feed_with_cursors(gpu, model, newest_step, &[self.cursor(history_steps)]);
         }
 
         // Rebuild from the prompt plus as much recent history as fits. With a
@@ -131,17 +155,21 @@ impl ConditionedStream {
             AttentionMode::Recompute => audio_room,
         };
 
-        let history_steps = history.len() / codebooks;
         let kept_steps = history_steps.min(window);
+        let first_kept = history_steps - kept_steps;
 
         let mut slots = self.prompt_slots.clone();
-        slots.extend_from_slice(&history[(history_steps - kept_steps) * codebooks..]);
+        slots.extend_from_slice(&history[first_kept * codebooks..]);
+
+        let prompt_positions = self.prompt_slots.len() / codebooks;
+        let mut cursors = vec![EMPTY_TOKEN; prompt_positions - 1];
+        cursors.extend((first_kept..=history_steps).map(|step| self.cursor(step)));
 
         self.decoder.reset();
         if attention == AttentionMode::Recompute {
             self.decoder.release_scratch_except(slots.len() / codebooks);
         }
-        self.decoder.feed(gpu, model, &slots)
+        self.decoder.feed_with_cursors(gpu, model, &slots, &cursors)
     }
 }
 
@@ -244,7 +272,8 @@ pub fn generate(gpu: &Gpu, model: &Gpt, prompt: Conditioning, config: &Generatio
     let steps = pattern.delayed_steps(config.frames);
 
     let mut lyrics = LyricsSchedule::new(prompt, vocabulary.lyrics_bytes, steps);
-    let mut streams = GuidedStreams::new(gpu, model, lyrics.prompt_slots(&vocabulary), config.guidance)?;
+    let cursors = lyrics.cursors(&vocabulary, config.seconds_per_step);
+    let mut streams = GuidedStreams::new(gpu, model, lyrics.prompt_slots(&vocabulary), cursors, config.guidance)?;
     let mut codes = DelayedCodes::with_capacity(steps * vocabulary.codebooks);
 
     let mut random = Random::new(config.seed);
@@ -254,7 +283,7 @@ pub fn generate(gpu: &Gpu, model: &Gpt, prompt: Conditioning, config: &Generatio
         if lyrics.advance_to(step) {
             streams
                 .conditional
-                .condition_on(lyrics.prompt_slots(&vocabulary));
+                .condition_on(lyrics.prompt_slots(&vocabulary), step);
         }
 
         let logits = streams.next_logits(gpu, model, &codes.history, config.attention)?;
@@ -304,6 +333,45 @@ impl<'a> LyricsSchedule<'a> {
     fn prompt_slots(&self, vocabulary: &Vocabulary) -> Vec<u32> {
         vocabulary.prompt_slots(Conditioning { caption: self.caption, lyrics: &self.windows[self.current] })
     }
+
+    /// The lyric cursor of every delayed step. Each window's lines are sung one
+    /// after another across the window's steps, each given time in proportion
+    /// to its length, and swept with [`sung_byte`] as in training.
+    fn cursors(&self, vocabulary: &Vocabulary, seconds_per_step: f32) -> Vec<u32> {
+        let windows = self.windows.len();
+        let first_step = |window: usize| (window * self.total_steps).div_ceil(windows);
+
+        (0..self.total_steps)
+            .map(|step| {
+                let window = step * windows / self.total_steps;
+                let first = first_step(window);
+                let steps = first_step(window + 1) - first;
+                window_cursor(&self.windows[window], step - first, steps, seconds_per_step, vocabulary)
+            })
+            .collect()
+    }
+}
+
+/// The lyric cursor `step` steps into a window of `steps` steps that sings
+/// `text`, one line after another, each for a share of the time proportional
+/// to its bytes (counting its line break).
+fn window_cursor(text: &str, step: usize, steps: usize, seconds_per_step: f32, vocabulary: &Vocabulary) -> u32 {
+    let bytes = text.len() + 1;
+    let seconds_per_byte = steps as f32 * seconds_per_step / bytes as f32;
+    let elapsed = step as f32 * seconds_per_step;
+
+    let mut line_start = 0;
+    for line in text.split('\n') {
+        let line_end = line_start + line.len() + 1;
+        if elapsed < line_end as f32 * seconds_per_byte {
+            let into_line = elapsed - line_start as f32 * seconds_per_byte;
+            let duration = (line.len() + 1) as f32 * seconds_per_byte;
+            return sung_byte(into_line, duration, line.len()).map_or(EMPTY_TOKEN, |byte| vocabulary.cursor_row(line_start + byte));
+        }
+        line_start = line_end;
+    }
+
+    EMPTY_TOKEN
 }
 
 /// The prompted stream and, under classifier-free guidance, the unprompted
@@ -323,15 +391,18 @@ struct GuidedStreams {
 }
 
 impl GuidedStreams {
-    /// Opens the prompted stream on `prompt_slots`, and the unprompted one when
+    /// Opens the prompted stream on `prompt_slots` with the lyric `cursors` of
+    /// every step, and the unprompted one (with no cursor) when
     /// `guidance` needs it.
-    fn new(gpu: &Gpu, model: &Gpt, prompt_slots: Vec<u32>, guidance: Guidance) -> GpuResult<Self> {
-        let conditional = ConditionedStream { prompt_slots, decoder: Decoder::new(gpu, model)? };
+    fn new(gpu: &Gpu, model: &Gpt, prompt_slots: Vec<u32>, cursors: Vec<u32>, guidance: Guidance) -> GpuResult<Self> {
+        let conditional = ConditionedStream { prompt_slots, decoder: Decoder::new(gpu, model)?, cursors, cursor_from: 0 };
         let unconditional = match guidance {
             Guidance::Off => None,
             Guidance::ClassifierFree { .. } => Some(ConditionedStream {
                 prompt_slots: model.vocabulary().prompt_slots(Conditioning::NONE),
                 decoder: Decoder::new(gpu, model)?,
+                cursors: Vec::new(),
+                cursor_from: 0,
             }),
         };
 
@@ -413,5 +484,17 @@ mod tests {
     #[test]
     fn overlong_lines_break_between_words() {
         assert_eq!(lyrics_windows("one two three four", 9), vec!["one two", "three", "four"]);
+    }
+
+    #[test]
+    fn the_cursor_sings_each_line_of_a_window_in_turn() {
+        let vocabulary = Vocabulary { codebooks: 1, codebook_size: 8, prompt_bytes: 2, lyrics_bytes: 8, context_length: 16 };
+        let cursor = |step| window_cursor("ab\ncd", step, 10, 0.1, &vocabulary);
+
+        assert_eq!(cursor(0), vocabulary.cursor_row(0));
+        assert_eq!(cursor(3), vocabulary.cursor_row(1));
+        assert_eq!(cursor(6), vocabulary.cursor_row(3));
+        assert_eq!(cursor(8), vocabulary.cursor_row(4));
+        assert_eq!(window_cursor("", 0, 10, 0.1, &vocabulary), EMPTY_TOKEN);
     }
 }

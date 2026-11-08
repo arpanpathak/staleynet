@@ -36,6 +36,10 @@ const STFT_FRAMES: usize = 4096;
 /// Candidates kept by top-k sampling in the decoding benchmark.
 const BENCH_TOP_K: usize = 250;
 
+/// Duration of a code step while benchmarking decoding; it only paces the
+/// lyric cursor, which the empty benchmark lyrics never use.
+const BENCH_SECONDS_PER_STEP: f32 = 0.05;
+
 /// Number of GEMM kernels compared.
 const KERNEL_COUNT: usize = 4;
 
@@ -270,6 +274,7 @@ fn measure_decoding(gpu: &Gpu, model: &Gpt) -> Result<[f64; 2]> {
             guidance: Guidance::Off,
             attention,
             seed: 0,
+            seconds_per_step: BENCH_SECONDS_PER_STEP,
         };
         let stats = generate(gpu, model, Conditioning { caption: "benchmark", lyrics: "" }, &config)?.stats;
 

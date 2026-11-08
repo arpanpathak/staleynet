@@ -6,7 +6,7 @@ use crate::store::{CacheLayout, DatasetManifest, read_codes};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use staleynet_cuda::EMPTY_TOKEN;
-use staleynet_model::vocabulary::Conditioning;
+use staleynet_model::vocabulary::{Conditioning, sung_byte};
 use staleynet_model::{DelayPattern, Random, TrainingBatch, Vocabulary};
 use std::ops::Range;
 
@@ -60,16 +60,43 @@ impl TokenTrack {
     /// Lyrics sung during steps `first_step .. first_step + steps`: every line
     /// that overlaps that span, one per text line.
     pub fn lyrics_between(&self, first_step: usize, steps: usize) -> String {
-        let start = first_step as f32 * self.seconds_per_step;
-        let end = (first_step + steps) as f32 * self.seconds_per_step;
-
         let sung: Vec<&str> = self
-            .lyrics
-            .iter()
-            .filter(|line| line.timing.end > start && line.timing.start < end)
+            .lines_between(first_step, steps)
             .map(|line| line.text.as_str())
             .collect();
         sung.join("\n")
+    }
+
+    /// The lyric cursor of steps `first_step .. first_step + steps`, pointing
+    /// into [`Self::lyrics_between`] for the same span: each line is swept
+    /// with [`sung_byte`] from its start, and a step where no line is being
+    /// sung gets no cursor ([`EMPTY_TOKEN`]).
+    pub fn lyric_cursors(&self, first_step: usize, steps: usize, vocabulary: &Vocabulary) -> Vec<u32> {
+        let mut cursors = vec![EMPTY_TOKEN; steps];
+        let mut line_start = 0;
+
+        for line in self.lines_between(first_step, steps) {
+            let duration = line.timing.end - line.timing.start;
+            for (offset, cursor) in cursors.iter_mut().enumerate() {
+                let time = (first_step + offset) as f32 * self.seconds_per_step;
+                if let Some(byte) = sung_byte(time - line.timing.start, duration, line.text.len()) {
+                    *cursor = vocabulary.cursor_row(line_start + byte);
+                }
+            }
+            line_start += line.text.len() + 1;
+        }
+
+        cursors
+    }
+
+    /// The lines that overlap steps `first_step .. first_step + steps`.
+    fn lines_between(&self, first_step: usize, steps: usize) -> impl Iterator<Item = &TimedLine> {
+        let start = first_step as f32 * self.seconds_per_step;
+        let end = (first_step + steps) as f32 * self.seconds_per_step;
+
+        self.lyrics
+            .iter()
+            .filter(move |line| line.timing.end > start && line.timing.start < end)
     }
 
     /// Lyrics of a `steps`-long window starting at a randomly chosen line, so
@@ -340,6 +367,7 @@ impl BatchSampler {
     pub fn fill(&self, corpus: &TokenCorpus, batch: &mut TrainingBatch, random: &mut Random) {
         batch.tokens.fill(EMPTY_TOKEN);
         batch.targets.fill(EMPTY_TOKEN);
+        batch.cursors.fill(EMPTY_TOKEN);
 
         for sequence in 0..batch.shape.batch {
             // Every draw is made under every condition, so a seed gives the
@@ -376,6 +404,14 @@ impl BatchSampler {
         self.vocabulary
             .write_prompt(conditioning, &mut batch.tokens[rows.slot(0)..rows.slot(prompt_positions)]);
         self.write_crop(track, first_step..delayed_steps, rows, prompt_positions, batch);
+
+        // The last prompt position predicts the crop's first step, and each
+        // later position the step after its own, so the cursors start there.
+        if !conditioning.lyrics.is_empty() {
+            let first_row = rows.sequence * rows.time + prompt_positions - 1;
+            let cursors = track.lyric_cursors(first_step, audio_positions + 1, &self.vocabulary);
+            batch.cursors[first_row..first_row + audio_positions + 1].copy_from_slice(&cursors);
+        }
     }
 
     /// The delayed step at which the crop begins: the start of the track with
@@ -561,6 +597,27 @@ mod tests {
         for _ in 0..20 {
             assert_eq!(sampler.crop_start(&track, 100, 20, &mut random), 50);
         }
+    }
+
+    #[test]
+    fn the_cursor_follows_the_sung_line() {
+        let config =
+            ModelConfig { prompt_bytes: 4, lyrics_bytes: 8, codebooks: 1, codebook_size: 10, context_length: 32, ..ModelConfig::default() };
+        let vocabulary = Vocabulary::new(&config);
+        let lyrics = [
+            LyricLine { text: "xy".into(), timing: Some(LineTiming { start: 0.0, end: 0.5 }) },
+            LyricLine { text: "ab".into(), timing: Some(LineTiming { start: 1.0, end: 2.0 }) },
+        ];
+        let track =
+            TokenTrack { captions: vec!["rock".into()], lyrics: timed_lines(&lyrics, 10.0), codes: vec![0; 100], seconds_per_step: 0.1 };
+
+        let cursors = track.lyric_cursors(8, 10, &vocabulary);
+
+        assert_eq!(track.lyrics_between(8, 10), "ab");
+        assert_eq!(cursors[0], EMPTY_TOKEN);
+        assert_eq!(cursors[2], vocabulary.cursor_row(0));
+        assert_eq!(cursors[5], vocabulary.cursor_row(1));
+        assert_eq!(cursors[9], EMPTY_TOKEN);
     }
 
     #[test]
