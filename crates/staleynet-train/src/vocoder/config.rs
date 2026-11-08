@@ -2,10 +2,52 @@
 
 use serde::{Deserialize, Serialize};
 use staleynet_model::optimizer::OptimizerConfig;
-use staleynet_model::vocoder::VocoderConfig;
+use staleynet_model::vocoder::{AdversarialWeights, DiscriminatorConfig, VocoderConfig};
+use std::path::PathBuf;
 
 /// Optimizer steps of a default run.
 const DEFAULT_STEPS: usize = 200_000;
+
+/// Adversarial training with HiFi-GAN's multi-period discriminator.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AdversarialTraining {
+    /// The discriminator's sizes.
+    pub discriminator: DiscriminatorConfig,
+
+    /// The discriminator's AdamW and its schedule.
+    pub optimizer: OptimizerConfig,
+
+    /// How much the adversarial terms weigh against the spectral losses.
+    pub weights: AdversarialWeights,
+
+    /// A trained vocoder run to start from, so that the discriminator refines
+    /// a vocoder that already works rather than one that makes noise.
+    pub initialize_from: Option<PathBuf>,
+}
+
+impl Default for AdversarialTraining {
+    /// HiFi-GAN's discriminator and its optimizer: AdamW with β = (0.8, 0.99)
+    /// and a rate of 2·10⁻⁴ (Kong, Kim and Bae, 2020, §4).
+    fn default() -> Self {
+        Self {
+            discriminator: DiscriminatorConfig::default(),
+            optimizer: OptimizerConfig {
+                peak_learning_rate: 2e-4,
+                final_learning_rate: 2e-5,
+                warmup_steps: 1_000,
+                decay_steps: DEFAULT_STEPS,
+                beta1: 0.8,
+                beta2: 0.99,
+                epsilon: 1e-8,
+                weight_decay: 0.01,
+                max_gradient_norm: 1.0,
+            },
+            weights: AdversarialWeights::default(),
+            initialize_from: None,
+        }
+    }
+}
 
 /// Everything a vocoder training run is set by.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -52,6 +94,9 @@ pub struct VocoderTrainingConfig {
 
     /// Seed of the initialization and of the batches.
     pub seed: u64,
+
+    /// Adversarial training; the spectral losses alone when absent.
+    pub adversarial: Option<AdversarialTraining>,
 }
 
 impl Default for VocoderTrainingConfig {
@@ -84,6 +129,7 @@ impl Default for VocoderTrainingConfig {
             render_tracks: 3,
             render_seconds: 10.0,
             seed: 0,
+            adversarial: None,
         }
     }
 }

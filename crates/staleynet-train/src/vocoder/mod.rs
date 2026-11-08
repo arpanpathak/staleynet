@@ -17,16 +17,18 @@
 //! * [`waveforms`]: writes every track's samples into the cache.
 //! * [`segments`]: cuts training segments out of the cache.
 //! * [`config`]: the settings of a run.
+//! * [`adversary`]: the discriminator's side of adversarial training.
 //! * [`progress`]: running averages and the best validation loss so far.
 //! * [`session`]: the training loop, checkpoints and listening samples.
 
+pub mod adversary;
 pub mod config;
 pub mod progress;
 pub mod segments;
 pub mod session;
 pub mod waveforms;
 
-pub use config::VocoderTrainingConfig;
+pub use config::{AdversarialTraining, VocoderTrainingConfig};
 pub use segments::SegmentSampler;
 pub use session::{preferred_checkpoint, train};
 pub use waveforms::{WaveformOutcome, prepare_waveforms};

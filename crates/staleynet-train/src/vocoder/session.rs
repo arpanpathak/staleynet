@@ -3,6 +3,7 @@
 //! number, so a resumed run sees the batches it would have seen without
 //! stopping, and `latest/` keeps the optimizer's moments for the same reason.
 
+use super::adversary::Adversary;
 use super::config::VocoderTrainingConfig;
 use super::progress::{Window, best_validation_so_far};
 use super::segments::{Batch, SegmentSampler};
@@ -51,7 +52,14 @@ pub fn train(gpu: &Gpu, cache: &Path, run: &Path, config: VocoderTrainingConfig)
 
     let latest = run.join("latest");
     let resumed = checkpoint::exists(&latest);
-    let restored = if resumed { checkpoint::load(gpu, &latest)? } else { fresh_vocoder(gpu, &sampler, &config)? };
+    let restored = match (resumed, initial_vocoder(&config)) {
+        (true, _) => checkpoint::load(gpu, &latest)?,
+        (false, Some(source)) => {
+            eprintln!("vocoder: starting from {}", source.display());
+            Restored { step: 0, ..checkpoint::load(gpu, &preferred_checkpoint(source))? }
+        }
+        (false, None) => fresh_vocoder(gpu, &sampler, &config)?,
+    };
     let Restored { mut vocoder, step } = restored;
     ensure!(vocoder.config == config.vocoder, "{} was trained with a different network", latest.display());
 
@@ -62,11 +70,24 @@ pub fn train(gpu: &Gpu, cache: &Path, run: &Path, config: VocoderTrainingConfig)
     }
     optimizer.steps_taken = step;
 
+    let pass = TrainingPass::new(gpu, &vocoder, config.sequences, config.frames, &TRAINING_RESOLUTIONS)?;
+    let adversary = match &config.adversarial {
+        Some(settings) => {
+            let mut adversary = Adversary::new(gpu, settings, config.sequences, pass.signal_length(), config.seed)?;
+            if resumed && checkpoint::has_discriminator(&latest) {
+                adversary.resume(gpu, &latest, step)?;
+            }
+            Some(adversary)
+        }
+        None => None,
+    };
+
     let validation_seed = config.seed ^ VALIDATION_SEED_OFFSET;
     let session = Session {
         gpu,
         run,
-        pass: TrainingPass::new(gpu, &vocoder, config.sequences, config.frames, &TRAINING_RESOLUTIONS)?,
+        pass,
+        adversary,
         validation: sampler.validation_batches(config.sequences, config.validation_batches, validation_seed)?,
         sampler: Arc::new(sampler),
         vocoder,
@@ -80,6 +101,14 @@ pub fn train(gpu: &Gpu, cache: &Path, run: &Path, config: VocoderTrainingConfig)
     };
 
     session.run(step)
+}
+
+/// The trained vocoder run that adversarial training starts from, if any.
+fn initial_vocoder(config: &VocoderTrainingConfig) -> Option<&Path> {
+    config
+        .adversarial
+        .as_ref()
+        .and_then(|settings| settings.initialize_from.as_deref())
 }
 
 /// A newly initialized vocoder at step 0, standardizing its input with the
@@ -116,6 +145,9 @@ struct Session<'a> {
     /// Buffers of one step.
     pass: TrainingPass,
 
+    /// The discriminator, when training adversarially.
+    adversary: Option<Adversary>,
+
     /// Fixed held-out batches.
     validation: Vec<Batch>,
 
@@ -141,9 +173,7 @@ impl Session<'_> {
             let batch = batches.recv().context("the batch loader stopped")??;
             let started = Instant::now();
 
-            self.vocoder.network.zero_gradients(self.gpu)?;
-            self.pass
-                .run(self.gpu, &mut self.vocoder, &batch.mel, &batch.target)?;
+            self.learn(&batch)?;
             let loss = self.pass.loss(self.gpu)?;
             let report = self.optimizer.step(self.gpu, &mut self.vocoder.network)?;
             window.add(&loss, report.gradient_norm, started.elapsed().as_secs_f64());
@@ -153,11 +183,21 @@ impl Session<'_> {
 
             if done.is_multiple_of(self.config.log_every) {
                 let means = window.take();
+                let adversarial = match &self.adversary {
+                    Some(adversary) => Some(adversary.losses(self.gpu)?),
+                    None => None,
+                };
+
                 self.emit(json!({
                     "event": "progress",
                     "step": done,
                     "loss": means.loss,
                     "loss_parts": means.loss_parts,
+                    "adversarial": adversarial.map(|losses| json!({
+                        "discriminator": losses.discriminator,
+                        "adversarial": losses.adversarial,
+                        "feature_matching": losses.feature_matching,
+                    })),
                     "gradient_norm": means.gradient_norm,
                     "learning_rate": report.learning_rate,
                     "milliseconds_per_step": 1000.0 * means.seconds_per_step,
@@ -176,6 +216,29 @@ impl Session<'_> {
                 self.render(done)?;
             }
         }
+
+        Ok(())
+    }
+
+    /// Adds one step's gradients for `batch` into the vocoder: those of the
+    /// spectral losses alone, or, when training adversarially, after a
+    /// discriminator step, those of the spectral and adversarial terms together.
+    fn learn(&mut self, batch: &Batch) -> Result<()> {
+        self.vocoder.network.zero_gradients(self.gpu)?;
+
+        let Some(adversary) = self.adversary.as_mut() else {
+            self.pass
+                .run(self.gpu, &mut self.vocoder, &batch.mel, &batch.target)?;
+            return Ok(());
+        };
+
+        self.pass
+            .forward(self.gpu, &self.vocoder, &batch.mel, &batch.target)?;
+        adversary.train_discriminator(self.gpu, &self.pass)?;
+
+        self.pass.spectral_backward(self.gpu)?;
+        adversary.add_vocoder_gradient(self.gpu, &mut self.pass)?;
+        self.pass.network_backward(self.gpu, &mut self.vocoder)?;
 
         Ok(())
     }
@@ -216,6 +279,9 @@ impl Session<'_> {
         let _ = fs::remove_dir_all(&staging);
 
         checkpoint::save(self.gpu, &staging, &mut self.vocoder, Some(&self.optimizer), step)?;
+        if let Some(adversary) = self.adversary.as_mut() {
+            adversary.save(self.gpu, &staging)?;
+        }
 
         let _ = fs::remove_dir_all(&destination);
         fs::rename(&staging, &destination)?;
