@@ -4,7 +4,7 @@
 //! the forward pass itself, by finite differences or as the adjoint of a
 //! linear map, so that a wrong formula cannot pass.
 
-use staleynet_cuda::{Convolution, Gpu, Shape, Tensor};
+use staleynet_cuda::{Convolution, Gpu, PeriodSplit, Shape, StridedConvolution, Tensor, Verdict};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 /// Relative tolerance for f32 results computed with different summation orders.
@@ -414,4 +414,113 @@ fn column_scaling_and_its_gradient_match_reference() {
     };
     let expected_grad: Vec<f32> = (0..cols).map(column_sum).collect();
     assert!(relative_error(&expected_grad, &gpu.download(&scale_grad).unwrap()) < TOLERANCE);
+}
+
+// ------------------------------------------------------------ discriminators
+
+#[test]
+fn strided_unfolding_matches_reference_and_its_gradient_is_the_adjoint() {
+    let gpu = gpu();
+    let shape = StridedConvolution::new(3, 23, 4, 5, 3);
+    let input = random_values(shape.input_rows() * shape.channels, 19);
+
+    let input_tensor = upload(&gpu, shape.input_rows(), shape.channels, &input);
+    let mut columns = zeros(&gpu, shape.output_rows(), shape.width());
+    gpu.unfold_strided(&input_tensor, &mut columns, shape)
+        .unwrap();
+
+    let column = |element: usize| {
+        let row = element / shape.width();
+        let sequence = row / shape.output_time;
+        let tap = (element % shape.width()) / shape.channels;
+        let channel = element % shape.channels;
+
+        shape
+            .source(row % shape.output_time, tap)
+            .map_or(0.0, |position| input[(sequence * shape.input_time + position) * shape.channels + channel])
+    };
+    let expected: Vec<f32> = (0..shape.output_rows() * shape.width())
+        .map(column)
+        .collect();
+    let unfolded = gpu.download(&columns).unwrap();
+    assert_eq!(unfolded, expected);
+
+    let columns_grad = random_values(unfolded.len(), 20);
+    let columns_grad_tensor = upload(&gpu, shape.output_rows(), shape.width(), &columns_grad);
+    let mut input_grad = zeros(&gpu, shape.input_rows(), shape.channels);
+    gpu.unfold_strided_backward(&columns_grad_tensor, &mut input_grad, shape)
+        .unwrap();
+
+    let forward = dot(&unfolded, &columns_grad);
+    let adjoint = dot(&input, &gpu.download(&input_grad).unwrap());
+    assert_adjoint(forward, adjoint, "unfold_strided adjoint");
+}
+
+#[test]
+fn period_splitting_matches_reference_and_its_gradient_is_the_adjoint() {
+    let gpu = gpu();
+    let layout = PeriodSplit { signals: 2, length: 101, period: 7 };
+    let signals = random_values(layout.signals * layout.length, 21);
+
+    let signals_tensor = upload(&gpu, layout.signals, layout.length, &signals);
+    let mut split = zeros(&gpu, layout.sequences(), layout.frames());
+    gpu.split_periods(&signals_tensor, &mut split, layout)
+        .unwrap();
+
+    let mut expected = vec![0.0; layout.sequences() * layout.frames()];
+    for signal in 0..layout.signals {
+        for sample in 0..layout.length {
+            expected[layout.split_index(signal, sample)] = signals[signal * layout.length + sample];
+        }
+    }
+    let split_values = gpu.download(&split).unwrap();
+    assert_eq!(split_values, expected);
+
+    let split_grad = random_values(split_values.len(), 22);
+    let split_grad_tensor = upload(&gpu, layout.sequences(), layout.frames(), &split_grad);
+    let mut signals_grad = zeros(&gpu, layout.signals, layout.length);
+    gpu.split_periods_backward(&split_grad_tensor, &mut signals_grad, layout)
+        .unwrap();
+
+    let forward = dot(&split_values, &split_grad);
+    let adjoint = dot(&signals, &gpu.download(&signals_grad).unwrap());
+    assert_adjoint(forward, adjoint, "split_periods adjoint");
+}
+
+#[test]
+fn leaky_relu_and_least_squares_gradients_match_their_formulas() {
+    let gpu = gpu();
+    let rows = 13;
+    let cols = 41;
+    let input = random_values(rows * cols, 23);
+    let output_grad = random_values(rows * cols, 24);
+
+    let input_tensor = upload(&gpu, rows, cols, &input);
+    let output_grad_tensor = upload(&gpu, rows, cols, &output_grad);
+    let mut activated = zeros(&gpu, rows, cols);
+    let mut input_grad = zeros(&gpu, rows, cols);
+    gpu.leaky_relu(&input_tensor, &mut activated).unwrap();
+    gpu.leaky_relu_backward(&input_tensor, &output_grad_tensor, &mut input_grad)
+        .unwrap();
+
+    let slope = |value: f32| if value > 0.0 { 1.0 } else { 0.1 };
+    let expected_activated: Vec<f32> = input.iter().map(|&value| slope(value) * value).collect();
+    let expected_grad: Vec<f32> = input
+        .iter()
+        .zip(&output_grad)
+        .map(|(&value, &grad)| slope(value) * grad)
+        .collect();
+    assert_eq!(gpu.download(&activated).unwrap(), expected_activated);
+    assert_eq!(gpu.download(&input_grad).unwrap(), expected_grad);
+
+    let scale = 0.25;
+    let mut gradient = zeros(&gpu, rows, cols);
+    gpu.least_squares_gradient(&input_tensor, &mut gradient, Verdict::Real, scale)
+        .unwrap();
+
+    let expected_least_squares: Vec<f32> = input
+        .iter()
+        .map(|&score| 2.0 * scale * (score - 1.0))
+        .collect();
+    assert!(relative_error(&expected_least_squares, &gpu.download(&gradient).unwrap()) < TOLERANCE);
 }

@@ -13,4 +13,7 @@ pub mod reference;
 
 pub use device::{Gpu, GpuInitError, GpuResult, MatmulKernel, Shape, Tensor, TokenBuffer};
 pub use kernels::EMPTY_TOKEN;
-pub use ops::{AdamWHyperparameters, BatchStrides, Convolution, CrossEntropyHead, HeadLayout, MatmulSpec, Storage, TokenIndex, WriteMode};
+pub use ops::{
+    AdamWHyperparameters, BatchStrides, Convolution, CrossEntropyHead, HeadLayout, MatmulSpec, PeriodSplit, Storage, StridedConvolution,
+    TokenIndex, Verdict, WriteMode,
+};

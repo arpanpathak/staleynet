@@ -1,6 +1,8 @@
 //! The GPU handle and the device-resident tensor types.
 
-use crate::kernels::{attention, convolution, elementwise, embedding, loss, matmul, normalization, optimizer, overlap, signal, spectrum};
+use crate::kernels::{
+    adversarial, attention, convolution, elementwise, embedding, loss, matmul, normalization, optimizer, overlap, signal, spectrum,
+};
 use cuda_core::{CudaContext, CudaStream, DeviceBuffer, DriverError};
 use cuda_host::EmbeddedModuleError;
 use std::fmt;
@@ -98,6 +100,10 @@ pub struct Kernels {
 
     /// Depthwise convolutions over time and the unfolding for convolution products.
     pub(crate) convolution: convolution::kernels::LoadedModule,
+
+    /// The discriminators: strided unfolding, period splitting, leaky ReLU and
+    /// the least-squares gradient.
+    pub(crate) adversarial: adversarial::kernels::LoadedModule,
 }
 
 impl Kernels {
@@ -115,6 +121,7 @@ impl Kernels {
             overlap: overlap::kernels::load(context)?,
             spectrum: spectrum::kernels::load(context)?,
             convolution: convolution::kernels::load(context)?,
+            adversarial: adversarial::kernels::load(context)?,
         })
     }
 }

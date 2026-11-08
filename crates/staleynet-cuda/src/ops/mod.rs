@@ -2,6 +2,7 @@
 //! checks the shapes it is given before launching, so the size invariants
 //! the kernels rely on hold by construction.
 
+mod adversarial;
 mod attention;
 mod convolution;
 mod elementwise;
@@ -14,6 +15,7 @@ mod overlap;
 mod signal;
 mod spectrum;
 
+pub use adversarial::{PeriodSplit, StridedConvolution, Verdict};
 pub use attention::HeadLayout;
 pub use convolution::Convolution;
 pub use embedding::TokenIndex;
