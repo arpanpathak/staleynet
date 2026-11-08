@@ -847,7 +847,7 @@ position, and $y$ the sequence leaving it. Attention is split into $h$
 \emph{heads}, each attending with its own $d/h$ numbers, so that different
 heads can track different relations; the feed-forward network expands each
 vector to $4d$ numbers, applies the GELU activation \cite{hendrycks2016gelu},
-and projects it back to $d$. \Cref{tab:models} lists the two models of this
+and projects it back to $d$. \Cref{tab:models} lists the three models of this
 paper.
 
 \begin{table}[htbp]
@@ -862,6 +862,7 @@ model & $N$ & $d$ & $h$ & $C$ & parameters \\
 \midrule
 first & 6 & 256 & 8 & 4 & 7.1\,M \\
 large (\cref{sec:large}) & 8 & 512 & 8 & 16 & 42.9\,M \\
+rock (\cref{sec:rock}) & 10 & 1\,024 & 16 & 16 & 161.2\,M \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1141,9 +1142,9 @@ and both products inside attention. A GPU runs thousands of lightweight
 \emph{threads} at once, grouped into \emph{blocks} that cooperate, so the speed
 of the whole system depends on how well one matrix-product kernel keeps those
 threads busy and fed with data. Our tutorial \cite{pathak2026tiled} derives the
-shared-memory tiled product in detail. Here we describe one further step,
-register blocking, which roughly doubles its speed, and a way to make one
-gradient repeatable bit for bit.
+shared-memory tiled product in detail. Here we describe two further steps,
+register blocking, which roughly doubles its speed, and tensor cores, which
+nearly double it again, and a way to make one gradient repeatable bit for bit.
 
 \subsection{Register blocking}
 
@@ -1217,6 +1218,64 @@ tiles. The two
 barriers play the same roles as in the tiled kernel, whose correctness is
 proved in \cite{pathak2026tiled}. On the Orin NX the blocked kernel is 1.8 to
 2.3 times faster than the tiled one (\cref{tab:bench-gemm}).
+
+\subsection{Tensor cores}
+\label{sec:tensor-cores}
+
+Recent NVIDIA GPUs contain \emph{tensor cores}, units that multiply small
+matrices in a single instruction executed jointly by the 32 threads of a
+\emph{warp}. The instruction we use, \texttt{mma.m16n8k8} in the TF32 format
+\cite{nvidia2026ptx}, computes $D = AB + C$ for a $16 \times 8$ block of $A$
+and an $8 \times 8$ block of $B$, adding into a $16 \times 8$ block of $C$ that
+the warp holds in 32-bit registers, four per thread. TF32 keeps the 8-bit
+exponent of a 32-bit float but rounds the mantissa to 10 bits, so each input
+carries a relative rounding error of at most $2^{-11}$, while the sums stay in
+32 bits.
+
+The tensor-core kernel keeps everything of \proc{Blocked-Thread} except the
+loop of lines 6 to 10: the same $64 \times 64$ tiles, the same copies into
+shared memory and the same barriers. Each value is rounded to TF32 once, as it
+is copied. The 256 threads of a block form 8 warps, arranged $4 \times 2$ over
+the tile, so that each warp owns a $16 \times 32$ slice of it; for every 8
+values of the inner dimension, a warp reads one block of \textit{tileA} and
+issues four instructions, one for each $16 \times 8$ part of its slice. Two
+details matter. A warp reads the same column of 8 rows of \textit{tileA} at
+once, and with rows of 16 values these reads fall into 2 of the 32 banks of
+shared memory and are served one after another; padding the rows to 20 values
+(and those of \textit{tileB} from 64 to 72) spreads them over distinct banks.
+And all 32 threads of a warp must take part in every instruction, so the loops
+are the same for every thread, and only the final store checks the bounds of
+the matrix.
+
+\begin{table}[htbp]
+\centering
+\caption{The blocked kernel and the tensor-core kernel on the Jetson AGX Thor,
+in GFLOP/s, measured while a training run shared the GPU, and one training
+step of the 161\,M-parameter model of \cref{tab:models}.}
+\label{tab:tensor-cores}
+\footnotesize
+\begin{tabular}{lrr}
+\toprule
+product ($M \times N \times K$) & blocked & tensor cores \\
+\midrule
+attention projections ($2\,048 \times 768 \times 256$) & 469 & 929 \\
+feed-forward ($2\,048 \times 1\,024 \times 256$) & 444 & 730 \\
+codebook heads ($2\,048 \times 4\,096 \times 256$) & 494 & 970 \\
+spectrogram ($4\,096 \times 513 \times 1\,024$) & 447 & 831 \\
+\midrule
+training step, 161\,M model & 11.33\,s & 6.48\,s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The products run 1.6 to 2.0 times faster, and a training step of the largest
+model 1.75 times (\cref{tab:tensor-cores}). To check that the lower precision
+does not change training, we trained a small model ($d = 256$, $N = 4$) for 200
+steps from the same initialization on the same batches with both kernels; at
+every logged step the two losses differ by at most $2 \cdot 10^{-5}$ nats per
+code. At about 1 TFLOP/s the kernel still uses a small fraction of the tensor
+cores: it waits for each tile to arrive before multiplying it, and copying the
+next tiles while the current ones are multiplied is the obvious next step.
 
 \subsection{A repeatable embedding gradient}
 
@@ -1529,8 +1588,69 @@ on MTG-Jamendo; the longer context thus costs about a third more spectral
 error. We trained the model of \cref{sec:large} unchanged on this corpus with
 the 4-frame tokens, so that each training window spans 43.7\,s instead of
 10.9\,s. Songs with lyrics and plain songs are drawn with equal weight, and
-half of the windows of songs with lyrics start at a line ($p = 0.5$). This
-run is in progress; its results will be reported in the next version of this
+half of the windows of songs with lyrics start at a line ($p = 0.5$); 107
+songs by Alice in Chains and Mad Season are drawn four times as often. We
+stopped the run after 31\,625 steps (about 29 hours at 3.3\,s per step). Its
+held-out loss fell from 6.449 nats per code at step 500 to 5.951 at step
+3\,000, 5.415 at 15\,000 and 5.045 at 31\,500, but by then by only 0.013 nats
+per 1\,000 steps. The first level of each band group, which carries the coarse
+spectrum, reached 3.3 to 3.8 nats per code, and the fourth level 5.95 to
+6.28, close to the $\ln 1\,024 = 6.93$ of a uniform guess.
+
+\paragraph{The ceiling of the pipeline.} To separate the model from the rest
+of the pipeline, we passed the codes of four Alice in Chains songs, without
+the language model, through the learned vocoder of \cref{sec:vocoder}. They
+sounded close to the recordings, so the 4-frame tokens and the vocoder do not
+limit the output at this stage; what remains is the language model.
+
+\paragraph{A drone from repetition.} The samples of this run, drawn with
+$k = 1\,024$ (no truncation) and $s = 2$, sounded like an electrical drone
+under a blurred voice. Counting the codes explains why
+(\cref{tab:repetition}). In 704 consecutive steps of a real song, the first
+codebook repeats the code of the previous step 10 to 12\,\% of the time; in
+the samples it did so 67\,\% of the time, and colder sampling made it worse,
+down to a single code held for 30\,s. Repeating is the single most probable
+move in the training data, which holds held notes and silences (23\,\% of all
+steps, averaged over 300 songs), so a model that has not yet learned what
+comes next learns that this is its best guess. Once the context fills with
+repeats, it resembles a held note, which real songs continue, and the model
+locks in: the degeneration that Holtzman et al.\ \cite{holtzman2020curious}
+describe for text. Truncating to $k = 250$ with $s = 3$, as \cref{sec:generation} intends,
+brings the counts to those of real songs; a penalty that divides the
+probability of each codebook's previous code by a factor $F$
+\cite{keskar2019ctrl} rescues colder sampling but did not improve $k = 250$.
+Matching these counts is necessary but not sufficient: the samples of
+$k = 250$ no longer drone, but to the ear they are still not music.
+
+\begin{table}[htbp]
+\centering
+\caption{Repetition in the first codebook over 30\,s (704 steps): how often
+the code of the previous step is repeated, and how many different codes
+appear. Samples from the model of \cref{sec:rock} after 22\,500 steps, one
+seed each.}
+\label{tab:repetition}
+\footnotesize
+\begin{tabular}{lrr}
+\toprule
+codes & repeated & distinct \\
+\midrule
+two Alice in Chains songs & 10--12\,\% & 207--257 \\
+$k = 1\,024$, $s = 2$ & 67\,\% & 64 \\
+$k = 250$, $s = 3$ & 9\,\% & 257 \\
+$k = 250$, $s = 3$, $F = 8$ & 3\,\% & 235 \\
+temperature 0.8, $k = 50$, $s = 3$ & 89\,\% & 11 \\
+temperature 0.8, $k = 50$, $s = 3$, $F = 4$ & 33\,\% & 86 \\
+temperature 0.6, $k = 20$, $s = 3$ & 100\,\% & 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{A larger model.} Since neither the pipeline nor the sampler
+explains the remaining gap, and the loss has nearly stopped falling, the
+model itself is too small. We are therefore training the model of 161.2\,M
+parameters of \cref{tab:models} on the same data, with its matrix products on
+the tensor cores (\cref{sec:tensor-cores}); at 6.48\,s per step, 60\,000 steps
+take about 4.5 days. Its results will be reported in the next version of this
 paper.
 
 \section{Limitations}
@@ -1554,9 +1674,12 @@ the checkpoint with the lowest held-out loss, the model has no regularization,
 and in particular no dropout inside the network.
 Our models are much smaller than published systems \cite{copet2023musicgen},
 and we have not yet carried out a formal listening test, so we make no claims
-about perceived quality. On the implementation side, all arithmetic uses
-32-bit floating point without tensor cores, and attention stores its full
-matrix of scores \cite{dao2022flashattention}.
+about perceived quality; the model of 42.9\,M parameters reached the code
+statistics of real songs but not their sound (\cref{sec:rock}), and whether
+the larger model closes that gap is not yet known. On the implementation side,
+only the matrix products use the tensor cores, in TF32 and at a fraction of
+their peak speed; all other arithmetic uses 32-bit floating point, and
+attention stores its full matrix of scores \cite{dao2022flashattention}.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -1570,8 +1693,11 @@ quality in the tokenizer rather than in the language model, and a tokenizer
 that quantizes groups of frequency bands with more codes per step halved the
 reconstruction error. A later count showed that the larger model heard only
 10.9\,s of music at a time; joining four frames into each step extends that
-to 43.7\,s at the same cost, and a model is now training on 1\,006 hours of
-rock with timed lyrics in this way. We hope the worked
+to 43.7\,s at the same cost. Trained this way on 1\,006 hours of rock, the
+model of 42.9\,M parameters stopped improving before it made music, and
+counting its codes showed that its drone came from the sampler's settings
+rather than from a fault in the pipeline. A model nearly four times larger,
+its matrix products moved onto the tensor cores, is now training. We hope the worked
 examples, the stage-by-stage analysis and the paired lyrics test will help
 others who build similar systems on modest hardware.
 
