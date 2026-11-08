@@ -2,10 +2,30 @@
 
 use super::open_gpu;
 use anyhow::{Context, Result};
-use clap::Args;
+use clap::{Args, ValueEnum};
+use staleynet_cuda::MatmulKernel;
 use staleynet_data::store::CacheLayout;
 use staleynet_train::{StartPoint, TrainingConfig, TrainingEvent, train};
 use std::path::PathBuf;
+
+/// The matrix-product kernel a run trains with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum MatmulArgument {
+    /// f32 on the CUDA cores, 64×64 tiles with 4×4 register blocks.
+    Blocked,
+
+    /// TF32 on the tensor cores: inputs rounded to a 10-bit mantissa, sums in f32.
+    TensorCore,
+}
+
+impl From<MatmulArgument> for MatmulKernel {
+    fn from(argument: MatmulArgument) -> Self {
+        match argument {
+            MatmulArgument::Blocked => MatmulKernel::Blocked,
+            MatmulArgument::TensorCore => MatmulKernel::TensorCore,
+        }
+    }
+}
 
 /// Arguments of `staleynet train`.
 #[derive(Args)]
@@ -34,6 +54,10 @@ pub struct Arguments {
     /// with a fresh optimiser. The configured model may add a lyrics field.
     #[arg(long)]
     fine_tune_from: Option<PathBuf>,
+
+    /// Matrix-product kernel. A run may resume with a different one.
+    #[arg(long, value_enum, default_value_t = MatmulArgument::Blocked)]
+    matmul: MatmulArgument,
 }
 
 /// Prints one training event as a single human-readable line.
@@ -83,5 +107,8 @@ pub fn run(arguments: Arguments) -> Result<()> {
         (false, Some(source)) => StartPoint::FineTune(source),
         (false, None) => StartPoint::Fresh,
     };
-    train(&open_gpu()?, &CacheLayout::new(&arguments.cache), &arguments.run, config, start, print_event)
+    let mut gpu = open_gpu()?;
+    gpu.matmul_kernel = arguments.matmul.into();
+
+    train(&gpu, &CacheLayout::new(&arguments.cache), &arguments.run, config, start, print_event)
 }
